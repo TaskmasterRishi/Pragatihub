@@ -1,98 +1,191 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import { ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? 'dark' : 'light';
+  
+  // Background colors
+  const backgroundColor = useThemeColor({}, 'background');
+  const backgroundSecondary = useThemeColor({}, 'backgroundSecondary');
+  const cardBackground = useThemeColor({}, 'card');
+  
+  // Text colors
+  const textColor = useThemeColor({}, 'text');
+  const textSecondary = useThemeColor({}, 'textSecondary');
+  const textMuted = useThemeColor({}, 'textMuted');
+  
+  // Brand colors
+  const primaryColor = useThemeColor({}, 'primary');
+  const secondaryColor = useThemeColor({}, 'secondary');
+  
+  // Semantic colors
+  const successColor = useThemeColor({}, 'success');
+  const warningColor = useThemeColor({}, 'warning');
+  const errorColor = useThemeColor({}, 'error');
+  const infoColor = useThemeColor({}, 'info');
+  
+  // Border colors
+  const borderColor = useThemeColor({}, 'border');
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  return (
+    <SafeAreaView className="flex-1" style={{ backgroundColor }} edges={['top', 'bottom']}>
+      <ScrollView 
+        className="flex-1" 
+        contentContainerStyle={{ padding: 20, gap: 20 }}
+      >
+      {/* Header */}
+      <View className="items-center" style={{ marginBottom: 20 }}>
+        <Text className="text-3xl font-bold" style={{ color: textColor }}>
+          Custom Color Scheme
+        </Text>
+        <Text className="text-base mt-2" style={{ color: textSecondary }}>
+          Current theme: {theme === 'dark' ? '🌙 Dark Mode' : '☀️ Light Mode'}
+        </Text>
+      </View>
+
+      {/* Brand Colors Card */}
+      <View 
+        className="p-5 rounded-2xl" 
+        style={{ backgroundColor: cardBackground, borderWidth: 1, borderColor }}
+      >
+        <Text className="text-xl font-bold mb-4" style={{ color: textColor }}>
+          Brand Colors
+        </Text>
+        <View className="gap-3">
+          <View className="flex-row items-center gap-3">
+            <View className="w-16 h-16 rounded-xl" style={{ backgroundColor: primaryColor }} />
+            <View className="flex-1">
+              <Text className="text-base font-semibold" style={{ color: textColor }}>
+                Primary
+              </Text>
+              <Text className="text-sm" style={{ color: textMuted }}>
+                {primaryColor}
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row items-center gap-3">
+            <View className="w-16 h-16 rounded-xl" style={{ backgroundColor: secondaryColor }} />
+            <View className="flex-1">
+              <Text className="text-base font-semibold" style={{ color: textColor }}>
+                Secondary
+              </Text>
+              <Text className="text-sm" style={{ color: textMuted }}>
+                {secondaryColor}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Semantic Colors Card */}
+      <View 
+        className="p-5 rounded-2xl" 
+        style={{ backgroundColor: cardBackground, borderWidth: 1, borderColor }}
+      >
+        <Text className="text-xl font-bold mb-4" style={{ color: textColor }}>
+          Semantic Colors
+        </Text>
+        <View className="gap-3">
+          <View className="flex-row items-center gap-3">
+            <View className="w-16 h-16 rounded-xl" style={{ backgroundColor: successColor }} />
+            <View className="flex-1">
+              <Text className="text-base font-semibold" style={{ color: textColor }}>
+                Success
+              </Text>
+              <Text className="text-sm" style={{ color: textMuted }}>
+                {successColor}
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row items-center gap-3">
+            <View className="w-16 h-16 rounded-xl" style={{ backgroundColor: warningColor }} />
+            <View className="flex-1">
+              <Text className="text-base font-semibold" style={{ color: textColor }}>
+                Warning
+              </Text>
+              <Text className="text-sm" style={{ color: textMuted }}>
+                {warningColor}
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row items-center gap-3">
+            <View className="w-16 h-16 rounded-xl" style={{ backgroundColor: errorColor }} />
+            <View className="flex-1">
+              <Text className="text-base font-semibold" style={{ color: textColor }}>
+                Error
+              </Text>
+              <Text className="text-sm" style={{ color: textMuted }}>
+                {errorColor}
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row items-center gap-3">
+            <View className="w-16 h-16 rounded-xl" style={{ backgroundColor: infoColor }} />
+            <View className="flex-1">
+              <Text className="text-base font-semibold" style={{ color: textColor }}>
+                Info
+              </Text>
+              <Text className="text-sm" style={{ color: textMuted }}>
+                {infoColor}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Text Colors Card */}
+      <View 
+        className="p-5 rounded-2xl" 
+        style={{ backgroundColor: cardBackground, borderWidth: 1, borderColor }}
+      >
+        <Text className="text-xl font-bold mb-4" style={{ color: textColor }}>
+          Text Colors
+        </Text>
+        <View className="gap-3">
+          <Text className="text-lg font-bold" style={{ color: textColor }}>
+            Primary Text - {textColor}
+          </Text>
+          <Text className="text-base" style={{ color: textSecondary }}>
+            Secondary Text - {textSecondary}
+          </Text>
+          <Text className="text-sm" style={{ color: textMuted }}>
+            Muted Text - {textMuted}
+          </Text>
+        </View>
+      </View>
+
+      {/* Background Colors Card */}
+      <View 
+        className="p-5 rounded-2xl mb-5" 
+        style={{ backgroundColor: cardBackground, borderWidth: 1, borderColor }}
+      >
+        <Text className="text-xl font-bold mb-4" style={{ color: textColor }}>
+          Background Colors
+        </Text>
+        <View className="gap-3">
+          <View 
+            className="p-4 rounded-xl" 
+            style={{ backgroundColor: backgroundSecondary }}
+          >
+            <Text className="text-sm font-semibold" style={{ color: textColor }}>
+              Secondary Background
+            </Text>
+          </View>
+          <View 
+            className="p-4 rounded-xl" 
+            style={{ backgroundColor: cardBackground, borderWidth: 1, borderColor }}
+          >
+            <Text className="text-sm font-semibold" style={{ color: textColor }}>
+              Card Background
+      </Text>
+    </View>
+        </View>
+      </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});

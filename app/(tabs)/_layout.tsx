@@ -5,14 +5,29 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useThemeColor } from '@/hooks/use-theme-color';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const theme = colorScheme ?? 'light';
+  const colors = Colors[theme];
+  
+  // Get theme colors for tab bar
+  const tabBarActiveTint = useThemeColor({}, 'tabIconSelected');
+  const tabBarInactiveTint = useThemeColor({}, 'tabIconDefault');
+  const tabBarBackground = useThemeColor({}, 'background');
+  const tabBarBorder = useThemeColor({}, 'border');
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: tabBarActiveTint,
+        tabBarInactiveTintColor: tabBarInactiveTint,
+        tabBarStyle: {
+          backgroundColor: tabBarBackground,
+          borderTopColor: tabBarBorder,
+          borderTopWidth: 1,
+        },
         headerShown: false,
         tabBarButton: HapticTab,
       }}>
@@ -21,13 +36,6 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
         }}
       />
     </Tabs>
