@@ -1,128 +1,150 @@
+import { Gyroscope } from 'expo-sensors';
 import * as LucideIcons from 'lucide-react-native';
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Dimensions, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
-  withTiming
+  withTiming,
 } from 'react-native-reanimated';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
-// Tech icons (Lucide icon names)
+/* ---------------- CONFIG ---------------- */
+
+const ICON_SIZE_MIN = 10;
+const ICON_SIZE_MAX = 36;
+
+const MAX_ICONS = 100;
+
+/* Spread control */
+const GRID_PADDING = 200;     // larger padding = wider spread
+const GRID_JITTER = 500;       // randomness inside grid cell
+
+const GYRO_STRENGTH = 28;
+const GYRO_SMOOTHING = 0.07;
+const GYRO_CLAMP = 48;
+
+/* ---------------- ICON LISTS ---------------- */
+
 const techIcons = [
-  'Code',
-  'Cpu',
-  'Terminal',
-  'Database',
-  'Cloud',
-  'Shield',
-  'Bug',
-  'Server',
-  'Network',
-  'Globe',
-  'Smartphone',
-  'Laptop',
-  'Router',
-  'Code2',
-  'GitBranch',
+  'Code','Cpu','Terminal','Database','Cloud',
+  'Shield','Bug','Server','Network','Globe','Binary',
+  'Smartphone','Laptop','Tablet','Router','GitBranch',
+  'GitCommit','GitMerge','GitPullRequest',
+  'Braces','Brackets','FileCode','Command',
 ] as const;
 
-// Non-tech icons (music, art, etc.)
-const nonTechIcons = [
-  'Music',
-  'Palette',
-  'Brush',
-  'Camera',
-  'Video',
-  'Mic',
-  'Headphones',
-  'Film',
-  'Image',
-  'Sparkles',
-  'Heart',
-  'Star',
-  'Paintbrush',
-  'Music2',
-  'VideoIcon',
+const creativeIcons = [
+  'Music','Palette','Brush','Paintbrush',
+  'Camera','Video','Film','Mic','Headphones',
+  'Image','Sparkles','Star','Heart',
 ] as const;
+
+const generalIcons = [
+  'Lightbulb','Zap','Rocket','Target','Compass',
+  'Layers','Grid','Activity','TrendingUp',
+  'Book','Bookmark','GraduationCap',
+  'MessageCircle','MessagesSquare',
+] as const;
+
+/* ---------------- TYPES ---------------- */
 
 interface FloatingIcon {
-  iconName: string;
-  IconComponent: React.ComponentType<any>;
+  id: string;
+  Icon: React.ComponentType<any>;
   x: number;
   y: number;
   size: number;
   duration: number;
-  delay: number;
-  opacity: number;
-  isTech: boolean;
+  depth: number;
 }
 
-function generateRandomIcons(count: number): FloatingIcon[] {
-  const icons: FloatingIcon[] = [];
-  
-  for (let i = 0; i < count; i++) {
-    const isTech = Math.random() > 0.4; // 60% tech, 40% non-tech
-    const iconList = isTech ? techIcons : nonTechIcons;
-    const randomIconName = iconList[Math.floor(Math.random() * iconList.length)];
-    const IconComponent = (LucideIcons as any)[randomIconName] || LucideIcons.Code;
-    
-    icons.push({
-      iconName: randomIconName,
-      IconComponent,
-      x: Math.random() * SCREEN_WIDTH,
-      y: Math.random() * SCREEN_HEIGHT,
-      size: 24 + Math.random() * 16, // 24-40px
-      duration: 8000 + Math.random() * 12000, // 8-20 seconds
-      delay: Math.random() * 2000,
-      opacity: 0.15 + Math.random() * 0.2, // 0.15-0.35
-      isTech,
-    });
+/* ---------------- HELPERS ---------------- */
+
+const clamp = (v: number, min: number, max: number) =>
+  Math.min(Math.max(v, min), max);
+
+/* -------- SPREAD-OUT GENERATOR -------- */
+
+function generateIcons(): FloatingIcon[] {
+  const iconNames = [
+    ...techIcons,
+    ...creativeIcons,
+    ...generalIcons,
+  ];
+
+  // Duplicate slightly for density
+  while (iconNames.length < MAX_ICONS) {
+    iconNames.push(
+      iconNames[Math.floor(Math.random() * iconNames.length)]
+    );
   }
-  
-  return icons;
+
+  const names = iconNames.slice(0, MAX_ICONS);
+
+  // Grid dimensions
+  const cols = Math.ceil(Math.sqrt(names.length));
+  const rows = Math.ceil(names.length / cols);
+
+  const cellW = (width + GRID_PADDING * 2) / cols;
+  const cellH = (height + GRID_PADDING * 2) / rows;
+
+  return names.map((name, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+
+    const baseX = col * cellW - GRID_PADDING;
+    const baseY = row * cellH - GRID_PADDING;
+
+    return {
+      id: `${name}-${i}`,
+      Icon: (LucideIcons as any)[name] || LucideIcons.Code,
+      x: baseX + Math.random() * GRID_JITTER,
+      y: baseY + Math.random() * GRID_JITTER,
+      size: ICON_SIZE_MIN + Math.random() * (ICON_SIZE_MAX - ICON_SIZE_MIN),
+      duration: 8000 + Math.random() * 10000,
+      depth: Math.random() * 0.6 + 0.4,
+    };
+  });
 }
 
-interface FloatingIconComponentProps {
+/* ---------------- ICON COMPONENT ---------------- */
+
+function FloatingIconItem({
+  icon,
+  gyroX,
+  gyroY,
+}: {
   icon: FloatingIcon;
-}
-
-function FloatingIconComponent({ icon }: FloatingIconComponentProps) {
-  const translateY = useSharedValue(0);
-  const translateX = useSharedValue(0);
+  gyroX: Animated.SharedValue<number>;
+  gyroY: Animated.SharedValue<number>;
+}) {
+  const floatX = useSharedValue(0);
+  const floatY = useSharedValue(0);
   const rotate = useSharedValue(0);
 
   useEffect(() => {
-    // Vertical floating animation
-    translateY.value = withRepeat(
-      withTiming(
-        -50 - Math.random() * 100,
-        {
-          duration: icon.duration,
-          easing: Easing.inOut(Easing.sin),
-        }
-      ),
+    floatY.value = withRepeat(
+      withTiming(-40 - Math.random() * 60, {
+        duration: icon.duration,
+        easing: Easing.inOut(Easing.sin),
+      }),
       -1,
       true
     );
 
-    // Horizontal floating animation (subtle)
-    translateX.value = withRepeat(
-      withTiming(
-        (Math.random() - 0.5) * 40,
-        {
-          duration: icon.duration * 1.3,
-          easing: Easing.inOut(Easing.sin),
-        }
-      ),
+    floatX.value = withRepeat(
+      withTiming((Math.random() - 0.5) * 70, {
+        duration: icon.duration * 1.3,
+        easing: Easing.inOut(Easing.sin),
+      }),
       -1,
       true
     );
 
-    // Rotation animation
     rotate.value = withRepeat(
       withTiming(360, {
         duration: icon.duration * 2,
@@ -133,60 +155,66 @@ function FloatingIconComponent({ icon }: FloatingIconComponentProps) {
     );
   }, []);
 
-  const animatedStyle = useAnimatedStyle(() => ({
+  const style = useAnimatedStyle(() => ({
     transform: [
-      { translateY: translateY.value },
-      { translateX: translateX.value },
+      { translateX: icon.x + floatX.value + gyroX.value * icon.depth },
+      { translateY: icon.y + floatY.value + gyroY.value * icon.depth },
       { rotate: `${rotate.value}deg` },
     ],
   }));
 
-  const IconComponent = icon.IconComponent;
-
   return (
-    <Animated.View
-      style={[
-        {
-          position: 'absolute',
-          left: icon.x,
-          top: icon.y,
-          opacity: icon.opacity,
-        },
-        animatedStyle,
-      ]}
-    >
-      <IconComponent
-        size={icon.size}
-        color="#ffffff"
-      />
+    <Animated.View style={[{ position: 'absolute', opacity: 0.22 }, style]}>
+      <icon.Icon size={icon.size} color="#FFFFFF" />
     </Animated.View>
   );
 }
 
-interface FloatingIconsBackgroundProps {
-  iconCount?: number;
-}
+/* ---------------- MAIN ---------------- */
 
-export default function FloatingIconsBackground({
-  iconCount = 20,
-}: FloatingIconsBackgroundProps) {
-  const [icons] = React.useState(() => generateRandomIcons(iconCount));
+export default function FloatingIconsBackground() {
+  const icons = useMemo(generateIcons, []);
+
+  const gyroX = useSharedValue(0);
+  const gyroY = useSharedValue(0);
+
+  useEffect(() => {
+    Gyroscope.setUpdateInterval(16);
+
+    let smoothX = 0;
+    let smoothY = 0;
+
+    const sub = Gyroscope.addListener(({ x, y }) => {
+      const targetX = clamp(y * GYRO_STRENGTH, -GYRO_CLAMP, GYRO_CLAMP);
+      const targetY = clamp(-x * GYRO_STRENGTH, -GYRO_CLAMP, GYRO_CLAMP);
+
+      smoothX += (targetX - smoothX) * GYRO_SMOOTHING;
+      smoothY += (targetY - smoothY) * GYRO_SMOOTHING;
+
+      gyroX.value = smoothX;
+      gyroY.value = smoothY;
+    });
+
+    return () => sub.remove();
+  }, []);
 
   return (
     <View
+      pointerEvents="none"
       style={{
         position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 0,
+        inset: 0,
         overflow: 'hidden',
+        zIndex: 0,
       }}
-      pointerEvents="none"
     >
-      {icons.map((icon, index) => (
-        <FloatingIconComponent key={index} icon={icon} />
+      {icons.map(icon => (
+        <FloatingIconItem
+          key={icon.id}
+          icon={icon}
+          gyroX={gyroX}
+          gyroY={gyroY}
+        />
       ))}
     </View>
   );

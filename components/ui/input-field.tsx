@@ -1,12 +1,12 @@
-import React from 'react';
-import { TextInput, TextInputProps, View, Text, StyleSheet } from 'react-native';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import React, { useState } from 'react';
+import { Text, TextInput, TextInputProps, View } from 'react-native';
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
-import { useThemeColor } from '@/hooks/use-theme-color';
 
 interface InputFieldProps extends TextInputProps {
   label?: string;
@@ -23,48 +23,47 @@ export default function InputField({
   ...textInputProps
 }: InputFieldProps) {
   const textColor = useThemeColor({}, 'text');
-  const textSecondary = useThemeColor({}, 'textSecondary');
   const primaryColor = useThemeColor({}, 'primary');
   const borderColor = useThemeColor({}, 'border');
   const inputBackground = useThemeColor({}, 'input');
   const placeholderColor = useThemeColor({}, 'placeholder');
 
+  const [isFocused, setIsFocused] = useState(false);
+
   // For gradient variant, use semi-transparent white background
   const backgroundColor = variant === 'gradient' 
-    ? 'rgba(255, 255, 255, 0.2)' 
+    ? 'rgba(255, 255, 255, 0.20)' 
     : inputBackground;
   const labelColor = variant === 'gradient' ? '#ffffff' : textColor;
   const inputTextColor = variant === 'gradient' ? '#ffffff' : textColor;
   const inputPlaceholderColor = variant === 'gradient' 
-    ? 'rgba(255, 255, 255, 0.7)' 
+    ? 'rgba(255, 255, 255, 0.8)' 
     : placeholderColor;
   const defaultBorderColor = variant === 'gradient' 
-    ? 'rgba(255, 255, 255, 0.3)' 
+    ? 'rgba(255, 255, 255, 0.25)' 
     : borderColor;
   const focusedBorderColor = variant === 'gradient' 
     ? '#ffffff' 
     : primaryColor;
 
-  const focusScale = useSharedValue(1);
-  const focused = useSharedValue(0);
+  const borderOpacity = useSharedValue(0);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: focusScale.value }],
     borderColor: interpolateColor(
-      focused.value,
+      borderOpacity.value,
       [0, 1],
       [defaultBorderColor, focusedBorderColor]
     ),
   }));
 
   const handleFocus = () => {
-    focusScale.value = withSpring(1.02, { damping: 15, stiffness: 200 });
-    focused.value = withSpring(1, { damping: 15, stiffness: 200 });
+    setIsFocused(true);
+    borderOpacity.value = withTiming(1, { duration: 200 });
   };
 
   const handleBlur = () => {
-    focusScale.value = withSpring(1, { damping: 15, stiffness: 200 });
-    focused.value = withSpring(0, { damping: 15, stiffness: 200 });
+    setIsFocused(false);
+    borderOpacity.value = withTiming(0, { duration: 200 });
   };
 
   return (
@@ -72,10 +71,11 @@ export default function InputField({
       {label && (
         <Text
           style={{
-            fontSize: 14,
-            fontWeight: '600',
+            fontSize: 13,
+            fontWeight: '500',
             color: labelColor,
-            marginBottom: 8,
+            marginBottom: 6,
+            opacity: variant === 'gradient' ? 0.9 : 1,
           }}
         >
           {label}
@@ -85,9 +85,9 @@ export default function InputField({
         style={[
           {
             backgroundColor: backgroundColor,
-            borderRadius: 12,
-            borderWidth: 2,
-            paddingHorizontal: 16,
+            borderRadius: 10,
+            borderWidth: 1.5,
+            paddingHorizontal: 14,
             paddingVertical: 16,
             flexDirection: 'row',
             alignItems: 'center',
@@ -98,8 +98,9 @@ export default function InputField({
         <TextInput
           style={{
             flex: 1,
-            fontSize: 16,
+            fontSize: 15,
             color: inputTextColor,
+            padding: 0,
           }}
           placeholderTextColor={inputPlaceholderColor}
           onFocus={handleFocus}
@@ -112,8 +113,8 @@ export default function InputField({
           style={{
             fontSize: 12,
             color: '#EF4444',
-            marginTop: 4,
-            marginLeft: 4,
+            marginTop: 6,
+            marginLeft: 2,
           }}
         >
           {error}

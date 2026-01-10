@@ -109,7 +109,7 @@ export default function AuthScreen() {
     <View style={{ flex: 1 }}>
       {/* Gradient Background */}
       <LinearGradient
-        colors={['#3B82F6', '#A855F7', '#EC4899']}
+        colors={['#3B82F6', '#2B2F77', '#070B34']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
