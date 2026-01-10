@@ -80,7 +80,6 @@ export default function OnboardingScreen() {
   const buttonWidth = useSharedValue(56); // Start as circular arrow button (56px)
   const buttonHeight = useSharedValue(56);
   const buttonRadius = useSharedValue(28);
-  const textOpacity = useSharedValue(0);
   const iconOpacity = useSharedValue(1);
   const iconRotation = useSharedValue(0);
 
@@ -139,28 +138,44 @@ export default function OnboardingScreen() {
     transform: [{ rotate: `${iconRotation.value}deg` }],
   }));
 
-  const getStartedTextAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: textOpacity.value,
-  }));
+  const getStartedTextAnimatedStyle = useAnimatedStyle(() => {
+    // Calculate progress of button expansion (from 56 to SCREEN_WIDTH / 2)
+    const minWidth = 56;
+    const maxWidth = SCREEN_WIDTH / 2;
+    const progress = Math.max(0, Math.min(1, (buttonWidth.value - minWidth) / (maxWidth - minWidth)));
+    
+    // Text appears gradually as button expands
+    // Start showing text when button is 30% expanded, fully visible at 70% expansion
+    const textProgress = Math.max(0, Math.min(1, (progress - 0.3) / 0.4));
+    
+    return {
+      opacity: textProgress,
+      transform: [{ scale: 0.8 + textProgress * 0.2 }], // Slight scale animation
+    };
+  });
 
   // Update button animation when currentIndex changes
   useEffect(() => {
     if (currentIndex === slides.length - 1) {
-      // Last screen: expand to show "Get Started"
-      buttonWidth.value = withSpring(SCREEN_WIDTH - 48, { damping: 15, stiffness: 100 });
-      buttonHeight.value = withSpring(56, { damping: 15, stiffness: 100 });
-      buttonRadius.value = withSpring(12, { damping: 15, stiffness: 100 });
-      textOpacity.value = withTiming(1, { duration: 300 });
-      iconOpacity.value = withTiming(0, { duration: 200 });
-      iconRotation.value = withSpring(90, { damping: 15, stiffness: 100 });
+      // Last screen: expand to half screen width
+      const getStartedWidth = SCREEN_WIDTH / 2;
+      buttonWidth.value = withSpring(getStartedWidth, { damping: 20, stiffness: 100 });
+      buttonHeight.value = withSpring(56, { damping: 20, stiffness: 100 });
+      buttonRadius.value = withSpring(28, { damping: 20, stiffness: 100 });
+      // Smooth crossfade: rotate icon and fade out icon
+      // Text will appear gradually based on button expansion (handled in animated style)
+      iconRotation.value = withTiming(90, { duration: 300 });
+      iconOpacity.value = withTiming(0, { duration: 300 });
     } else {
-      // Other screens: show as arrow button
-      buttonWidth.value = withSpring(56, { damping: 15, stiffness: 100 });
-      buttonHeight.value = withSpring(56, { damping: 15, stiffness: 100 });
-      buttonRadius.value = withSpring(28, { damping: 15, stiffness: 100 });
-      textOpacity.value = withTiming(0, { duration: 200 });
-      iconOpacity.value = withTiming(1, { duration: 300 });
-      iconRotation.value = withSpring(0, { damping: 15, stiffness: 100 });
+      // Other screens: show as arrow button (shrinking back)
+      // Use withTiming for smooth, non-bouncy shrink animation
+      buttonWidth.value = withTiming(56, { duration: 300 });
+      buttonHeight.value = withTiming(56, { duration: 300 });
+      buttonRadius.value = withTiming(28, { duration: 300 });
+      // Smooth crossfade: fade out text and fade in icon simultaneously
+      // Rotate icon back to 0 first, then fade in icon while text fades out
+      iconRotation.value = withTiming(0, { duration: 250 });
+      iconOpacity.value = withTiming(1, { duration: 250 });
     }
   }, [currentIndex]);
 
@@ -446,7 +461,8 @@ export default function OnboardingScreen() {
             alignItems: 'center',
             justifyContent: 'center',
             flexDirection: 'row',
-            paddingHorizontal: 20,
+            paddingHorizontal: 24,
+            gap: 8,
           }}
           activeOpacity={0.8}
         >
@@ -482,6 +498,7 @@ export default function OnboardingScreen() {
                 fontWeight: '700',
                 color: '#ffffff',
               }}
+              numberOfLines={1}
             >
               Get Started
             </Text>
