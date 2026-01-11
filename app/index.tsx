@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { Colors } from '@/constants/theme';
 import { hasCompletedOnboarding } from '@/utils/onboarding-storage';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 
 export default function Index() {
   const router = useRouter();
@@ -21,7 +21,10 @@ export default function Index() {
         
         if (completed) {
           // If onboarding is completed, redirect to auth
-          router.replace('/(auth)/login');
+          // router.replace('/(auth)/login');
+          // ^-- Auth redirect temporarily disabled. To re-enable, remove the comment markers on the line above.
+          // Redirecting to the `(tabs)` group instead while auth is disabled.
+          router.replace('/(tabs)');
         } else {
           // If not completed, show onboarding
           router.replace('/(onboarding)');

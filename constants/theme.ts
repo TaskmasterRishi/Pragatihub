@@ -75,8 +75,8 @@ export const Colors = {
     // Interactive elements
     tint: primaryLight,
     icon: neutralLight[600],
-    tabIconDefault: neutralLight[400],
-    tabIconSelected: primaryLight,
+    tabIconDefault: neutralDark[400],
+    tabIconSelected: primaryDark,
     
     // Semantic colors
     success: successLight,
@@ -115,8 +115,8 @@ export const Colors = {
     // Interactive elements
     tint: primaryDark,
     icon: neutralDark[600],
-    tabIconDefault: neutralDark[400],
-    tabIconSelected: primaryDark,
+    tabIconDefault: neutralLight[400],
+    tabIconSelected: primaryLight,
     
     // Semantic colors
     success: successDark,

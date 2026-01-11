@@ -7,22 +7,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Dimensions,
-    Image,
-    Text,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  Image,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Animated, {
-    Extrapolate,
-    FadeIn,
-    FadeOut,
-    interpolate,
-    useAnimatedScrollHandler,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    withTiming
+  Extrapolate,
+  FadeIn,
+  FadeOut,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -442,7 +442,7 @@ export default function OnboardingScreen() {
             zIndex: 10,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: primaryColor,
+            backgroundColor: '#1E4499',
             shadowColor: primaryColor,
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.3,

@@ -116,7 +116,7 @@ export default function AuthScreen() {
       />
 
       {/* Floating Icons Background */}
-      <FloatingIconsBackground iconCount={25} />
+      <FloatingIconsBackground />
 
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         <KeyboardAvoidingView

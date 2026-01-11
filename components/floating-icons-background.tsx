@@ -119,8 +119,8 @@ function FloatingIconItem({
   gyroY,
 }: {
   icon: FloatingIcon;
-  gyroX: Animated.SharedValue<number>;
-  gyroY: Animated.SharedValue<number>;
+  gyroX: ReturnType<typeof useSharedValue>;
+  gyroY: ReturnType<typeof useSharedValue>;
 }) {
   const floatX = useSharedValue(0);
   const floatY = useSharedValue(0);
@@ -157,8 +157,8 @@ function FloatingIconItem({
 
   const style = useAnimatedStyle(() => ({
     transform: [
-      { translateX: icon.x + floatX.value + gyroX.value * icon.depth },
-      { translateY: icon.y + floatY.value + gyroY.value * icon.depth },
+      { translateX: icon.x + floatX.value + (gyroX.value as number) * icon.depth },
+      { translateY: icon.y + floatY.value + (gyroY.value as number) * icon.depth },
       { rotate: `${rotate.value}deg` },
     ],
   }));
@@ -212,8 +212,8 @@ export default function FloatingIconsBackground() {
         <FloatingIconItem
           key={icon.id}
           icon={icon}
-          gyroX={gyroX}
-          gyroY={gyroY}
+          gyroX={gyroX as any}
+          gyroY={gyroY as any}
         />
       ))}
     </View>

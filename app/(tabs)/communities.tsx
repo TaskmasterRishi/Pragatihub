@@ -3,10 +3,10 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function HomeScreen() {
+export default function CommunitiesScreen() {
   const [isFocused, setIsFocused] = useState(false);
 
   useFocusEffect(
@@ -36,33 +36,7 @@ export default function HomeScreen() {
       edges={["top", "bottom"]}
     >
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 20 }}>
-        <View className="items-center my-5">
-          <Text
-            className="text-4xl font-bold"
-            style={{ color: textColor, marginBottom: 6 }}
-          >
-            PragatiHub
-          </Text>
-          <Text className="text-base" style={{ color: textSecondary }}>
-            Welcome to your learning journey
-          </Text>
-        </View>
-
-        <View
-          className="p-4 rounded-2xl"
-          style={{ backgroundColor: cardBackground }}
-        >
-          <Text className="text-xl font-bold mb-2" style={{ color: textColor }}>
-            🎓 Learn Together
-          </Text>
-          <Text
-            className="text-sm"
-            style={{ color: textSecondary, lineHeight: 20 }}
-          >
-            Join a community of people building skills, sharing knowledge, and
-            growing side by side.
-          </Text>
-        </View>
+        <Text style={{ color: textColor }}>Communities Screen</Text>
       </ScrollView>
     </SafeAreaView>
   );
