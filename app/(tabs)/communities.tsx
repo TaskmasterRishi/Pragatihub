@@ -1,43 +1,22 @@
-import ActivityLoader from "@/components/activity-loader";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useState } from "react";
-import { ScrollView, Text } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ScrollView, Text, View } from "react-native";
 
 export default function CommunitiesScreen() {
-  const [isFocused, setIsFocused] = useState(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      setIsFocused(true);
-      return () => setIsFocused(false);
-    }, [])
-  );
-
-  const colorScheme = useColorScheme();
-  const theme = colorScheme === "dark" ? "dark" : "light";
-
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
-  const textSecondary = useThemeColor({}, "textSecondary");
-  const primaryColor = useThemeColor({}, "primary");
-  const cardBackground = useThemeColor({}, "card");
-
-  if (!isFocused) {
-    return <ActivityLoader />;
-  }
 
   return (
-    <SafeAreaView
-      className="flex-1"
-      style={{ backgroundColor }}
-      edges={["top", "bottom"]}
-    >
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 20 }}>
-        <Text style={{ color: textColor }}>Communities Screen</Text>
+    <View style={{ flex: 1, backgroundColor }}>
+      <ScrollView
+        contentContainerStyle={{
+          padding: 20,
+          paddingBottom: 120, // space for floating tab bar
+        }}
+      >
+        <Text style={{ color: textColor, fontSize: 18 }}>
+          communities Screen
+        </Text>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }

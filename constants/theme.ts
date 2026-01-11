@@ -6,10 +6,10 @@
 import { Platform } from 'react-native';
 
 // Primary brand colors
-const primaryLight = '#6366f1'; // Indigo
-const primaryDark = '#818cf8'; // Lighter indigo for dark mode
-const secondaryLight = '#8b5cf6'; // Purple
-const secondaryDark = '#a78bfa'; // Lighter purple for dark mode
+const primaryLight = '#0A66E8'; 
+const primaryDark = '#084DB3';
+const secondaryLight = '#6da5ffff'; 
+const secondaryDark = '#0558d4ff'; 
 
 // Semantic colors
 const successLight = '#10b981'; // Green
