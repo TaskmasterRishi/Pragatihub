@@ -1,22 +1,39 @@
+import posts from "@/assets/data/posts.json";
+import PostListItem from "@/components/PostListItem";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { FlatList, View } from "react-native";
+
+const PAGE_SIZE = 5;
 
 export default function HomeScreen() {
   const backgroundColor = useThemeColor({}, "background");
-  const textColor = useThemeColor({}, "text");
+
+  const [page, setPage] = useState(1);
+  const [visiblePosts, setVisiblePosts] = useState(posts.slice(0, PAGE_SIZE));
+
+  useEffect(() => {
+    setVisiblePosts(posts.slice(0, page * PAGE_SIZE));
+  }, [page]);
 
   return (
     <View style={{ flex: 1, backgroundColor }}>
-      <ScrollView
+      <FlatList
+        data={visiblePosts}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <PostListItem post={item} />}
         contentContainerStyle={{
           padding: 20,
           paddingBottom: 120, // space for floating tab bar
         }}
-      >
-        <Text style={{ color: textColor, fontSize: 18 }}>
-          Home Screen
-        </Text>
-      </ScrollView>
+        onEndReached={() => {
+          if (page * PAGE_SIZE < posts.length) {
+            setPage((p) => p + 1);
+          }
+        }}
+        onEndReachedThreshold={0.5}
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
 }
