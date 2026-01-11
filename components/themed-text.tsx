@@ -1,33 +1,31 @@
-import { StyleSheet, Text, type TextProps } from 'react-native';
+import { StyleSheet, Text } from "react-native";
 
-import { useThemeColor } from '@/hooks/use-theme-color';
-
-export type ThemedTextProps = TextProps & {
-  lightColor?: string;
-  darkColor?: string;
-  type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
-};
+import { ThemedTextProps } from "@/constants/types";
+import { useThemeColor } from "@/hooks/use-theme-color";
 
 export function ThemedText({
   style,
   lightColor,
   darkColor,
-  type = 'default',
+  type = "default",
   ...rest
 }: ThemedTextProps) {
-  const defaultColor = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
-  const primaryColor = useThemeColor({}, 'primary');
-  const color = type === 'link' ? primaryColor : defaultColor;
+  const defaultColor = useThemeColor(
+    { light: lightColor, dark: darkColor },
+    "text"
+  );
+  const primaryColor = useThemeColor({}, "primary");
+  const color = type === "link" ? primaryColor : defaultColor;
 
   return (
     <Text
       style={[
         { color },
-        type === 'default' ? styles.default : undefined,
-        type === 'title' ? styles.title : undefined,
-        type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
-        type === 'subtitle' ? styles.subtitle : undefined,
-        type === 'link' ? styles.link : undefined,
+        type === "default" ? styles.default : undefined,
+        type === "title" ? styles.title : undefined,
+        type === "defaultSemiBold" ? styles.defaultSemiBold : undefined,
+        type === "subtitle" ? styles.subtitle : undefined,
+        type === "link" ? styles.link : undefined,
         style,
       ]}
       {...rest}
@@ -43,16 +41,16 @@ const styles = StyleSheet.create({
   defaultSemiBold: {
     fontSize: 16,
     lineHeight: 24,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     lineHeight: 32,
   },
   subtitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   link: {
     lineHeight: 30,

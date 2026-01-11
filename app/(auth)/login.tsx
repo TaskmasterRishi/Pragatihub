@@ -1,9 +1,10 @@
-import FloatingIconsBackground from '@/components/floating-icons-background';
-import InputField from '@/components/ui/input-field';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import FloatingIconsBackground from "@/components/floating-icons-background";
+import InputField from "@/components/ui/input-field";
+import { AuthMode } from "@/constants/types";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
   Dimensions,
   KeyboardAvoidingView,
@@ -12,28 +13,26 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withTiming
-} from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+  withTiming,
+} from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-type AuthMode = 'login' | 'register';
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function AuthScreen() {
   const router = useRouter();
-  const primaryColor = useThemeColor({}, 'primary');
+  const primaryColor = useThemeColor({}, "primary");
 
-  const [mode, setMode] = useState<AuthMode>('login');
+  const [mode, setMode] = useState<AuthMode>("login");
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   // Animation values for smooth transitions
   const formOpacity = useSharedValue(1);
@@ -42,9 +41,9 @@ export default function AuthScreen() {
 
   const toggleMode = () => {
     if (isTransitioning) return; // Prevent rapid toggling
-    
+
     setIsTransitioning(true);
-    
+
     // Fade out
     formOpacity.value = withTiming(0, { duration: 200 });
     headerOpacity.value = withTiming(0, { duration: 200 });
@@ -52,18 +51,18 @@ export default function AuthScreen() {
 
     // After animation, switch mode and fade in
     setTimeout(() => {
-      setMode(mode === 'login' ? 'register' : 'login');
+      setMode(mode === "login" ? "register" : "login");
       // Clear form when switching
-      setName('');
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
+      setName("");
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
 
       // Fade in
       formOpacity.value = withTiming(1, { duration: 300 });
       headerOpacity.value = withTiming(1, { duration: 300 });
       bottomTextOpacity.value = withTiming(1, { duration: 300 });
-      
+
       // Re-enable interactions after animation completes
       setTimeout(() => {
         setIsTransitioning(false);
@@ -73,7 +72,7 @@ export default function AuthScreen() {
 
   const formAnimatedStyle = useAnimatedStyle(() => ({
     opacity: formOpacity.value,
-    pointerEvents: formOpacity.value > 0.5 ? 'auto' : 'none',
+    pointerEvents: formOpacity.value > 0.5 ? "auto" : "none",
   }));
 
   const buttonContainerStyle = useAnimatedStyle(() => {
@@ -81,7 +80,7 @@ export default function AuthScreen() {
     // Use overflow hidden when opacity is very low to clip shadow completely
     return {
       opacity,
-      overflow: opacity > 0.15 ? 'visible' : 'hidden',
+      overflow: opacity > 0.15 ? "visible" : "hidden",
     };
   });
 
@@ -91,79 +90,85 @@ export default function AuthScreen() {
 
   const bottomTextAnimatedStyle = useAnimatedStyle(() => ({
     opacity: bottomTextOpacity.value,
-    pointerEvents: bottomTextOpacity.value > 0.5 ? 'auto' : 'none',
+    pointerEvents: bottomTextOpacity.value > 0.5 ? "auto" : "none",
   }));
 
   const handleSubmit = () => {
-    if (mode === 'login') {
-      console.log('Login:', { email, password });
+    if (mode === "login") {
+      console.log("Login:", { email, password });
       // router.replace('/(tabs)');
     } else {
-      console.log('Register:', { name, email, password, confirmPassword });
+      console.log("Register:", { name, email, password, confirmPassword });
       // router.replace('/(tabs)');
     }
   };
-
 
   return (
     <View style={{ flex: 1 }}>
       {/* Gradient Background */}
       <LinearGradient
-        colors={['#3B82F6', '#2B2F77', '#070B34']}
+        colors={["#3B82F6", "#2B2F77", "#070B34"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
       {/* Floating Icons Background */}
       <FloatingIconsBackground />
 
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+      <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <ScrollView
             contentContainerStyle={{ flexGrow: 1, paddingVertical: 20 }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24, zIndex: 1 }}>
+            <View
+              style={{
+                flex: 1,
+                justifyContent: "center",
+                paddingHorizontal: 24,
+                zIndex: 1,
+              }}
+            >
               {/* Header */}
               <Animated.View
                 style={[
-                  { marginBottom: 40, alignItems: 'center' },
+                  { marginBottom: 40, alignItems: "center" },
                   headerAnimatedStyle,
                 ]}
               >
                 <Text
                   style={{
                     fontSize: 36,
-                    fontWeight: '700',
-                    color: '#ffffff',
+                    fontWeight: "700",
+                    color: "#ffffff",
                     marginBottom: 12,
                   }}
                 >
-                  {mode === 'login' ? 'Welcome Back' : 'Create Account'}
+                  {mode === "login" ? "Welcome Back" : "Create Account"}
                 </Text>
                 <Text
                   style={{
                     fontSize: 16,
-                    color: '#ffffff',
-                    textAlign: 'center',
+                    color: "#ffffff",
+                    textAlign: "center",
                     opacity: 0.9,
                   }}
                 >
-                  {mode === 'login'
-                    ? 'Sign in to continue to PragatiHub'
-                    : 'Join PragatiHub and start your journey'}
+                  {mode === "login"
+                    ? "Sign in to continue to PragatiHub"
+                    : "Join PragatiHub and start your journey"}
                 </Text>
               </Animated.View>
 
               {/* Form */}
               <Animated.View style={[{ gap: 16 }, formAnimatedStyle]}>
                 {/* Name Input - Only for Register */}
-                {mode === 'register' && (
+                {mode === "register" && (
                   <View>
                     <InputField
                       label="Full Name"
@@ -195,7 +200,11 @@ export default function AuthScreen() {
                 <View>
                   <InputField
                     label="Password"
-                    placeholder={mode === 'login' ? 'Enter your password' : 'Create a password'}
+                    placeholder={
+                      mode === "login"
+                        ? "Enter your password"
+                        : "Create a password"
+                    }
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
@@ -205,7 +214,7 @@ export default function AuthScreen() {
                 </View>
 
                 {/* Confirm Password Input - Only for Register */}
-                {mode === 'register' && (
+                {mode === "register" && (
                   <View>
                     <InputField
                       label="Confirm Password"
@@ -220,14 +229,14 @@ export default function AuthScreen() {
                 )}
 
                 {/* Forgot Password - Only for Login */}
-                {mode === 'login' && (
-                  <View style={{ alignItems: 'flex-end' }}>
+                {mode === "login" && (
+                  <View style={{ alignItems: "flex-end" }}>
                     <TouchableOpacity>
                       <Text
                         style={{
                           fontSize: 14,
-                          fontWeight: '600',
-                          color: '#ffffff',
+                          fontWeight: "600",
+                          color: "#ffffff",
                         }}
                       >
                         Forgot Password?
@@ -237,9 +246,9 @@ export default function AuthScreen() {
                 )}
 
                 {/* Submit Button */}
-                <Animated.View 
+                <Animated.View
                   style={[
-                    { 
+                    {
                       marginTop: 8,
                     },
                     buttonContainerStyle,
@@ -247,7 +256,7 @@ export default function AuthScreen() {
                 >
                   <View
                     style={{
-                      shadowColor: '#000',
+                      shadowColor: "#000",
                       shadowOffset: { width: 0, height: 4 },
                       shadowOpacity: 0.3,
                       shadowRadius: 8,
@@ -258,20 +267,20 @@ export default function AuthScreen() {
                       onPress={handleSubmit}
                       disabled={isTransitioning}
                       style={{
-                        backgroundColor: '#ffffff',
+                        backgroundColor: "#ffffff",
                         borderRadius: 12,
                         paddingVertical: 16,
-                        alignItems: 'center',
+                        alignItems: "center",
                       }}
                     >
                       <Text
                         style={{
                           fontSize: 16,
-                          fontWeight: '700',
+                          fontWeight: "700",
                           color: primaryColor,
                         }}
                       >
-                        {mode === 'login' ? 'Sign In' : 'Create Account'}
+                        {mode === "login" ? "Sign In" : "Create Account"}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -282,27 +291,32 @@ export default function AuthScreen() {
               <Animated.View
                 style={[
                   {
-                    flexDirection: 'row',
-                    justifyContent: 'center',
+                    flexDirection: "row",
+                    justifyContent: "center",
                     marginTop: 24,
                     gap: 4,
                   },
                   bottomTextAnimatedStyle,
                 ]}
               >
-                <Text style={{ fontSize: 14, color: '#ffffff', opacity: 0.9 }}>
-                  {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+                <Text style={{ fontSize: 14, color: "#ffffff", opacity: 0.9 }}>
+                  {mode === "login"
+                    ? "Don't have an account? "
+                    : "Already have an account? "}
                 </Text>
-                <TouchableOpacity onPress={toggleMode} disabled={isTransitioning}>
+                <TouchableOpacity
+                  onPress={toggleMode}
+                  disabled={isTransitioning}
+                >
                   <Text
                     style={{
                       fontSize: 14,
-                      fontWeight: '700',
-                      color: '#ffffff',
+                      fontWeight: "700",
+                      color: "#ffffff",
                       opacity: isTransitioning ? 0.5 : 1,
                     }}
                   >
-                    {mode === 'login' ? 'Sign Up' : 'Sign In'}
+                    {mode === "login" ? "Sign Up" : "Sign In"}
                   </Text>
                 </TouchableOpacity>
               </Animated.View>

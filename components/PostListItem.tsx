@@ -1,32 +1,110 @@
-import { useThemeColor } from "@/hooks/use-theme-color";
 import { formatDistanceToNowStrict } from "date-fns";
 import {
   ArrowBigDown,
   ArrowBigUp,
+  Loader2,
   MessageSquare,
   Share2,
   Trophy,
 } from "lucide-react-native";
-import { Image, Pressable, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  Image,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 
-export type Post = {
-  id: string;
-  title: string;
-  description: string | null;
-  image: string | null;
-  created_at: string;
-  upvotes: number;
-  nr_of_comments: number;
-  group: {
-    name: string;
-    image: string;
-  };
-};
+import { PostListItemProps } from "@/constants/types";
+import { useThemeColor } from "@/hooks/use-theme-color";
 
-export type PostListItemProps = {
-  post: Post;
-};
+const SCREEN_WIDTH = Dimensions.get("window").width;
 
+/* ───────────────────────────────────────────── */
+/* Post Image with Animated Loader */
+/* ───────────────────────────────────────────── */
+function PostImage({ uri }: { uri: string }) {
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  /* Spinner animation */
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(rotate, {
+        toValue: 1,
+        duration: 900,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
+
+  /* Fetch image size */
+  useEffect(() => {
+    Image.getSize(
+      uri,
+      (width, height) => {
+        setAspectRatio(width / height);
+      },
+      () => {
+        setAspectRatio(1);
+      }
+    );
+  }, [uri]);
+
+  if (!aspectRatio) return null;
+
+  const spin = rotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <View
+      style={{
+        width: "100%",
+        aspectRatio,
+        maxHeight: SCREEN_WIDTH * 1.25,
+        borderRadius: 16,
+        backgroundColor: "#00000010",
+        overflow: "hidden",
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      {/* Loader */}
+      {!loaded && (
+        <Animated.View
+          style={{
+            position: "absolute",
+            transform: [{ rotate: spin }],
+          }}
+        >
+          <Loader2 size={28} color="#999" />
+        </Animated.View>
+      )}
+
+      {/* Image */}
+      <Image
+        source={{ uri }}
+        resizeMode="cover"
+        onLoadEnd={() => setLoaded(true)}
+        style={{
+          width: "100%",
+          height: "100%",
+          opacity: loaded ? 1 : 0,
+        }}
+      />
+    </View>
+  );
+}
+
+/* ───────────────────────────────────────────── */
+/* Main Post Card */
+/* ───────────────────────────────────────────── */
 export default function PostListItem({ post }: PostListItemProps) {
   const text = useThemeColor({}, "text");
   const muted = useThemeColor({}, "textMuted");
@@ -81,13 +159,7 @@ export default function PostListItem({ post }: PostListItemProps) {
           {post.title}
         </Text>
 
-        {post.image && (
-          <Image
-            source={{ uri: post.image }}
-            className="w-full aspect-[4/3] rounded-2xl"
-            resizeMode="cover"
-          />
-        )}
+        {post.image && <PostImage uri={post.image} />}
 
         {post.description && (
           <Text
@@ -110,7 +182,6 @@ export default function PostListItem({ post }: PostListItemProps) {
       />
 
       {/* ───────── Footer ───────── */}
-      {/* ───────── Footer ───────── */}
       <View className="flex-row items-center">
         {/* Votes */}
         <View
@@ -128,11 +199,10 @@ export default function PostListItem({ post }: PostListItemProps) {
             <ArrowBigUp size={22} color={text} />
           </Pressable>
 
-          {/* Vote count */}
           <Text className="font-semibold ml-3" style={{ color: text }}>
             {post.upvotes}
           </Text>
-          {/* vertical separator */}
+
           <View
             style={{
               width: 1,
@@ -168,7 +238,6 @@ export default function PostListItem({ post }: PostListItemProps) {
             <Trophy size={20} color={muted} />
           </Pressable>
 
-          {/* vertical separator */}
           <View
             style={{
               width: 1,
