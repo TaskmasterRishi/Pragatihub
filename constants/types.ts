@@ -1,8 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Href, Link } from "expo-router";
 import { SymbolViewProps } from "expo-symbols";
-import { type ComponentProps } from "react";
-import { type TextProps, type ViewProps } from "react-native";
+import { type ComponentProps, type TextProps, type ViewProps } from "react";
 
 // ────────────────────────────────────────────────────────
 // Post Types

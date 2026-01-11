@@ -1,6 +1,5 @@
 import FloatingIconsBackground from "@/components/floating-icons-background";
 import InputField from "@/components/ui/input-field";
-import { AuthMode } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -22,6 +21,8 @@ import Animated, {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+type AuthMode = "login" | "register";
 
 export default function AuthScreen() {
   const router = useRouter();
