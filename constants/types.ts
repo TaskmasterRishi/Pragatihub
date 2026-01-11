@@ -1,7 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Href, Link } from "expo-router";
 import { SymbolViewProps } from "expo-symbols";
-import { type ComponentProps, type TextProps, type ViewProps } from "react";
+import { type ComponentProps } from "react";
 
 // ────────────────────────────────────────────────────────
 // Post Types
@@ -29,13 +29,13 @@ export type PostListItemProps = {
 // Themed Component Types
 // ────────────────────────────────────────────────────────
 
-export type ThemedTextProps = TextProps & {
+export type ThemedTextProps = React.ComponentProps<'text'> & {
   lightColor?: string;
   darkColor?: string;
   type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
 };
 
-export type ThemedViewProps = ViewProps & {
+export type ThemedViewProps = React.ComponentProps<'view'> & {
   lightColor?: string;
   darkColor?: string;
 };
