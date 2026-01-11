@@ -110,16 +110,37 @@ export default function PostListItem({ post }: PostListItemProps) {
       />
 
       {/* ───────── Footer ───────── */}
+      {/* ───────── Footer ───────── */}
       <View className="flex-row items-center">
         {/* Votes */}
-        <View className="flex-row items-center gap-1">
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            borderWidth: 1,
+            borderColor: border,
+            borderRadius: 999,
+            paddingHorizontal: 6,
+            paddingVertical: 4,
+          }}
+        >
           <Pressable className="p-1">
             <ArrowBigUp size={22} color={text} />
           </Pressable>
 
-          <Text className="font-semibold mx-1" style={{ color: text }}>
+          {/* Vote count */}
+          <Text className="font-semibold ml-3" style={{ color: text }}>
             {post.upvotes}
           </Text>
+          {/* vertical separator */}
+          <View
+            style={{
+              width: 1,
+              height: 20,
+              backgroundColor: border,
+              marginHorizontal: 6,
+            }}
+          />
 
           <Pressable className="p-1">
             <ArrowBigDown size={22} color={text} />
@@ -133,10 +154,30 @@ export default function PostListItem({ post }: PostListItemProps) {
         </View>
 
         {/* Actions */}
-        <View className="ml-auto flex-row gap-4">
+        <View
+          className="ml-auto flex-row items-center"
+          style={{
+            borderWidth: 1,
+            borderColor: border,
+            borderRadius: 999,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+          }}
+        >
           <Pressable>
             <Trophy size={20} color={muted} />
           </Pressable>
+
+          {/* vertical separator */}
+          <View
+            style={{
+              width: 1,
+              height: 18,
+              backgroundColor: border,
+              marginHorizontal: 10,
+            }}
+          />
+
           <Pressable>
             <Share2 size={20} color={muted} />
           </Pressable>
