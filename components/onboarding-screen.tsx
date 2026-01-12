@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   Text,
@@ -25,6 +26,9 @@ import Animated, {
   withTiming
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+// --- auth check addition ---
+import { useAuth } from '@clerk/clerk-expo'; // or your actual auth hook
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -61,6 +65,8 @@ const slides: OnboardingSlide[] = [
 ];
 
 export default function OnboardingScreen() {
+  // --- auth check addition ---
+  const { isSignedIn, isLoaded } = useAuth ? useAuth() : { isSignedIn: false, isLoaded: true };
   const router = useRouter();
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? 'dark' : 'light';
@@ -71,17 +77,22 @@ export default function OnboardingScreen() {
   const textSecondary = useThemeColor({}, 'textSecondary');
   const primaryColor = useThemeColor({}, 'primary');
 
-
   const scrollX = useSharedValue(0);
   const scrollViewRef = useRef<Animated.ScrollView>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  
-  // Animation values for the arrow/button expansion
-  const buttonWidth = useSharedValue(56); // Start as circular arrow button (56px)
+
+  const buttonWidth = useSharedValue(56); // Arrow button
   const buttonHeight = useSharedValue(56);
   const buttonRadius = useSharedValue(28);
   const iconOpacity = useSharedValue(1);
   const iconRotation = useSharedValue(0);
+
+  // --- auth check addition with redirect ---
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace('/(protected)');
+    }
+  }, [isLoaded, isSignedIn]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -92,17 +103,16 @@ export default function OnboardingScreen() {
   const handleMomentumScrollEnd = (event: any) => {
     const index = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
     setCurrentIndex(index);
-    // Animation will be handled by useEffect watching currentIndex
   };
 
   const handleSkip = async () => {
     await setOnboardingCompleted();
-    router.replace('/(auth)/login');
+    router.replace('/(auth)/sign-in');
   };
 
   const handleGetStarted = async () => {
     await setOnboardingCompleted();
-    router.replace('/(auth)/login');
+    router.replace('/(auth)/sign-in');
   };
 
   const scrollToNext = () => {
@@ -112,16 +122,13 @@ export default function OnboardingScreen() {
         x: nextIndex * SCREEN_WIDTH,
         animated: true,
       });
-      // Index will be updated by handleMomentumScrollEnd after scroll completes
     }
   };
 
   const handleArrowPress = async () => {
     if (currentIndex === slides.length - 1) {
-      // Last screen: Get Started action
       await handleGetStarted();
     } else {
-      // Other screens: Navigate to next
       scrollToNext();
     }
   };
@@ -139,41 +146,28 @@ export default function OnboardingScreen() {
   }));
 
   const getStartedTextAnimatedStyle = useAnimatedStyle(() => {
-    // Calculate progress of button expansion (from 56 to SCREEN_WIDTH / 2)
     const minWidth = 56;
     const maxWidth = SCREEN_WIDTH / 2;
     const progress = Math.max(0, Math.min(1, (buttonWidth.value - minWidth) / (maxWidth - minWidth)));
-    
-    // Text appears gradually as button expands
-    // Start showing text when button is 30% expanded, fully visible at 70% expansion
     const textProgress = Math.max(0, Math.min(1, (progress - 0.3) / 0.4));
-    
     return {
       opacity: textProgress,
-      transform: [{ scale: 0.8 + textProgress * 0.2 }], // Slight scale animation
+      transform: [{ scale: 0.8 + textProgress * 0.2 }],
     };
   });
 
-  // Update button animation when currentIndex changes
   useEffect(() => {
     if (currentIndex === slides.length - 1) {
-      // Last screen: expand to half screen width
       const getStartedWidth = SCREEN_WIDTH / 2;
       buttonWidth.value = withSpring(getStartedWidth, { damping: 20, stiffness: 100 });
       buttonHeight.value = withSpring(56, { damping: 20, stiffness: 100 });
       buttonRadius.value = withSpring(28, { damping: 20, stiffness: 100 });
-      // Smooth crossfade: rotate icon and fade out icon
-      // Text will appear gradually based on button expansion (handled in animated style)
       iconRotation.value = withTiming(90, { duration: 300 });
       iconOpacity.value = withTiming(0, { duration: 300 });
     } else {
-      // Other screens: show as arrow button (shrinking back)
-      // Use withTiming for smooth, non-bouncy shrink animation
       buttonWidth.value = withTiming(56, { duration: 300 });
       buttonHeight.value = withTiming(56, { duration: 300 });
       buttonRadius.value = withTiming(28, { duration: 300 });
-      // Smooth crossfade: fade out text and fade in icon simultaneously
-      // Rotate icon back to 0 first, then fade in icon while text fades out
       iconRotation.value = withTiming(0, { duration: 250 });
       iconOpacity.value = withTiming(1, { duration: 250 });
     }
@@ -187,7 +181,7 @@ export default function OnboardingScreen() {
         index * SCREEN_WIDTH,
         (index + 1) * SCREEN_WIDTH,
       ];
-      
+
       const scale = interpolate(
         scrollX.value,
         inputRange,
@@ -360,6 +354,15 @@ export default function OnboardingScreen() {
       </Animated.View>
     );
   };
+
+  // --- show loading indicator while auth is loading ---
+  if (!isLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#fff" />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>
