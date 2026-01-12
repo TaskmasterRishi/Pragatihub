@@ -17,9 +17,12 @@ import {
   View,
 } from "react-native";
 
-import { PostListItemProps } from "@/constants/types";
+import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 
+export type PostListItemProps = {
+  post: Post;
+};
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
 /* ───────────────────────────────────────────── */
@@ -103,6 +106,53 @@ function PostImage({ uri }: { uri: string }) {
 }
 
 /* ───────────────────────────────────────────── */
+/* Animated Button Wrapper */
+/* ───────────────────────────────────────────── */
+function AnimatedIconButton({
+  children,
+  onPress,
+  style,
+}: {
+  children: React.ReactNode;
+  onPress?: () => void;
+  style?: any;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.8,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 7,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 25,
+      bounciness: 5,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={[{ transform: [{ scale }] }, style]}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        android_ripple={{ color: "#00000008", borderless: true }}
+        style={{ borderRadius: 999 }}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+/* ───────────────────────────────────────────── */
 /* Main Post Card */
 /* ───────────────────────────────────────────── */
 export default function PostListItem({ post }: PostListItemProps) {
@@ -139,7 +189,7 @@ export default function PostListItem({ post }: PostListItemProps) {
           </Text>
         </View>
 
-        <Pressable
+        <AnimatedIconButton
           style={{
             backgroundColor: primary,
             paddingHorizontal: 14,
@@ -150,7 +200,7 @@ export default function PostListItem({ post }: PostListItemProps) {
           <Text className="text-sm font-semibold" style={{ color: "white" }}>
             Join
           </Text>
-        </Pressable>
+        </AnimatedIconButton>
       </View>
 
       {/* ───────── Content ───────── */}
@@ -195,9 +245,9 @@ export default function PostListItem({ post }: PostListItemProps) {
             paddingVertical: 4,
           }}
         >
-          <Pressable className="p-1">
+          <AnimatedIconButton style={{ padding: 4 }}>
             <ArrowBigUp size={22} color={text} />
-          </Pressable>
+          </AnimatedIconButton>
 
           <Text className="font-semibold ml-3" style={{ color: text }}>
             {post.upvotes}
@@ -212,9 +262,9 @@ export default function PostListItem({ post }: PostListItemProps) {
             }}
           />
 
-          <Pressable className="p-1">
+          <AnimatedIconButton style={{ padding: 4 }}>
             <ArrowBigDown size={22} color={text} />
-          </Pressable>
+          </AnimatedIconButton>
         </View>
 
         {/* Comments */}
@@ -234,9 +284,9 @@ export default function PostListItem({ post }: PostListItemProps) {
             paddingVertical: 6,
           }}
         >
-          <Pressable>
+          <AnimatedIconButton>
             <Trophy size={20} color={muted} />
-          </Pressable>
+          </AnimatedIconButton>
 
           <View
             style={{
@@ -247,9 +297,9 @@ export default function PostListItem({ post }: PostListItemProps) {
             }}
           />
 
-          <Pressable>
+          <AnimatedIconButton>
             <Share2 size={20} color={muted} />
-          </Pressable>
+          </AnimatedIconButton>
         </View>
       </View>
     </View>
