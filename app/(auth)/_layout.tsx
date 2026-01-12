@@ -1,15 +1,22 @@
-import { Stack } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo'
+import { Redirect, Stack } from 'expo-router'
+import { View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-export default function AuthLayout() {
+export default function AuthRoutesLayout() {
+  const { isSignedIn } = useAuth()
+  const insets = useSafeAreaInsets()
+
+  if (isSignedIn) {
+    return <Redirect href={'/'} />
+  }
+
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: 'slide_from_right',
-      }}
-    >
-      <Stack.Screen name="login" />
-      <Stack.Screen name="register" />
-    </Stack>
-  );
+    <View style={{ flex: 1, paddingTop: insets.top }}>
+      <Stack screenOptions={{ headerShown: false }} >
+        <Stack.Screen name="sign-in" />
+        <Stack.Screen name="sign-up" />
+      </Stack>
+    </View>
+  )
 }
