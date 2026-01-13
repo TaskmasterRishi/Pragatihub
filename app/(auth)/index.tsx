@@ -31,7 +31,7 @@ export default function AuthScreen() {
   const { isSignedIn } = useAuth();
 
   if (isSignedIn) {
-    return <Redirect href={"/(protected)/(tabs)"} />;
+    return <Redirect href="../(protected)/(tabs)/index" />;
   }
 
   useWarmUpBrowser();
@@ -127,7 +127,7 @@ export default function AuthScreen() {
 
       if (signInAttempt.status === "complete") {
         await setSignInActive({ session: signInAttempt.createdSessionId });
-        router.replace("/(protected)/(tabs)/inbox");
+        router.replace("/(protected)/(tabs)");
       } else {
         console.error(JSON.stringify(signInAttempt, null, 2));
         Alert.alert(
@@ -172,7 +172,7 @@ export default function AuthScreen() {
 
       if (signUpAttempt.status === "complete") {
         await setSignUpActive({ session: signUpAttempt.createdSessionId });
-        router.replace("/"); // or specific route
+        router.replace("/(protected)/(tabs)"); // or specific route
       } else {
         console.error(JSON.stringify(signUpAttempt, null, 2));
         Alert.alert("Error", "Verification failed. Please try again.");
