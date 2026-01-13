@@ -1,6 +1,19 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import {
+  AppWindow,
+  ChevronLeft,
+  ChevronRight,
+  Footprints,
+  Gem,
+  Grid,
+  Languages,
+  Mail,
+  ShieldCheck,
+  User,
+  Users,
+  Wallet,
+} from "lucide-react-native";
 import React from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,82 +37,67 @@ export default function SettingsScreen() {
   const [isDarkMode, setIsDarkMode] = React.useState(false);
 
   const SettingItem = ({
-    icon,
+    Icon,
     label,
     value,
     onPress,
     showChevron = true,
+    style,
   }: {
-    icon: keyof typeof Ionicons.glyphMap;
+    Icon: any;
     label: string;
     value?: string;
     onPress?: () => void;
     showChevron?: boolean;
+    style?: any;
   }) => (
     <TouchableOpacity
       onPress={onPress}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: borderColor,
-      }}
+      className="flex-row items-center border-b py-4"
+      style={[
+        {
+          borderBottomColor: borderColor,
+        },
+        style,
+      ]}
     >
-      <Ionicons
-        name={icon}
-        size={24}
-        color={textSecondaryColor}
-        style={{ marginRight: 16 }}
-      />
+      <Icon size={24} color={textSecondaryColor} className="mr-4" />
       <Text
-        style={{ flex: 1, fontSize: 16, color: textColor, fontWeight: "500" }}
+        className="flex-1 text-base font-medium"
+        style={{ color: textColor }}
       >
         {label}
       </Text>
       {value && (
-        <Text
-          style={{ fontSize: 16, color: textSecondaryColor, marginRight: 8 }}
-        >
+        <Text className="mr-2 text-base" style={{ color: textSecondaryColor }}>
           {value}
         </Text>
       )}
-      {showChevron && (
-        <Ionicons name="chevron-forward" size={20} color={textSecondaryColor} />
-      )}
+      {showChevron && <ChevronRight size={20} color={textSecondaryColor} />}
     </TouchableOpacity>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor }}>
+    <View className="flex-1" style={{ backgroundColor }}>
       {/* Header */}
       <View
+        className="flex-row items-center border-b px-5 pb-5"
         style={{
           paddingTop: insets.top,
-          paddingHorizontal: 20,
-          paddingBottom: 20,
-          flexDirection: "row",
-          alignItems: "center",
           backgroundColor: cardColor,
-          borderBottomWidth: 1,
           borderBottomColor: borderColor,
         }}
       >
         <TouchableOpacity
           onPress={() => router.back()}
+          className="mr-4 h-10 w-10 items-center justify-center rounded-xl"
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 12,
             backgroundColor: backgroundColor,
-            alignItems: "center",
-            justifyContent: "center",
-            marginRight: 16,
           }}
         >
-          <Ionicons name="chevron-back" size={24} color={textColor} />
+          <ChevronLeft size={24} color={textColor} />
         </TouchableOpacity>
-        <Text style={{ fontSize: 20, fontWeight: "700", color: textColor }}>
+        <Text className="text-xl font-bold" style={{ color: textColor }}>
           Settings
         </Text>
       </View>
@@ -107,21 +105,19 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         {/* Account Section */}
         <View
+          className="mb-6 rounded-2xl p-4"
           style={{
             backgroundColor: cardColor,
-            borderRadius: 16,
-            padding: 16,
-            marginBottom: 24,
           }}
         >
           <SettingItem
-            icon="mail-outline"
+            Icon={Mail}
             label="Email"
             value={user?.primaryEmailAddress?.emailAddress}
             showChevron={false}
           />
           <SettingItem
-            icon="person-outline"
+            Icon={User}
             label="Username"
             value={
               user?.username ||
@@ -130,14 +126,10 @@ export default function SettingsScreen() {
                 : "User")
             }
           />
-          <SettingItem icon="footsteps-outline" label="Step data source" />
+          <SettingItem Icon={Footprints} label="Step data source" />
+          <SettingItem Icon={Languages} label="Language" value="English" />
           <SettingItem
-            icon="language-outline"
-            label="Language"
-            value="English"
-          />
-          <SettingItem
-            icon="shield-checkmark-outline"
+            Icon={ShieldCheck}
             label="Privacy"
             style={{ borderBottomWidth: 0 }}
           />
@@ -145,129 +137,61 @@ export default function SettingsScreen() {
 
         {/* Premium Status */}
         <View
+          className="mb-6 flex-row items-center justify-between rounded-2xl p-4"
           style={{
             backgroundColor: cardColor,
-            borderRadius: 16,
-            padding: 16,
-            marginBottom: 24,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
           }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Ionicons
-              name="diamond-outline"
-              size={24}
-              color={primaryColor}
-              style={{ marginRight: 12 }}
-            />
-            <Text style={{ fontSize: 16, fontWeight: "600", color: textColor }}>
+          <View className="flex-row items-center">
+            <Gem size={24} color={primaryColor} className="mr-3" />
+            <Text
+              className="text-base font-semibold"
+              style={{ color: textColor }}
+            >
               Premium Status
             </Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Text
-              style={{
-                fontSize: 14,
-                color: "#ef4444",
-                marginRight: 4,
-                fontWeight: "500",
-              }}
-            >
+          <View className="flex-row items-center">
+            <Text className="mr-1 text-sm font-medium text-red-500">
               Inactive
             </Text>
-            <Ionicons
-              name="chevron-forward"
-              size={20}
-              color={textSecondaryColor}
-            />
+            <ChevronRight size={20} color={textSecondaryColor} />
           </View>
         </View>
 
         {/* Refer a friend banner */}
         <TouchableOpacity
+          className="relative mb-6 overflow-hidden rounded-2xl p-5"
           style={{
             backgroundColor: "#ff6b00", // Orange-ish color from design
-            borderRadius: 20,
-            padding: 20,
-            marginBottom: 24,
-            overflow: "hidden",
-            position: "relative",
           }}
         >
           {/* Decorative circles */}
-          <View
-            style={{
-              position: "absolute",
-              right: -20,
-              top: -20,
-              width: 100,
-              height: 100,
-              borderRadius: 50,
-              borderWidth: 20,
-              borderColor: "rgba(255,255,255,0.1)",
-            }}
-          />
+          <View className="absolute -right-5 -top-5 h-[100px] w-[100px] rounded-full border-[20px] border-white/10" />
 
-          <Text
-            style={{
-              color: "white",
-              fontSize: 18,
-              fontWeight: "bold",
-              marginBottom: 8,
-            }}
-          >
+          <Text className="mb-2 text-lg font-bold text-white">
             Refer a friend
           </Text>
-          <View
-            style={{
-              backgroundColor: "rgba(255,255,255,0.2)",
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 20,
-              alignSelf: "flex-start",
-              flexDirection: "row",
-              alignItems: "center",
-            }}
-          >
-            <Ionicons
-              name="wallet-outline"
-              size={16}
-              color="white"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={{ color: "white", fontWeight: "bold" }}>
-              50 /referral
-            </Text>
+          <View className="self-start flex-row items-center rounded-2xl bg-white/20 px-3 py-1.5">
+            <Wallet size={16} color="white" className="mr-1.5" />
+            <Text className="font-bold text-white">50 /referral</Text>
           </View>
           {/* Panda illustration placeholder */}
-          <View
-            style={{
-              position: "absolute",
-              right: 20,
-              bottom: 0,
-              height: 80,
-              width: 80,
-              justifyContent: "flex-end",
-            }}
-          >
-            <Ionicons name="people-circle" size={80} color="white" />
+          <View className="absolute bottom-0 right-5 h-20 w-20 justify-end">
+            <Users size={80} color="white" />
           </View>
         </TouchableOpacity>
 
         {/* App Settings */}
         <View
+          className="mb-6 rounded-2xl p-4"
           style={{
             backgroundColor: cardColor,
-            borderRadius: 16,
-            padding: 16,
-            marginBottom: 24,
           }}
         >
-          <SettingItem icon="apps-outline" label="App Icon" />
+          <SettingItem Icon={AppWindow} label="App Icon" />
           <SettingItem
-            icon="grid-outline"
+            Icon={Grid}
             label="Widget"
             style={{ borderBottomWidth: 0 }}
           />
@@ -276,17 +200,12 @@ export default function SettingsScreen() {
         {/* Logout Button */}
         <TouchableOpacity
           onPress={() => signOut()}
+          className="mb-10 items-center rounded-2xl p-4"
           style={{
             backgroundColor: cardColor,
-            borderRadius: 16,
-            padding: 16,
-            alignItems: "center",
-            marginBottom: 40,
           }}
         >
-          <Text style={{ color: "#ef4444", fontSize: 16, fontWeight: "600" }}>
-            Log Out
-          </Text>
+          <Text className="text-base font-semibold text-red-500">Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
