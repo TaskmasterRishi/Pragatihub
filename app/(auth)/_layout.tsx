@@ -8,7 +8,7 @@ export default function AuthRoutesLayout() {
   const insets = useSafeAreaInsets()
 
   if (isSignedIn) {
-    return <Redirect href={'/'} />
+    return <Redirect href={'/(protected)/(tabs)'} />
   }
 
   return (
