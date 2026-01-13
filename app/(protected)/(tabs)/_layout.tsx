@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { Bell, Home, MessageCircle, Plus, Users } from "lucide-react-native";
+import { Bell, Home, Plus, User, Users } from "lucide-react-native";
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -75,19 +75,6 @@ export default function TabLayout() {
         />
 
         <Tabs.Screen
-          name="chat"
-          options={{
-            title: "Chat",
-            tabBarIcon: ({ focused }) => (
-              <MessageCircle
-                size={26}
-                color={focused ? tabBarActiveTint : tabBarInactiveTint}
-              />
-            ),
-          }}
-        />
-
-        <Tabs.Screen
           name="create"
           options={{
             title: "Create",
@@ -119,6 +106,19 @@ export default function TabLayout() {
             title: "Communities",
             tabBarIcon: ({ focused }) => (
               <Users
+                size={26}
+                color={focused ? tabBarActiveTint : tabBarInactiveTint}
+              />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+            tabBarIcon: ({ focused }) => (
+              <User
                 size={26}
                 color={focused ? tabBarActiveTint : tabBarInactiveTint}
               />
