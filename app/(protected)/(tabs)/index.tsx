@@ -23,7 +23,6 @@ export default function HomeScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <PostListItem post={item} />}
         contentContainerStyle={{
-          padding: 20,
           paddingBottom: 120, // space for floating tab bar
         }}
         onEndReached={() => {

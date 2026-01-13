@@ -12,8 +12,11 @@ export default function AppLayout() {
   }
 
   return (
-    <View style={{ flex: 1, paddingTop: insets.top }}>
-      <Stack screenOptions={{ headerShown: false }} />
+    <View style={{ flex: 1, paddingTop: insets.top}}>
+      <Stack screenOptions={{ headerShown: false }} >
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="post/[id]" options={{animation:"fade_from_bottom"}}/>
+      </Stack>
     </View>
   );
 }
