@@ -171,6 +171,8 @@ export default function PostListItem({ post, isDetailedPost = false }: PostListI
         borderRadius: 20,
         padding: 16,
         marginBottom: 16,
+        marginLeft:16,
+        marginRight:16,
         borderWidth: 1,
         borderColor: border,
       }}
