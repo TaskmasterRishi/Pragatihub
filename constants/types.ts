@@ -16,13 +16,20 @@ export type Post = {
   upvotes: number;
   nr_of_comments: number;
   group: {
+    id: string;
     name: string;
     image: string;
+  };
+  user: {
+    id: string;
+    name: string;
+    image: string | null;
   };
 };
 
 export type PostListItemProps = {
   post: Post;
+  isDetailedPost?: boolean;
 };
 
 // ────────────────────────────────────────────────────────
