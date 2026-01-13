@@ -1,6 +1,6 @@
 import { useUser } from "@clerk/clerk-expo";
 import * as ImagePicker from "expo-image-picker";
-import { Link, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import {
   ChevronLeft,
   Footprints,
@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Image,
+  Modal,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -22,6 +23,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import Settings from "@/components/Settings";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { Pen } from "lucide-react-native";
 
@@ -32,6 +34,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const [updatingImage, setUpdatingImage] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const onSelectImage = async () => {
     try {
@@ -204,11 +207,12 @@ export default function ProfileScreen() {
               <ChevronLeft size={24} color={primaryForeground} />
             </TouchableOpacity>
 
-            <Link href="/settings" asChild>
-              <TouchableOpacity className="h-11 w-11 items-center justify-center rounded-2xl bg-white/20">
-                <SettingsIcon size={24} color={primaryForeground} />
-              </TouchableOpacity>
-            </Link>
+            <TouchableOpacity
+              onPress={() => setShowSettings(true)}
+              className="h-11 w-11 items-center justify-center rounded-2xl bg-white/20"
+            >
+              <SettingsIcon size={24} color={primaryForeground} />
+            </TouchableOpacity>
           </View>
 
           {/* Profile Details */}
@@ -329,6 +333,14 @@ export default function ProfileScreen() {
           <WeeklyChart />
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showSettings}
+        animationType="slide"
+        onRequestClose={() => setShowSettings(false)}
+      >
+        <Settings onClose={() => setShowSettings(false)} />
+      </Modal>
     </View>
   );
 }
