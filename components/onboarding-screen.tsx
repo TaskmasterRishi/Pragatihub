@@ -64,6 +64,146 @@ const slides: OnboardingSlide[] = [
   },
 ];
 
+const Slide = ({ slide, index, scrollX }: { slide: OnboardingSlide; index: number; scrollX: any }) => {
+  const animatedImageStyle = useAnimatedStyle(() => {
+    const inputRange = [
+      (index - 1) * SCREEN_WIDTH,
+      index * SCREEN_WIDTH,
+      (index + 1) * SCREEN_WIDTH,
+    ];
+
+    const scale = interpolate(
+      scrollX.value,
+      inputRange,
+      [0.8, 1, 0.8],
+      Extrapolate.CLAMP
+    );
+
+    const opacity = interpolate(
+      scrollX.value,
+      inputRange,
+      [0.5, 1, 0.5],
+      Extrapolate.CLAMP
+    );
+
+    const translateY = interpolate(
+      scrollX.value,
+      inputRange,
+      [50, 0, 50],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      transform: [
+        { scale },
+        { translateY },
+      ],
+      opacity,
+    };
+  });
+
+  const animatedTextStyle = useAnimatedStyle(() => {
+    const inputRange = [
+      (index - 1) * SCREEN_WIDTH,
+      index * SCREEN_WIDTH,
+      (index + 1) * SCREEN_WIDTH,
+    ];
+
+    const opacity = interpolate(
+      scrollX.value,
+      inputRange,
+      [0, 1, 0],
+      Extrapolate.CLAMP
+    );
+
+    const translateY = interpolate(
+      scrollX.value,
+      inputRange,
+      [30, 0, -30],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      opacity,
+      transform: [{ translateY }],
+    };
+  });
+
+  return (
+    <View
+      key={index}
+      style={{
+        width: SCREEN_WIDTH,
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        backgroundColor: 'transparent',
+      }}
+    >
+      {/* Image Container */}
+      <Animated.View
+        style={[
+          {
+            width: SCREEN_WIDTH * 0.85,
+            height: SCREEN_HEIGHT * 0.5,
+            marginBottom: 40,
+            alignItems: 'center',
+            justifyContent: 'center',
+          },
+          animatedImageStyle,
+        ]}
+      >
+        <Image
+          source={slide.image}
+          style={{
+            width: '100%',
+            height: '100%',
+            resizeMode: 'contain',
+          }}
+        />
+      </Animated.View>
+
+      {/* Text Content */}
+      <Animated.View
+        style={[
+          {
+            alignItems: 'center',
+            paddingHorizontal: 20,
+          },
+          animatedTextStyle,
+        ]}
+      >
+        <Text
+          style={{
+            fontSize: 32,
+            fontWeight: '700',
+            color: '#ffffff',
+            textAlign: 'center',
+            marginBottom: 16,
+            lineHeight: 40,
+          }}
+        >
+          {slide.title}
+        </Text>
+        <Text
+          style={{
+            fontSize: 16,
+            fontWeight: '400',
+            color: '#ffffff',
+            textAlign: 'center',
+            lineHeight: 24,
+            maxWidth: SCREEN_WIDTH * 0.9,
+            opacity: 0.9,
+          }}
+        >
+          {slide.subtitle}
+        </Text>
+      </Animated.View>
+    </View>
+  );
+};
+
 export default function OnboardingScreen() {
   // --- auth check addition ---
   const { isSignedIn, isLoaded } = useAuth ? useAuth() : { isSignedIn: false, isLoaded: true };
@@ -90,7 +230,7 @@ export default function OnboardingScreen() {
   // --- auth check addition with redirect ---
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      router.replace('/(protected)');
+      router.replace('/(protected)/(tabs)');
     }
   }, [isLoaded, isSignedIn]);
 
@@ -173,146 +313,7 @@ export default function OnboardingScreen() {
     }
   }, [currentIndex]);
 
-  const renderSlide = (slide: OnboardingSlide, index: number) => {
 
-    const animatedImageStyle = useAnimatedStyle(() => {
-      const inputRange = [
-        (index - 1) * SCREEN_WIDTH,
-        index * SCREEN_WIDTH,
-        (index + 1) * SCREEN_WIDTH,
-      ];
-
-      const scale = interpolate(
-        scrollX.value,
-        inputRange,
-        [0.8, 1, 0.8],
-        Extrapolate.CLAMP
-      );
-
-      const opacity = interpolate(
-        scrollX.value,
-        inputRange,
-        [0.5, 1, 0.5],
-        Extrapolate.CLAMP
-      );
-
-      const translateY = interpolate(
-        scrollX.value,
-        inputRange,
-        [50, 0, 50],
-        Extrapolate.CLAMP
-      );
-
-      return {
-        transform: [
-          { scale },
-          { translateY },
-        ],
-        opacity,
-      };
-    });
-
-    const animatedTextStyle = useAnimatedStyle(() => {
-      const inputRange = [
-        (index - 1) * SCREEN_WIDTH,
-        index * SCREEN_WIDTH,
-        (index + 1) * SCREEN_WIDTH,
-      ];
-
-      const opacity = interpolate(
-        scrollX.value,
-        inputRange,
-        [0, 1, 0],
-        Extrapolate.CLAMP
-      );
-
-      const translateY = interpolate(
-        scrollX.value,
-        inputRange,
-        [30, 0, -30],
-        Extrapolate.CLAMP
-      );
-
-      return {
-        opacity,
-        transform: [{ translateY }],
-      };
-    });
-
-    return (
-      <View
-        key={index}
-        style={{
-          width: SCREEN_WIDTH,
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          paddingHorizontal: 24,
-          backgroundColor: 'transparent',
-        }}
-      >
-        {/* Image Container */}
-        <Animated.View
-          style={[
-            {
-              width: SCREEN_WIDTH * 0.85,
-              height: SCREEN_HEIGHT * 0.5,
-              marginBottom: 40,
-              alignItems: 'center',
-              justifyContent: 'center',
-            },
-            animatedImageStyle,
-          ]}
-        >
-          <Image
-            source={slide.image}
-            style={{
-              width: '100%',
-              height: '100%',
-              resizeMode: 'contain',
-            }}
-          />
-        </Animated.View>
-
-        {/* Text Content */}
-        <Animated.View
-          style={[
-            {
-              alignItems: 'center',
-              paddingHorizontal: 20,
-            },
-            animatedTextStyle,
-          ]}
-        >
-          <Text
-            style={{
-              fontSize: 32,
-              fontWeight: '700',
-              color: '#ffffff',
-              textAlign: 'center',
-              marginBottom: 16,
-              lineHeight: 40,
-            }}
-          >
-            {slide.title}
-          </Text>
-          <Text
-            style={{
-              fontSize: 16,
-              fontWeight: '400',
-              color: '#ffffff',
-              textAlign: 'center',
-              lineHeight: 24,
-              maxWidth: SCREEN_WIDTH * 0.9,
-              opacity: 0.9,
-            }}
-          >
-            {slide.subtitle}
-          </Text>
-        </Animated.View>
-      </View>
-    );
-  };
 
 
   // Create animated gradient overlay layers for smooth transitions
@@ -432,7 +433,9 @@ export default function OnboardingScreen() {
           alignItems: 'center',
         }}
       >
-        {slides.map((slide, index) => renderSlide(slide, index))}
+        {slides.map((slide, index) => (
+          <Slide key={index} slide={slide} index={index} scrollX={scrollX} />
+        ))}
       </Animated.ScrollView>
 
       {/* Arrow / Get Started Button - Bottom Center */}
