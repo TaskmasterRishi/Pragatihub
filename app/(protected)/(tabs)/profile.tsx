@@ -1,7 +1,15 @@
 import { useUser } from "@clerk/clerk-expo";
-import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { Link, useRouter } from "expo-router";
+import {
+  ChevronLeft,
+  Footprints,
+  Plus,
+  Settings as SettingsIcon,
+  Star,
+  Trophy,
+  Zap,
+} from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -15,6 +23,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { Pen } from "lucide-react-native";
 
 const { width } = Dimensions.get("window");
 
@@ -60,46 +69,42 @@ export default function ProfileScreen() {
   const primaryForeground = useThemeColor({}, "primaryForeground");
 
   const StatCard = ({
-    iconName,
+    Icon,
     value,
     label,
     iconColor,
-    bgColor = cardColor,
-  }: any) => (
+  }: {
+    Icon: any;
+    value: string;
+    label: string;
+    iconColor: string;
+  }) => (
     <View
+      className="mb-4 rounded-3xl p-4"
       style={{
         width: (width - 48) / 2,
-        backgroundColor: bgColor,
-        padding: 16,
-        borderRadius: 20,
-        marginBottom: 16,
+        backgroundColor: cardColor,
       }}
     >
       <View
+        className="mb-3 h-10 w-10 items-center justify-center rounded-full"
         style={{
-          width: 40,
-          height: 40,
-          borderRadius: 20,
           backgroundColor: `${iconColor}20`, // 20% opacity
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 12,
         }}
       >
-        <Ionicons name={iconName} size={20} color={iconColor} />
+        <Icon size={20} color={iconColor} />
       </View>
       <Text
+        className="mb-1 text-2xl font-extrabold"
         style={{
-          fontSize: 24,
-          fontWeight: "800",
           color: textColor,
-          marginBottom: 4,
         }}
       >
         {value}
       </Text>
       <Text
-        style={{ fontSize: 13, color: textSecondaryColor, fontWeight: "500" }}
+        className="text-xs font-medium"
+        style={{ color: textSecondaryColor }}
       >
         {label}
       </Text>
@@ -108,65 +113,49 @@ export default function ProfileScreen() {
 
   const WeeklyChart = () => {
     const data = [30, 45, 20, 60, 35, 15, 30]; // Mock data
-    const max = Math.max(...data);
     const chartHeight = 120;
 
     return (
       <View
+        className="mb-24 rounded-3xl p-5"
         style={{
           backgroundColor: cardColor,
-          padding: 20,
-          borderRadius: 24,
-          marginBottom: 100,
         }}
       >
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginBottom: 20,
-          }}
-        >
+        <View className="mb-5 flex-row items-center">
           <Text
+            className="mr-2 text-lg font-bold"
             style={{
-              fontSize: 18,
-              fontWeight: "700",
               color: textColor,
-              marginRight: 8,
             }}
           >
             Weekly XP
           </Text>
-          <Text style={{ fontSize: 18, fontWeight: "700", color: textColor }}>
+          <Text className="text-lg font-bold" style={{ color: textColor }}>
             30
           </Text>
-          <Ionicons
-            name="flash"
-            size={16}
-            color="#fbbf24"
-            style={{ marginLeft: 4 }}
-          />
+          <Zap size={16} color="#fbbf24" fill="#fbbf24" className="ml-1" />
         </View>
 
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
             height: chartHeight,
           }}
+          className="flex-row items-end justify-between"
         >
-          <View
-            style={{
-              height: "100%",
-              justifyContent: "space-between",
-              paddingVertical: 0,
-            }}
-          >
-            <Text style={{ fontSize: 12, color: textSecondaryColor }}>30</Text>
-            <Text style={{ fontSize: 12, color: textSecondaryColor }}>25</Text>
-            <Text style={{ fontSize: 12, color: textSecondaryColor }}>20</Text>
-            <Text style={{ fontSize: 12, color: textSecondaryColor }}>15</Text>
+          <View className="h-full justify-between py-0">
+            <Text className="text-xs" style={{ color: textSecondaryColor }}>
+              30
+            </Text>
+            <Text className="text-xs" style={{ color: textSecondaryColor }}>
+              25
+            </Text>
+            <Text className="text-xs" style={{ color: textSecondaryColor }}>
+              20
+            </Text>
+            <Text className="text-xs" style={{ color: textSecondaryColor }}>
+              15
+            </Text>
           </View>
 
           {data.map((val, idx) => {
@@ -174,16 +163,13 @@ export default function ProfileScreen() {
             const isToday = idx === 1; // Mocking "Tuesday" (index 1) as "Today" highlighted
 
             return (
-              <View key={idx} style={{ alignItems: "center", width: "10%" }}>
+              <View key={idx} className="w-[10%] items-center">
                 <View
                   style={{
                     height: `${height}%`,
-                    width: "100%",
                     backgroundColor: isToday ? "#f97316" : "#ffe4bc", // Orange for highlighted
-                    borderRadius: 8,
-                    borderBottomLeftRadius: 0,
-                    borderBottomRightRadius: 0,
                   }}
+                  className="w-full rounded-t-lg"
                 />
               </View>
             );
@@ -194,217 +180,111 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor }}>
+    <View className="flex-1" style={{ backgroundColor }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 40 }}
-        style={{ flex: 1 }}
+        className="flex-1"
       >
         {/* Custom Header Area */}
         <View
           style={{
-            backgroundColor: primaryColor,
-            paddingTop: insets.top + 10,
+            paddingTop: 10,
             paddingBottom: 30,
-            borderBottomLeftRadius: 40,
-            borderBottomRightRadius: 40,
-            paddingHorizontal: 20,
+            backgroundColor: primaryColor,
           }}
+          className="rounded-[25px] px-5"
         >
           {/* Top Navigation Bar */}
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 24,
-            }}
-          >
+          <View className="mb-6 pt-3 flex-row items-center justify-between">
             <TouchableOpacity
-              style={{
-                width: 44,
-                height: 44,
-                backgroundColor: "rgba(255,255,255,0.2)",
-                borderRadius: 14,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              onPress={() => router.back()} // Though it's a tab, design shows back. Maybe irrelevant for main tab but harmless.
+              className="h-11 w-11 items-center justify-center rounded-2xl bg-white/20"
+              onPress={() => router.back()}
             >
-              <Ionicons
-                name="chevron-back"
-                size={24}
-                color={primaryForeground}
-              />
+              <ChevronLeft size={24} color={primaryForeground} />
             </TouchableOpacity>
 
             <Link href="/settings" asChild>
-              <TouchableOpacity
-                style={{
-                  width: 44,
-                  height: 44,
-                  backgroundColor: "rgba(255,255,255,0.2)",
-                  borderRadius: 14,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons
-                  name="settings-outline"
-                  size={24}
-                  color={primaryForeground}
-                />
+              <TouchableOpacity className="h-11 w-11 items-center justify-center rounded-2xl bg-white/20">
+                <SettingsIcon size={24} color={primaryForeground} />
               </TouchableOpacity>
             </Link>
           </View>
 
           {/* Profile Details */}
-          <View style={{ alignItems: "center", marginBottom: 20 }}>
-            <View
-              style={{
-                padding: 4,
-                backgroundColor: "rgba(255,255,255,0.2)",
-                borderRadius: 50,
-                marginBottom: 12,
-                position: "relative",
-              }}
-            >
+          <View className="mb-5 items-center">
+            <View className="relative mb-3 rounded-full bg-white/20 p-1">
               <Image
                 source={{ uri: user?.imageUrl }}
+                className="h-[90px] w-[90px] rounded-full bg-gray-300"
                 style={{
-                  width: 90,
-                  height: 90,
-                  borderRadius: 45,
-                  backgroundColor: "#ccc",
                   opacity: updatingImage ? 0.5 : 1,
                 }}
               />
               {updatingImage && (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
+                <View className="absolute bottom-0 left-0 right-0 top-0 items-center justify-center">
                   <ActivityIndicator size="small" color="#ffffff" />
                 </View>
               )}
               <TouchableOpacity
                 onPress={onSelectImage}
                 disabled={updatingImage}
+                className="absolute bottom-0 right-0 h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm"
                 style={{
-                  position: "absolute",
-                  bottom: 0,
-                  right: 0,
-                  backgroundColor: cardColor,
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
-                  alignItems: "center",
-                  justifyContent: "center",
+                  elevation: 4,
                   shadowColor: "#000",
                   shadowOffset: { width: 0, height: 2 },
                   shadowOpacity: 0.2,
                   shadowRadius: 4,
-                  elevation: 4,
                 }}
               >
-                <Ionicons name="pencil" size={18} color={primaryColor} />
+                <Pen size={18} color={primaryColor} />
               </TouchableOpacity>
             </View>
 
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                width: "100%",
-                justifyContent: "space-between",
-                paddingHorizontal: 10,
-              }}
-            >
-              <View style={{ flex: 1 }}>
+            <View className="w-full flex-row items-center justify-between px-2.5">
+              <View className="flex-1">
                 <Text
+                  className="mb-1 text-2xl font-bold"
                   style={{
-                    fontSize: 22,
-                    fontWeight: "bold",
                     color: primaryForeground,
-                    marginBottom: 4,
                   }}
                 >
                   {user?.fullName || user?.username || "User"}
                 </Text>
-                <Text style={{ fontSize: 14, color: "rgba(255,255,255,0.8)" }}>
+                <Text className="text-white/80 text-sm">
                   {user?.primaryEmailAddress?.emailAddress}
                 </Text>
               </View>
 
-              <View style={{ alignItems: "flex-end" }}>
-                <TouchableOpacity
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: "rgba(255,255,255,0.2)",
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 20,
-                    marginBottom: 8,
-                  }}
-                >
-                  <Ionicons name="add" size={16} color="#ff8c42" />
-                  <Text
-                    style={{
-                      color: "#ff8c42",
-                      fontWeight: "bold",
-                      marginLeft: 4,
-                    }}
-                  >
-                    Friends
-                  </Text>
+              <View className="items-end">
+                <TouchableOpacity className="mb-2 flex-row items-center rounded-3xl bg-white/20 px-3 py-2">
+                  <Plus size={16} color="#ff8c42" />
+                  <Text className="ml-1 font-bold text-[#ff8c42]">Friends</Text>
                 </TouchableOpacity>
 
-                <View
-                  style={{
-                    flexDirection: "row",
-                    width: 120,
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <View style={{ alignItems: "center" }}>
+                <View className="w-[120px] flex-row justify-between">
+                  <View className="items-center">
                     <Text
+                      className="text-lg font-bold"
                       style={{
                         color: primaryForeground,
-                        fontWeight: "bold",
-                        fontSize: 16,
                       }}
                     >
                       1.5K
                     </Text>
-                    <Text
-                      style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}
-                    >
-                      Followers
-                    </Text>
+                    <Text className="text-xs text-white/70">Followers</Text>
                   </View>
-                  <View style={{ alignItems: "center" }}>
+                  <View className="items-center">
                     <Text
+                      className="text-lg font-bold"
                       style={{
                         color: primaryForeground,
-                        fontWeight: "bold",
-                        fontSize: 16,
                       }}
                     >
                       0
                     </Text>
-                    <Text
-                      style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}
-                    >
-                      Following
-                    </Text>
+                    <Text className="text-xs text-white/70">Following</Text>
                   </View>
                 </View>
               </View>
@@ -413,51 +293,32 @@ export default function ProfileScreen() {
         </View>
 
         {/* Floating Stats Grid */}
-        <View style={{ paddingHorizontal: 16, marginTop: -20 }}>
-          <TouchableOpacity
-            style={{
-              position: "absolute",
-              right: 24,
-              top: -16,
-              zIndex: 10,
-              backgroundColor: "#ffaa5b",
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 20,
-            }}
-          >
-            <Text style={{ color: "white", fontWeight: "bold", fontSize: 12 }}>
-              Record
-            </Text>
+        <View className="-mt-5 px-4">
+          <TouchableOpacity className="absolute right-6 -top-4 z-10 rounded-3xl bg-[#ffaa5b] px-3 py-1.5">
+            <Text className="text-xs font-bold text-white">Record</Text>
           </TouchableOpacity>
 
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              justifyContent: "space-between",
-            }}
-          >
+          <View className="flex-row flex-wrap justify-between">
             <StatCard
-              iconName="star"
+              Icon={Star}
               value="51"
               label="Balance"
               iconColor="#facc15"
             />
             <StatCard
-              iconName="trophy"
+              Icon={Trophy}
               value="1"
               label="Level"
               iconColor="#facc15"
             />
             <StatCard
-              iconName="footsteps"
+              Icon={Footprints}
               value="Barefoot"
               label="Current League"
               iconColor="#f87171"
             />
             <StatCard
-              iconName="flash"
+              Icon={Zap}
               value="30"
               label="Total XP"
               iconColor="#a3e635"
