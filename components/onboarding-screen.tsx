@@ -1,11 +1,14 @@
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { setOnboardingCompleted } from '@/utils/onboarding-storage';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import {
+  hasCompletedOnboarding,
+  setOnboardingCompleted,
+} from "@/utils/onboarding-storage";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -13,7 +16,7 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
 import Animated, {
   Extrapolate,
   FadeIn,
@@ -23,14 +26,14 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming
-} from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+  withTiming,
+} from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 // --- auth check addition ---
-import { useAuth } from '@clerk/clerk-expo'; // or your actual auth hook
+import { useAuth } from "@clerk/clerk-expo"; // or your actual auth hook
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 interface OnboardingSlide {
   title: string;
@@ -38,33 +41,43 @@ interface OnboardingSlide {
   image: any;
 }
 
-
 // Gradient colors for each screen
 const gradientColors = [
-  { start: '#FF6B9D', end: '#A855F7' }, // Pink to Purple - Screen 1
-  { start: '#3B82F6', end: '#A855F7' }, // Blue to Purple - Screen 2
-  { start: '#3B82F6', end: '#06B6D4' }, // Blue to Cyan - Screen 3
+  { start: "#FF6B9D", end: "#A855F7" }, // Pink to Purple - Screen 1
+  { start: "#3B82F6", end: "#A855F7" }, // Blue to Purple - Screen 2
+  { start: "#3B82F6", end: "#06B6D4" }, // Blue to Cyan - Screen 3
 ];
 
 const slides: OnboardingSlide[] = [
   {
-    title: 'Learn Together',
-    subtitle: 'Join a community of people building skills, sharing knowledge, and growing side by side.',
-    image: require('@/assets/onBoarding/image1.png'),
+    title: "Learn Together",
+    subtitle:
+      "Join a community of people building skills, sharing knowledge, and growing side by side.",
+    image: require("@/assets/onBoarding/image1.png"),
   },
   {
-    title: 'Build Through Collaboration',
-    subtitle: 'Discuss ideas, practice skills, and work on projects with people who share your goals.',
-    image: require('@/assets/onBoarding/image2.png'),
+    title: "Build Through Collaboration",
+    subtitle:
+      "Discuss ideas, practice skills, and work on projects with people who share your goals.",
+    image: require("@/assets/onBoarding/image2.png"),
   },
   {
-    title: 'Grow Your Potential',
-    subtitle: 'Turn learning into progress and become part of something bigger with PragatiHub.',
-    image: require('@/assets/onBoarding/image3.png'),
+    title: "Grow Your Potential",
+    subtitle:
+      "Turn learning into progress and become part of something bigger with PragatiHub.",
+    image: require("@/assets/onBoarding/image3.png"),
   },
 ];
 
-const Slide = ({ slide, index, scrollX }: { slide: OnboardingSlide; index: number; scrollX: any }) => {
+const Slide = ({
+  slide,
+  index,
+  scrollX,
+}: {
+  slide: OnboardingSlide;
+  index: number;
+  scrollX: any;
+}) => {
   const animatedImageStyle = useAnimatedStyle(() => {
     const inputRange = [
       (index - 1) * SCREEN_WIDTH,
@@ -94,10 +107,7 @@ const Slide = ({ slide, index, scrollX }: { slide: OnboardingSlide; index: numbe
     );
 
     return {
-      transform: [
-        { scale },
-        { translateY },
-      ],
+      transform: [{ scale }, { translateY }],
       opacity,
     };
   });
@@ -135,10 +145,10 @@ const Slide = ({ slide, index, scrollX }: { slide: OnboardingSlide; index: numbe
       style={{
         width: SCREEN_WIDTH,
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
+        justifyContent: "center",
+        alignItems: "center",
         paddingHorizontal: 24,
-        backgroundColor: 'transparent',
+        backgroundColor: "transparent",
       }}
     >
       {/* Image Container */}
@@ -148,8 +158,8 @@ const Slide = ({ slide, index, scrollX }: { slide: OnboardingSlide; index: numbe
             width: SCREEN_WIDTH * 0.85,
             height: SCREEN_HEIGHT * 0.5,
             marginBottom: 40,
-            alignItems: 'center',
-            justifyContent: 'center',
+            alignItems: "center",
+            justifyContent: "center",
           },
           animatedImageStyle,
         ]}
@@ -157,9 +167,9 @@ const Slide = ({ slide, index, scrollX }: { slide: OnboardingSlide; index: numbe
         <Image
           source={slide.image}
           style={{
-            width: '100%',
-            height: '100%',
-            resizeMode: 'contain',
+            width: "100%",
+            height: "100%",
+            resizeMode: "contain",
           }}
         />
       </Animated.View>
@@ -168,7 +178,7 @@ const Slide = ({ slide, index, scrollX }: { slide: OnboardingSlide; index: numbe
       <Animated.View
         style={[
           {
-            alignItems: 'center',
+            alignItems: "center",
             paddingHorizontal: 20,
           },
           animatedTextStyle,
@@ -177,9 +187,9 @@ const Slide = ({ slide, index, scrollX }: { slide: OnboardingSlide; index: numbe
         <Text
           style={{
             fontSize: 32,
-            fontWeight: '700',
-            color: '#ffffff',
-            textAlign: 'center',
+            fontWeight: "700",
+            color: "#ffffff",
+            textAlign: "center",
             marginBottom: 16,
             lineHeight: 40,
           }}
@@ -189,9 +199,9 @@ const Slide = ({ slide, index, scrollX }: { slide: OnboardingSlide; index: numbe
         <Text
           style={{
             fontSize: 16,
-            fontWeight: '400',
-            color: '#ffffff',
-            textAlign: 'center',
+            fontWeight: "400",
+            color: "#ffffff",
+            textAlign: "center",
             lineHeight: 24,
             maxWidth: SCREEN_WIDTH * 0.9,
             opacity: 0.9,
@@ -206,16 +216,18 @@ const Slide = ({ slide, index, scrollX }: { slide: OnboardingSlide; index: numbe
 
 export default function OnboardingScreen() {
   // --- auth check addition ---
-  const { isSignedIn, isLoaded } = useAuth ? useAuth() : { isSignedIn: false, isLoaded: true };
+  const { isSignedIn, isLoaded } = useAuth
+    ? useAuth()
+    : { isSignedIn: false, isLoaded: true };
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const theme = colorScheme === 'dark' ? 'dark' : 'light';
+  const theme = colorScheme === "dark" ? "dark" : "light";
   const colors = Colors[theme];
 
-  const backgroundColor = useThemeColor({}, 'background');
-  const textColor = useThemeColor({}, 'text');
-  const textSecondary = useThemeColor({}, 'textSecondary');
-  const primaryColor = useThemeColor({}, 'primary');
+  const backgroundColor = useThemeColor({}, "background");
+  const textColor = useThemeColor({}, "text");
+  const textSecondary = useThemeColor({}, "textSecondary");
+  const primaryColor = useThemeColor({}, "primary");
 
   const scrollX = useSharedValue(0);
   const scrollViewRef = useRef<Animated.ScrollView>(null);
@@ -230,9 +242,24 @@ export default function OnboardingScreen() {
   // --- auth check addition with redirect ---
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      router.replace('/(protected)/(tabs)');
+      router.replace("/(protected)/(tabs)");
     }
   }, [isLoaded, isSignedIn]);
+
+  // Check if onboarding is already completed
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      const completed = await hasCompletedOnboarding();
+      if (completed) {
+        if (isSignedIn) {
+          router.replace("/(protected)/(tabs)");
+        } else {
+          router.replace("/(auth)");
+        }
+      }
+    };
+    checkOnboardingStatus();
+  }, [isSignedIn, router]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -247,12 +274,20 @@ export default function OnboardingScreen() {
 
   const handleSkip = async () => {
     await setOnboardingCompleted();
-    router.replace('/(auth)/sign-in');
+    if (isSignedIn) {
+      router.replace("/(protected)/(tabs)");
+    } else {
+      router.replace("/(auth)");
+    }
   };
 
   const handleGetStarted = async () => {
     await setOnboardingCompleted();
-    router.replace('/(auth)/sign-in');
+    if (isSignedIn) {
+      router.replace("/(protected)/(tabs)");
+    } else {
+      router.replace("/(auth)");
+    }
   };
 
   const scrollToNext = () => {
@@ -288,7 +323,10 @@ export default function OnboardingScreen() {
   const getStartedTextAnimatedStyle = useAnimatedStyle(() => {
     const minWidth = 56;
     const maxWidth = SCREEN_WIDTH / 2;
-    const progress = Math.max(0, Math.min(1, (buttonWidth.value - minWidth) / (maxWidth - minWidth)));
+    const progress = Math.max(
+      0,
+      Math.min(1, (buttonWidth.value - minWidth) / (maxWidth - minWidth))
+    );
     const textProgress = Math.max(0, Math.min(1, (progress - 0.3) / 0.4));
     return {
       opacity: textProgress,
@@ -299,7 +337,10 @@ export default function OnboardingScreen() {
   useEffect(() => {
     if (currentIndex === slides.length - 1) {
       const getStartedWidth = SCREEN_WIDTH / 2;
-      buttonWidth.value = withSpring(getStartedWidth, { damping: 20, stiffness: 100 });
+      buttonWidth.value = withSpring(getStartedWidth, {
+        damping: 20,
+        stiffness: 100,
+      });
       buttonHeight.value = withSpring(56, { damping: 20, stiffness: 100 });
       buttonRadius.value = withSpring(28, { damping: 20, stiffness: 100 });
       iconRotation.value = withTiming(90, { duration: 300 });
@@ -312,9 +353,6 @@ export default function OnboardingScreen() {
       iconOpacity.value = withTiming(1, { duration: 250 });
     }
   }, [currentIndex]);
-
-
-
 
   // Create animated gradient overlay layers for smooth transitions
   const GradientLayer = ({ index }: { index: number }) => {
@@ -337,7 +375,7 @@ export default function OnboardingScreen() {
       <Animated.View
         style={[
           {
-            position: 'absolute',
+            position: "absolute",
             top: 0,
             left: 0,
             right: 0,
@@ -359,7 +397,7 @@ export default function OnboardingScreen() {
   // --- show loading indicator while auth is loading ---
   if (!isLoaded) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color="#fff" />
       </View>
     );
@@ -370,7 +408,7 @@ export default function OnboardingScreen() {
       {/* Animated Gradient Background Layers - Full Screen */}
       <View
         style={{
-          position: 'absolute',
+          position: "absolute",
           top: 0,
           left: 0,
           right: 0,
@@ -383,135 +421,137 @@ export default function OnboardingScreen() {
         ))}
       </View>
 
-    <SafeAreaView style={{ flex: 1, zIndex: 1, backgroundColor: 'transparent' }} edges={['top', 'bottom']}>
-
-      {/* Skip Button */}
-      {currentIndex < slides.length - 1 && (
-        <Animated.View
-          entering={FadeIn.duration(300)}
-          exiting={FadeOut.duration(200)}
-          style={{
-            position: 'absolute',
-            top: 50,
-            right: 24,
-            zIndex: 10,
-          }}
-        >
-          <TouchableOpacity
-            onPress={handleSkip}
+      <SafeAreaView
+        style={{ flex: 1, zIndex: 1, backgroundColor: "transparent" }}
+        edges={["top", "bottom"]}
+      >
+        {/* Skip Button */}
+        {currentIndex < slides.length - 1 && (
+          <Animated.View
+            entering={FadeIn.duration(300)}
+            exiting={FadeOut.duration(200)}
             style={{
-              paddingHorizontal: 20,
-              paddingVertical: 8,
+              position: "absolute",
+              top: 50,
+              right: 24,
+              zIndex: 10,
             }}
           >
-            <Text
+            <TouchableOpacity
+              onPress={handleSkip}
               style={{
-                fontSize: 16,
-                fontWeight: '600',
-                color: '#ffffff',
+                paddingHorizontal: 20,
+                paddingVertical: 8,
               }}
             >
-              Skip
-            </Text>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: "#ffffff",
+                }}
+              >
+                Skip
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+        <Animated.ScrollView
+          style={{ zIndex: 1, backgroundColor: "transparent" }}
+          ref={scrollViewRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={scrollHandler}
+          onMomentumScrollEnd={handleMomentumScrollEnd}
+          scrollEventThrottle={16}
+          decelerationRate="fast"
+          snapToInterval={SCREEN_WIDTH}
+          snapToAlignment="center"
+          contentContainerStyle={{
+            alignItems: "center",
+          }}
+        >
+          {slides.map((slide, index) => (
+            <Slide key={index} slide={slide} index={index} scrollX={scrollX} />
+          ))}
+        </Animated.ScrollView>
+
+        {/* Arrow / Get Started Button - Bottom Center */}
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              bottom: 60,
+              alignSelf: "center",
+              zIndex: 10,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#1E4499",
+              shadowColor: primaryColor,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 8,
+              overflow: "hidden",
+            },
+            arrowButtonAnimatedStyle,
+          ]}
+        >
+          <TouchableOpacity
+            onPress={handleArrowPress}
+            style={{
+              width: "100%",
+              height: "100%",
+              alignItems: "center",
+              justifyContent: "center",
+              flexDirection: "row",
+              paddingHorizontal: 24,
+              gap: 8,
+            }}
+            activeOpacity={0.8}
+          >
+            {/* Arrow Icon */}
+            <Animated.View
+              style={[
+                {
+                  position: "absolute",
+                  alignItems: "center",
+                  justifyContent: "center",
+                },
+                arrowIconAnimatedStyle,
+              ]}
+            >
+              <MaterialIcons name="arrow-forward" size={24} color="#ffffff" />
+            </Animated.View>
+
+            {/* Get Started Text */}
+            <Animated.View
+              style={[
+                {
+                  position: "absolute",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "100%",
+                },
+                getStartedTextAnimatedStyle,
+              ]}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "700",
+                  color: "#ffffff",
+                }}
+                numberOfLines={1}
+              >
+                Get Started
+              </Text>
+            </Animated.View>
           </TouchableOpacity>
         </Animated.View>
-      )}
-
-      <Animated.ScrollView
-        style={{ zIndex: 1, backgroundColor: 'transparent' }}
-        ref={scrollViewRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={scrollHandler}
-        onMomentumScrollEnd={handleMomentumScrollEnd}
-        scrollEventThrottle={16}
-        decelerationRate="fast"
-        snapToInterval={SCREEN_WIDTH}
-        snapToAlignment="center"
-        contentContainerStyle={{
-          alignItems: 'center',
-        }}
-      >
-        {slides.map((slide, index) => (
-          <Slide key={index} slide={slide} index={index} scrollX={scrollX} />
-        ))}
-      </Animated.ScrollView>
-
-      {/* Arrow / Get Started Button - Bottom Center */}
-      <Animated.View
-        style={[
-          {
-            position: 'absolute',
-            bottom: 60,
-            alignSelf: 'center',
-            zIndex: 10,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#1E4499',
-            shadowColor: primaryColor,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 8,
-            overflow: 'hidden',
-          },
-          arrowButtonAnimatedStyle,
-        ]}
-      >
-        <TouchableOpacity
-          onPress={handleArrowPress}
-          style={{
-            width: '100%',
-            height: '100%',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'row',
-            paddingHorizontal: 24,
-            gap: 8,
-          }}
-          activeOpacity={0.8}
-        >
-          {/* Arrow Icon */}
-          <Animated.View
-            style={[
-              {
-                position: 'absolute',
-                alignItems: 'center',
-                justifyContent: 'center',
-              },
-              arrowIconAnimatedStyle,
-            ]}
-          >
-            <MaterialIcons name="arrow-forward" size={24} color="#ffffff" />
-          </Animated.View>
-
-          {/* Get Started Text */}
-          <Animated.View
-            style={[
-              {
-                position: 'absolute',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%',
-              },
-              getStartedTextAnimatedStyle,
-            ]}
-          >
-            <Text
-              style={{
-                fontSize: 16,
-                fontWeight: '700',
-                color: '#ffffff',
-              }}
-              numberOfLines={1}
-            >
-              Get Started
-            </Text>
-          </Animated.View>
-        </TouchableOpacity>
-      </Animated.View>
-    </SafeAreaView>
+      </SafeAreaView>
     </View>
   );
 }
