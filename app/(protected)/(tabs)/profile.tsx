@@ -1,7 +1,8 @@
 import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { Link, useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
   Dimensions,
   Image,
@@ -20,6 +21,35 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
+  const [updatingImage, setUpdatingImage] = useState(false);
+
+  const onSelectImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        setUpdatingImage(true);
+        const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+
+        await user?.setProfileImage({
+          file: base64,
+        });
+
+        // No need to manually refresh, Clerk generic hook should pick it up or we rely on re-render
+      }
+    } catch (err) {
+      console.error("Error updating image:", err);
+      alert("Failed to update profile image");
+    } finally {
+      setUpdatingImage(false);
+    }
+  };
 
   const backgroundColor = useThemeColor({}, "background");
   const cardColor = useThemeColor({}, "card");
@@ -235,6 +265,7 @@ export default function ProfileScreen() {
                 backgroundColor: "rgba(255,255,255,0.2)",
                 borderRadius: 50,
                 marginBottom: 12,
+                position: "relative",
               }}
             >
               <Image
@@ -244,8 +275,31 @@ export default function ProfileScreen() {
                   height: 90,
                   borderRadius: 45,
                   backgroundColor: "#ccc",
+                  opacity: updatingImage ? 0.5 : 1,
                 }}
               />
+              <TouchableOpacity
+                onPress={onSelectImage}
+                disabled={updatingImage}
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  right: 0,
+                  backgroundColor: cardColor,
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 4,
+                  elevation: 4,
+                }}
+              >
+                <Ionicons name="pencil" size={18} color={primaryColor} />
+              </TouchableOpacity>
             </View>
 
             <View
