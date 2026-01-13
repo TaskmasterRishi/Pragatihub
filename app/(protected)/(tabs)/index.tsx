@@ -1,6 +1,5 @@
 import posts from "@/assets/data/posts.json";
 import PostListItem from "@/components/PostListItem";
-import { SignOutButton } from "@/components/SignOutButton";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useEffect, useState } from "react";
 import { FlatList, View } from "react-native";
@@ -19,7 +18,6 @@ export default function HomeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor }}>
-      <SignOutButton />
       <FlatList
         data={visiblePosts}
         keyExtractor={(item) => item.id}
