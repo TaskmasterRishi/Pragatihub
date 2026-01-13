@@ -5,7 +5,7 @@ export default function AppLayout() {
   const { isSignedIn } = useAuth();
 
   if (!isSignedIn) {
-    return <Redirect href="/(auth)/sign-in" />;
+    return <Redirect href="/(auth)" />;
   }
 
   return <Stack screenOptions={{ headerShown: false }} />;
