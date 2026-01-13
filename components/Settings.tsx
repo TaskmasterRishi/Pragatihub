@@ -1,18 +1,17 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
-import { useRouter } from "expo-router";
 import {
-  AppWindow,
-  ChevronLeft,
-  ChevronRight,
-  Footprints,
-  Gem,
-  Grid,
-  Languages,
-  Mail,
-  ShieldCheck,
-  User,
-  Users,
-  Wallet,
+    AppWindow,
+    ChevronRight,
+    Footprints,
+    Gem,
+    Grid,
+    Languages,
+    Mail,
+    ShieldCheck,
+    User,
+    Users,
+    Wallet,
+    X,
 } from "lucide-react-native";
 import React from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
@@ -20,8 +19,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
 
-export default function SettingsScreen() {
-  const router = useRouter();
+interface SettingsProps {
+  onClose: () => void;
+}
+
+export default function Settings({ onClose }: SettingsProps) {
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const { signOut } = useAuth();
@@ -81,25 +83,25 @@ export default function SettingsScreen() {
     <View className="flex-1" style={{ backgroundColor }}>
       {/* Header */}
       <View
-        className="flex-row items-center border-b px-5 pb-5"
+        className="flex-row items-center justify-between border-b rounded-b-xl px-5 pb-5"
         style={{
-          paddingTop: insets.top,
+          paddingTop: 15,
           backgroundColor: cardColor,
           borderBottomColor: borderColor,
         }}
       >
+        <Text className="text-xl font-bold" style={{ color: textColor }}>
+          Settings
+        </Text>
         <TouchableOpacity
-          onPress={() => router.back()}
-          className="mr-4 h-10 w-10 items-center justify-center rounded-xl"
+          onPress={onClose}
+          className="h-10 w-10 items-center justify-center rounded-xl"
           style={{
             backgroundColor: backgroundColor,
           }}
         >
-          <ChevronLeft size={24} color={textColor} />
+          <X size={24} color={textColor} />
         </TouchableOpacity>
-        <Text className="text-xl font-bold" style={{ color: textColor }}>
-          Settings
-        </Text>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20 }}>

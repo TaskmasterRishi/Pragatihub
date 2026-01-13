@@ -19,6 +19,7 @@ import {
 
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { Link } from "expo-router";
 
 export type PostListItemProps = {
   post: Post;
@@ -163,6 +164,7 @@ export default function PostListItem({ post }: PostListItemProps) {
   const border = useThemeColor({}, "border");
 
   return (
+    <Link href={`/post/${post.id}`}> 
     <View
       style={{
         backgroundColor: card,
@@ -303,5 +305,6 @@ export default function PostListItem({ post }: PostListItemProps) {
         </View>
       </View>
     </View>
+    </Link>
   );
 }
