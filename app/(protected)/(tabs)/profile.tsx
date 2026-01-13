@@ -4,6 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   ScrollView,
@@ -278,6 +279,21 @@ export default function ProfileScreen() {
                   opacity: updatingImage ? 0.5 : 1,
                 }}
               />
+              {updatingImage && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <ActivityIndicator size="small" color="#ffffff" />
+                </View>
+              )}
               <TouchableOpacity
                 onPress={onSelectImage}
                 disabled={updatingImage}
