@@ -73,19 +73,6 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="create"
-        options={{
-          title: "Create",
-          tabBarIcon: ({ focused }) => (
-            <Plus
-              size={30}
-              color={focused ? tabBarActiveTint : tabBarInactiveTint}
-            />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
         name="inbox"
         options={{
           title: "Inbox",
@@ -97,7 +84,19 @@ export default function TabLayout() {
           ),
         }}
       />
-
+      <Tabs.Screen
+        name="create"
+        options={{
+          title: "Create",
+          tabBarStyle :{ display: 'none' },
+          tabBarIcon: ({ focused }) => (
+            <Plus
+              size={30}
+              color={focused ? tabBarActiveTint : tabBarInactiveTint}
+            />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="communities"
         options={{

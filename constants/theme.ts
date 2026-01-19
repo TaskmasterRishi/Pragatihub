@@ -59,7 +59,7 @@ export const Colors = {
     // Background colors
     background: neutralLight[50],
     backgroundSecondary: neutralLight[100],
-    card: '#ffffff',
+    card: '#e0e5ed',
     cardForeground: neutralLight[900],
     
     // Text colors
