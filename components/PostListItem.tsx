@@ -1,4 +1,5 @@
 import { formatDistanceToNowStrict } from "date-fns";
+import { Link } from "expo-router";
 import {
   ArrowBigDown,
   ArrowBigUp,
@@ -7,7 +8,13 @@ import {
   Share2,
   Trophy,
 } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   Dimensions,
@@ -19,46 +26,101 @@ import {
 
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { Link } from "expo-router";
 
-export type PostListItemProps = {
-  post: Post;
-  isDetailedPost?: boolean;
-};
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
 /* ───────────────────────────────────────────── */
-/* Post Image with Animated Loader */
+/* Shared Press Scale Hook */
 /* ───────────────────────────────────────────── */
-function PostImage({ uri }: { uri: string }) {
-  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
-  const [loaded, setLoaded] = useState(false);
+function usePressScale(initial = 1, pressed = 0.9) {
+  const scale = useRef(new Animated.Value(initial)).current;
 
+  const onPressIn = useCallback(() => {
+    Animated.spring(scale, {
+      toValue: pressed,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 6,
+    }).start();
+  }, []);
+
+  const onPressOut = useCallback(() => {
+    Animated.spring(scale, {
+      toValue: initial,
+      useNativeDriver: true,
+      speed: 25,
+      bounciness: 5,
+    }).start();
+  }, []);
+
+  return { scale, onPressIn, onPressOut };
+}
+
+/* ───────────────────────────────────────────── */
+/* Fade + Scale Entrance */
+/* ───────────────────────────────────────────── */
+function FadeInView({ children }: { children: React.ReactNode }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.96)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scale, {
+        toValue: 1,
+        speed: 18,
+        bounciness: 6,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ scale }] }}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/* ───────────────────────────────────────────── */
+/* Post Image */
+/* ───────────────────────────────────────────── */
+const PostImage = memo(({ uri }: { uri: string }) => {
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+  const opacity = useRef(new Animated.Value(0)).current;
   const rotate = useRef(new Animated.Value(0)).current;
 
-  /* Spinner animation */
   useEffect(() => {
-    Animated.loop(
+    const loop = Animated.loop(
       Animated.timing(rotate, {
         toValue: 1,
         duration: 900,
         useNativeDriver: true,
       })
-    ).start();
+    );
+    loop.start();
+    return () => loop.stop();
   }, []);
 
-  /* Fetch image size */
   useEffect(() => {
     Image.getSize(
       uri,
-      (width, height) => {
-        setAspectRatio(width / height);
-      },
-      () => {
-        setAspectRatio(1);
-      }
+      (w, h) => setAspectRatio(w / h),
+      () => setAspectRatio(1)
     );
   }, [uri]);
+
+  const onLoad = () => {
+    Animated.timing(opacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
 
   if (!aspectRatio) return null;
 
@@ -80,35 +142,35 @@ function PostImage({ uri }: { uri: string }) {
         alignItems: "center",
       }}
     >
-      {/* Loader */}
-      {!loaded && (
-        <Animated.View
-          style={{
-            position: "absolute",
-            transform: [{ rotate: spin }],
-          }}
-        >
-          <Loader2 size={28} color="#999" />
-        </Animated.View>
-      )}
+      <Animated.View
+        style={{
+          position: "absolute",
+          opacity: opacity.interpolate({
+            inputRange: [0, 0.01],
+            outputRange: [1, 0],
+          }),
+          transform: [{ rotate: spin }],
+        }}
+      >
+        <Loader2 size={28} color="#999" />
+      </Animated.View>
 
-      {/* Image */}
-      <Image
+      <Animated.Image
         source={{ uri }}
         resizeMode="cover"
-        onLoadEnd={() => setLoaded(true)}
+        onLoad={onLoad}
         style={{
           width: "100%",
           height: "100%",
-          opacity: loaded ? 1 : 0,
+          opacity,
         }}
       />
     </View>
   );
-}
+});
 
 /* ───────────────────────────────────────────── */
-/* Animated Button Wrapper */
+/* Animated Icon Button */
 /* ───────────────────────────────────────────── */
 function AnimatedIconButton({
   children,
@@ -119,34 +181,15 @@ function AnimatedIconButton({
   onPress?: () => void;
   style?: any;
 }) {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = () => {
-    Animated.spring(scale, {
-      toValue: 0.8,
-      useNativeDriver: true,
-      speed: 40,
-      bounciness: 7,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scale, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 25,
-      bounciness: 5,
-    }).start();
-  };
+  const { scale, onPressIn, onPressOut } = usePressScale();
 
   return (
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
       <Pressable
         onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
         android_ripple={{ color: "#00000008", borderless: true }}
-        style={{ borderRadius: 999 }}
       >
         {children}
       </Pressable>
@@ -157,173 +200,156 @@ function AnimatedIconButton({
 /* ───────────────────────────────────────────── */
 /* Main Post Card */
 /* ───────────────────────────────────────────── */
-export default function PostListItem({ post, isDetailedPost = false }: PostListItemProps) {
+function PostListItem({
+  post,
+  isDetailedPost = false,
+}: {
+  post: Post;
+  isDetailedPost?: boolean;
+}) {
   const text = useThemeColor({}, "text");
   const muted = useThemeColor({}, "textMuted");
   const primary = useThemeColor({}, "primary");
   const card = useThemeColor({}, "card");
   const border = useThemeColor({}, "border");
 
-  const content = (
-    <View
-      style={{
-        backgroundColor: card,
-        borderRadius: 20,
-        padding: 16,
-        marginBottom: 16,
-        marginLeft:16,
-        marginRight:16,
-        borderWidth: 1,
-        borderColor: border,
-      }}
-    >
-      {/* ───────── Header ───────── */}
-      <View className="flex-row items-center mb-4">
-        <Image
-          source={{ uri: post.group.image }}
-          className="w-10 h-10 rounded-full"
-        />
-
-        <View className="ml-3 flex-1">
-          <Text className="font-semibold text-base" style={{ color: text }}>
-            {post.group.name}
-          </Text>
-          <Text className="text-xs mt-0.5" style={{ color: muted }}>
-            {formatDistanceToNowStrict(new Date(post.created_at))} ago
-          </Text>
-        </View>
-
-        <AnimatedIconButton
-          style={{
-            backgroundColor: primary,
-            paddingHorizontal: 14,
-            paddingVertical: 6,
-            borderRadius: 999,
-          }}
-        >
-          <Text
-            className="text-sm font-semibold"
-            style={{ color: "white" }}
-          >
-            Join
-          </Text>
-        </AnimatedIconButton>
-      </View>
-
-      {/* ───────── Content ───────── */}
-      <View className="gap-3">
-        <Text
-          className="text-lg font-bold leading-6"
-          style={{ color: text }}
-        >
-          {post.title}
-        </Text>
-
-        {post.image && <PostImage uri={post.image} />}
-
-        {post.description && (
-          <Text
-            className="text-base leading-6"
-            style={{ color: muted }}
-            numberOfLines={isDetailedPost ? undefined : 1}
-          >
-            {post.description}
-          </Text>
-        )}
-      </View>
-
-      {/* ───────── Divider ───────── */}
+  return (
+    <FadeInView>
       <View
         style={{
-          height: 1,
-          backgroundColor: border,
-          marginVertical: 14,
+          backgroundColor: card,
+          borderRadius: 20,
+          padding: 16,
+          margin: 16,
+          borderWidth: 1,
+          borderColor: border,
         }}
-      />
-
-      {/* ───────── Footer ───────── */}
-      <View className="flex-row items-center">
-        {/* Votes */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            borderWidth: 1,
-            borderColor: border,
-            borderRadius: 999,
-            paddingHorizontal: 6,
-            paddingVertical: 4,
-          }}
-        >
-          <AnimatedIconButton style={{ padding: 4 }}>
-            <ArrowBigUp size={22} color={text} />
-          </AnimatedIconButton>
-
-          <Text className="font-semibold ml-3" style={{ color: text }}>
-            {post.upvotes}
-          </Text>
-
-          <View
-            style={{
-              width: 1,
-              height: 20,
-              backgroundColor: border,
-              marginHorizontal: 6,
-            }}
+      >
+        {/* Header */}
+        <View className="flex-row items-center mb-4">
+          <Image
+            source={{ uri: post.group.image }}
+            className="w-10 h-10 rounded-full"
           />
 
-          <AnimatedIconButton style={{ padding: 4 }}>
-            <ArrowBigDown size={22} color={text} />
+          <View className="ml-3 flex-1">
+            <Text style={{ color: text }} className="font-semibold text-base">
+              {post.group.name}
+            </Text>
+            <Text style={{ color: muted }} className="text-xs">
+              {formatDistanceToNowStrict(new Date(post.created_at))} ago
+            </Text>
+          </View>
+
+          <AnimatedIconButton
+            style={{
+              backgroundColor: primary,
+              paddingHorizontal: 14,
+              paddingVertical: 6,
+              borderRadius: 999,
+            }}
+          >
+            <Text style={{ color: "white" }} className="font-semibold">
+              Join
+            </Text>
           </AnimatedIconButton>
         </View>
 
-        {/* Comments */}
-        <View className="flex-row items-center ml-4 gap-1">
-          <MessageSquare size={20} color={muted} />
-          <Text style={{ color: muted }}>{post.nr_of_comments}</Text>
-        </View>
+        <Link href={`/post/${post.id}`} asChild>
+          <Pressable>
+            <View className="gap-3">
+              <Text style={{ color: text }} className="text-lg font-bold">
+                {post.title}
+              </Text>
 
-        {/* Actions */}
+              {post.description && (
+                <Text
+                  style={{ color: muted }}
+                  numberOfLines={isDetailedPost ? undefined : 2}
+                >
+                  {post.description}
+                </Text>
+              )}
+
+              {post.image && <PostImage uri={post.image} />}
+            </View>
+          </Pressable>
+        </Link>
+
+        {/* Divider */}
         <View
-          className="ml-auto flex-row items-center"
           style={{
-            borderWidth: 1,
-            borderColor: border,
-            borderRadius: 999,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
+            height: 1,
+            backgroundColor: border,
+            marginVertical: 14,
           }}
-        >
-          <AnimatedIconButton>
-            <Trophy size={20} color={muted} />
-          </AnimatedIconButton>
+        />
 
+        {/* Footer */}
+        <View className="flex-row items-center">
+          {/* Votes */}
           <View
             style={{
-              width: 1,
-              height: 18,
-              backgroundColor: border,
-              marginHorizontal: 10,
+              flexDirection: "row",
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: border,
+              borderRadius: 999,
+              paddingHorizontal: 6,
+              paddingVertical: 4,
             }}
-          />
+          >
+            <AnimatedIconButton>
+              <ArrowBigUp size={22} color={text} />
+            </AnimatedIconButton>
 
-          <AnimatedIconButton>
-            <Share2 size={20} color={muted} />
-          </AnimatedIconButton>
+            <Text style={{ color: text }} className="mx-3 font-semibold">
+              {post.upvotes}
+            </Text>
+
+            <AnimatedIconButton>
+              <ArrowBigDown size={22} color={text} />
+            </AnimatedIconButton>
+          </View>
+
+          {/* Comments */}
+          <View className="flex-row items-center ml-4 gap-1">
+            <MessageSquare size={20} color={muted} />
+            <Text style={{ color: muted }}>{post.nr_of_comments}</Text>
+          </View>
+
+          {/* Actions */}
+          <View
+            className="ml-auto flex-row items-center"
+            style={{
+              borderWidth: 1,
+              borderColor: border,
+              borderRadius: 999,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+            }}
+          >
+            <AnimatedIconButton>
+              <Trophy size={20} color={muted} />
+            </AnimatedIconButton>
+
+            <View
+              style={{
+                width: 1,
+                height: 18,
+                backgroundColor: border,
+                marginHorizontal: 10,
+              }}
+            />
+
+            <AnimatedIconButton>
+              <Share2 size={20} color={muted} />
+            </AnimatedIconButton>
+          </View>
         </View>
       </View>
-    </View>
-  );
-
-  if (isDetailedPost) {
-    return content;
-  }
-
-  return (
-    <Link href={`/post/${post.id}`} asChild>
-      <Pressable>
-        {content}
-      </Pressable>
-    </Link>
+    </FadeInView>
   );
 }
+
+export default memo(PostListItem);
