@@ -7,9 +7,10 @@ import {
   MessageSquare,
   Settings as SettingsIcon,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Image,
   Modal,
   ScrollView,
@@ -65,6 +66,64 @@ export default function ProfileScreen() {
 
   type ProfileTab = "posts" | "comments";
   const [activeTab, setActiveTab] = useState<ProfileTab>("posts");
+  const [tabContainerWidth, setTabContainerWidth] = useState(0);
+
+  // Animation values
+  const postsTabScale = useRef(new Animated.Value(1)).current;
+  const commentsTabScale = useRef(new Animated.Value(1)).current;
+  const tabIndicatorPosition = useRef(new Animated.Value(0)).current;
+  const postsContentPosition = useRef(new Animated.Value(0)).current;
+  const commentsContentPosition = useRef(new Animated.Value(-1)).current;
+  const [contentWidth, setContentWidth] = useState(0);
+
+  // Animate when tab changes
+  useEffect(() => {
+    // Animate tab indicator position
+    Animated.spring(tabIndicatorPosition, {
+      toValue: activeTab === "posts" ? 0 : 1,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 10,
+    }).start();
+
+    // Animate content sections horizontally
+    // When posts is active: posts at center (0), comments at left (-1)
+    // When comments is active: posts at right (1), comments at center (0)
+    Animated.parallel([
+      Animated.spring(postsContentPosition, {
+        toValue: activeTab === "posts" ? 0 : 1,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 10,
+      }),
+      Animated.spring(commentsContentPosition, {
+        toValue: activeTab === "posts" ? -1 : 0,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 10,
+      }),
+    ]).start();
+  }, [activeTab]);
+
+  const handleTabPress = (tab: ProfileTab) => {
+    const scaleAnim = tab === "posts" ? postsTabScale : commentsTabScale;
+    
+    // Scale down on press
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
+    setActiveTab(tab);
+  };
 
   // Mock counts (Reddit-style)
   const karmaCount = "0";
@@ -190,113 +249,196 @@ export default function ProfileScreen() {
         <View className="px-4 pt-16">
           {/* Tabs - Posts | Comments */}
           <View
-            className="mt-2 flex-row rounded-2xl px-1 py-1"
+            className="mt-2 flex-row rounded-2xl px-1 py-1 relative"
             style={{ backgroundColor: cardColor }}
+            onLayout={(event) => {
+              const { width } = event.nativeEvent.layout;
+              setTabContainerWidth(width);
+            }}
           >
-            <TouchableOpacity
-              onPress={() => setActiveTab("posts")}
-              className="flex-1 flex-row items-center justify-center rounded-xl py-3 gap-2"
+            {/* Sliding Background Indicator */}
+            {tabContainerWidth > 0 && (
+              <Animated.View
+                style={{
+                  position: "absolute",
+                  left: 4,
+                  top: 4,
+                  bottom: 4,
+                  width: (tabContainerWidth - 8) / 2,
+                  backgroundColor: primaryColor,
+                  borderRadius: 12,
+                  transform: [
+                    {
+                      translateX: tabIndicatorPosition.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, tabContainerWidth / 2],
+                      }),
+                    },
+                  ],
+                }}
+              />
+            )}
+
+            <Animated.View
               style={{
-                backgroundColor:
-                  activeTab === "posts" ? primaryColor : "transparent",
+                flex: 1,
+                transform: [{ scale: postsTabScale }],
+                zIndex: 1,
               }}
             >
-              <FileText
-                size={18}
-                color={
-                  activeTab === "posts" ? primaryForeground : textSecondaryColor
-                }
-                className="mr-2"
-              />
-              <Text
-                className="font-semibold"
-                style={{
-                  color:
+              <TouchableOpacity
+                onPress={() => handleTabPress("posts")}
+                className="flex-1 flex-row items-center justify-center rounded-xl py-3 gap-2"
+              >
+                <FileText
+                  size={18}
+                  color={
                     activeTab === "posts"
                       ? primaryForeground
-                      : textSecondaryColor,
-                }}
-              >
-                Posts
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setActiveTab("comments")}
-              className="flex-1 flex-row items-center justify-center rounded-xl py-3 gap-2"
+                      : textSecondaryColor
+                  }
+                  className="mr-2"
+                />
+                <Text
+                  className="font-semibold"
+                  style={{
+                    color:
+                      activeTab === "posts"
+                        ? primaryForeground
+                        : textSecondaryColor,
+                  }}
+                >
+                  Posts
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+            <Animated.View
               style={{
-                backgroundColor:
-                  activeTab === "comments" ? primaryColor : "transparent",
+                flex: 1,
+                transform: [{ scale: commentsTabScale }],
+                zIndex: 1,
               }}
             >
-              <MessageSquare
-                size={18}
-                color={
-                  activeTab === "comments"
-                    ? primaryForeground
-                    : textSecondaryColor
-                }
-                className="mr-2"
-              />
-              <Text
-                className="font-semibold"
-                style={{
-                  color:
+              <TouchableOpacity
+                onPress={() => handleTabPress("comments")}
+                className="flex-1 flex-row items-center justify-center rounded-xl py-3 gap-2"
+              >
+                <MessageSquare
+                  size={18}
+                  color={
                     activeTab === "comments"
                       ? primaryForeground
-                      : textSecondaryColor,
-                }}
-              >
-                Comments
-              </Text>
-            </TouchableOpacity>
+                      : textSecondaryColor
+                  }
+                  className="mr-2"
+                />
+                <Text
+                  className="font-semibold"
+                  style={{
+                    color:
+                      activeTab === "comments"
+                        ? primaryForeground
+                        : textSecondaryColor,
+                  }}
+                >
+                  Comments
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
           </View>
 
           {/* Content area */}
           <View
-            className="mt-4 flex-1 rounded-2xl p-6"
+            className="mt-4 flex-1 rounded-2xl p-6 overflow-hidden"
             style={{ backgroundColor: cardColor, minHeight: 200 }}
+            onLayout={(event) => {
+              const { width } = event.nativeEvent.layout;
+              setContentWidth(width);
+            }}
           >
-            {activeTab === "posts" ? (
-              <View className="items-center justify-center py-8">
-                <FileText
-                  size={48}
-                  color={textSecondaryColor}
-                  className="opacity-50"
-                />
-                <Text
-                  className="text-center font-medium"
-                  style={{ color: textColor }}
-                >
-                  No posts yet
-                </Text>
-                <Text
-                  className="mt-1 text-center text-sm"
-                  style={{ color: textSecondaryColor }}
-                >
-                  Your posts will appear here
-                </Text>
-              </View>
-            ) : (
-              <View className="items-center justify-center py-8">
-                <MessageSquare
-                  size={48}
-                  color={textSecondaryColor}
-                  className=" opacity-50"
-                />
-                <Text
-                  className="text-center font-medium"
-                  style={{ color: textColor }}
-                >
-                  No comments yet
-                </Text>
-                <Text
-                  className="mt-1 text-center text-sm"
-                  style={{ color: textSecondaryColor }}
-                >
-                  Your comments will appear here
-                </Text>
-              </View>
-            )}
+            <View className="flex-row relative" style={{ flex: 1 }}>
+              {/* Posts Section */}
+              <Animated.View
+                style={{
+                  position: "absolute",
+                  width: contentWidth > 0 ? contentWidth - 48 : "100%",
+                  left: 0,
+                  right: 0,
+                  transform: [
+                    {
+                      translateX: postsContentPosition.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: contentWidth > 0 
+                          ? [0, contentWidth]
+                          : [0, 300],
+                      }),
+                    },
+                  ],
+                  flex: 1,
+                }}
+              >
+                <View className="items-center justify-center py-8">
+                  <FileText
+                    size={48}
+                    color={textSecondaryColor}
+                    className="opacity-50"
+                  />
+                  <Text
+                    className="text-center font-medium"
+                    style={{ color: textColor }}
+                  >
+                    No posts yet
+                  </Text>
+                  <Text
+                    className="mt-1 text-center text-sm"
+                    style={{ color: textSecondaryColor }}
+                  >
+                    Your posts will appear here
+                  </Text>
+                </View>
+              </Animated.View>
+
+              {/* Comments Section */}
+              <Animated.View
+                style={{
+                  position: "absolute",
+                  width: contentWidth > 0 ? contentWidth - 48 : "100%",
+                  left: 0,
+                  right: 0,
+                  transform: [
+                    {
+                      translateX: commentsContentPosition.interpolate({
+                        inputRange: [-1, 0],
+                        outputRange: contentWidth > 0 
+                          ? [-contentWidth, 0]
+                          : [-300, 0],
+                      }),
+                    },
+                  ],
+                  flex: 1,
+                }}
+              >
+                <View className="items-center justify-center py-8">
+                  <MessageSquare
+                    size={48}
+                    color={textSecondaryColor}
+                    className=" opacity-50"
+                  />
+                  <Text
+                    className="text-center font-medium"
+                    style={{ color: textColor }}
+                  >
+                    No comments yet
+                  </Text>
+                  <Text
+                    className="mt-1 text-center text-sm"
+                    style={{ color: textSecondaryColor }}
+                  >
+                    Your comments will appear here
+                  </Text>
+                </View>
+              </Animated.View>
+            </View>
           </View>
         </View>
       </ScrollView>
