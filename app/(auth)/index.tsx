@@ -7,11 +7,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Redirect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
-  Alert,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -26,6 +26,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 type AuthMode = "login" | "register" | "verify";
+
+/* -------------------- ERROR NORMALIZER -------------------- */
+const getClerkErrorMessage = (err: any): string => {
+  if (err?.errors?.length) {
+    return (
+      err.errors[0].longMessage ||
+      err.errors[0].message ||
+      "Something went wrong"
+    );
+  }
+  return err?.message || "Unexpected error occurred";
+};
 
 export default function AuthScreen() {
   const { isSignedIn } = useAuth();
@@ -51,6 +63,7 @@ export default function AuthScreen() {
 
   const [mode, setMode] = useState<AuthMode>("login");
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [error, setError] = useState<string>("");
 
   // Form State
   const [name, setName] = useState(""); // Username for Clerk
@@ -75,6 +88,7 @@ export default function AuthScreen() {
 
     setTimeout(() => {
       setMode(mode === "login" ? "register" : "login");
+      setError(""); // Clear errors when switching modes
       // Clear form sensitive data but keep email if possible? No, clear all for safety/cleanliness
       // setName("");
       // setEmail("");
@@ -115,99 +129,114 @@ export default function AuthScreen() {
     pointerEvents: bottomTextOpacity.value > 0.5 ? "auto" : "none",
   }));
 
-  // --- Handlers ---
+  /* -------------------- HANDLERS -------------------- */
 
   const onSignInPress = async () => {
-    if (!isSignInLoaded) return;
     try {
-      const signInAttempt = await signIn.create({
+      if (!isSignInLoaded) throw new Error("Auth not ready");
+
+      const attempt = await signIn.create({
         identifier: email,
         password,
       });
 
-      if (signInAttempt.status === "complete") {
-        await setSignInActive({ session: signInAttempt.createdSessionId });
-        router.replace("/(protected)/(tabs)");
-      } else {
-        console.error(JSON.stringify(signInAttempt, null, 2));
-        Alert.alert(
-          "Error",
-          "Login incomplete. Please check your credentials."
-        );
+      if (attempt.status !== "complete") {
+        throw new Error("Login incomplete. Please try again.");
       }
-    } catch (err: any) {
-      console.error(JSON.stringify(err, null, 2));
-      Alert.alert("Error", err.errors?.[0]?.message || "Failed to sign in");
+
+      await setSignInActive({ session: attempt.createdSessionId });
+      router.replace("/(protected)/(tabs)");
+    } catch (err) {
+      throw new Error(getClerkErrorMessage(err));
     }
   };
 
   const onSignUpPress = async () => {
-    if (!isSignUpLoaded) return;
-    if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
-      return;
-    }
-
     try {
+      if (!isSignUpLoaded) throw new Error("Auth not ready");
+      if (password !== confirmPassword)
+        throw new Error("Passwords do not match");
+
       await signUp.create({
         username: name,
         emailAddress: email,
         password,
       });
 
-      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+      await signUp.prepareEmailAddressVerification({
+        strategy: "email_code",
+      });
+
       setMode("verify");
-    } catch (err: any) {
-      console.error(JSON.stringify(err, null, 2));
-      Alert.alert("Error", err.errors?.[0]?.message || "Failed to sign up");
+    } catch (err) {
+      throw new Error(getClerkErrorMessage(err));
     }
   };
 
   const onVerifyPress = async () => {
-    if (!isSignUpLoaded) return;
     try {
-      const signUpAttempt = await signUp.attemptEmailAddressVerification({
-        code,
-      });
+      if (!isSignUpLoaded) throw new Error("Auth not ready");
 
-      if (signUpAttempt.status === "complete") {
-        await setSignUpActive({ session: signUpAttempt.createdSessionId });
-        router.replace("/(protected)/(tabs)"); // or specific route
-      } else {
-        console.error(JSON.stringify(signUpAttempt, null, 2));
-        Alert.alert("Error", "Verification failed. Please try again.");
+      const attempt = await signUp.attemptEmailAddressVerification({ code });
+
+      if (attempt.status !== "complete") {
+        throw new Error("Invalid verification code");
       }
-    } catch (err: any) {
-      console.error(JSON.stringify(err, null, 2));
-      Alert.alert(
-        "Error",
-        err.errors?.[0]?.message || "Failed to verify email"
-      );
+
+      await setSignUpActive({ session: attempt.createdSessionId });
+      router.replace("/(protected)/(tabs)");
+    } catch (err) {
+      throw new Error(getClerkErrorMessage(err));
     }
   };
 
   const onGoogleSignInPress = useCallback(async () => {
     try {
-      const { createdSessionId, setActive, signUp } = await startOAuthFlow();
+      const { createdSessionId, setActive } = await startOAuthFlow();
+      if (!createdSessionId) throw new Error("OAuth failed");
 
-      if (createdSessionId) {
-        setActive!({ session: createdSessionId });
-      } else {
-        // Use signIn or signUp for next steps such as MFA
-      }
+      setActive?.({ session: createdSessionId });
     } catch (err) {
-      console.error("OAuth error", err);
+      throw new Error(getClerkErrorMessage(err));
     }
   }, []);
 
-  const handleSubmit = () => {
-    if (mode === "login") {
-      onSignInPress();
-    } else if (mode === "register") {
-      onSignUpPress();
-    } else if (mode === "verify") {
-      onVerifyPress();
+  const handleSubmit = async () => {
+    try {
+      setError("");
+      if (mode === "login") await onSignInPress();
+      if (mode === "register") await onSignUpPress();
+      if (mode === "verify") await onVerifyPress();
+    } catch (err: any) {
+      setError(err?.message ?? "Something went wrong");
     }
+  };
+
+  const clearError = () => error && setError("");
+
+  const handleNameChange = (text: string) => {
+    setName(text);
+    clearError();
+  };
+
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    clearError();
+  };
+
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+    clearError();
+  };
+
+  const handleConfirmPasswordChange = (text: string) => {
+    setConfirmPassword(text);
+    clearError();
+  };
+
+  const handleCodeChange = (text: string) => {
+    setCode(text);
+    clearError();
   };
 
   return (
@@ -217,7 +246,7 @@ export default function AuthScreen() {
         colors={["#3B82F6", "#2B2F77", "#070B34"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+        style={StyleSheet.absoluteFillObject}
       />
 
       {/* Floating Icons Background */}
@@ -280,6 +309,20 @@ export default function AuthScreen() {
 
               {/* Form */}
               <Animated.View style={[{ gap: 16 }, formAnimatedStyle]}>
+                {error && (
+                  <View
+                    style={{
+                      backgroundColor: "rgba(239,68,68,0.2)",
+                      borderRadius: 8,
+                      padding: 12,
+                    }}
+                  >
+                    <Text style={{ color: "#FEE2E2", textAlign: "center" }}>
+                      {error}
+                    </Text>
+                  </View>
+                )}
+
                 {mode === "verify" ? (
                   // VERIFY FORM
                   <View>
@@ -287,7 +330,7 @@ export default function AuthScreen() {
                       label="Verification Code"
                       placeholder="Enter code"
                       value={code}
-                      onChangeText={setCode}
+                      onChangeText={handleCodeChange}
                       keyboardType="number-pad"
                       variant="gradient"
                     />
@@ -302,7 +345,7 @@ export default function AuthScreen() {
                           label="Username"
                           placeholder="Enter your username"
                           value={name}
-                          onChangeText={setName}
+                          onChangeText={handleNameChange}
                           autoCapitalize="none"
                           autoCorrect={false}
                           variant="gradient"
@@ -316,7 +359,7 @@ export default function AuthScreen() {
                         label="Email"
                         placeholder="Enter your email"
                         value={email}
-                        onChangeText={setEmail}
+                        onChangeText={handleEmailChange}
                         keyboardType="email-address"
                         autoCapitalize="none"
                         autoCorrect={false}
@@ -334,7 +377,7 @@ export default function AuthScreen() {
                             : "Create a password"
                         }
                         value={password}
-                        onChangeText={setPassword}
+                        onChangeText={handlePasswordChange}
                         secureTextEntry
                         autoCapitalize="none"
                         variant="gradient"
@@ -348,7 +391,7 @@ export default function AuthScreen() {
                           label="Confirm Password"
                           placeholder="Confirm your password"
                           value={confirmPassword}
-                          onChangeText={setConfirmPassword}
+                          onChangeText={handleConfirmPasswordChange}
                           secureTextEntry
                           autoCapitalize="none"
                           variant="gradient"
@@ -423,7 +466,14 @@ export default function AuthScreen() {
                 {/* Google Sign In - Only shown in Login/Register, not Verify */}
                 {mode !== "verify" && (
                   <TouchableOpacity
-                    onPress={onGoogleSignInPress}
+                    onPress={async () => {
+                      setError("");
+                      try {
+                        await onGoogleSignInPress();
+                      } catch (e: any) {
+                        setError(e?.message ?? "Something went wrong");
+                      }
+                    }}
                     disabled={isTransitioning}
                     style={{
                       backgroundColor: "rgba(255,255,255,0.1)",
