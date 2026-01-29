@@ -16,6 +16,7 @@ export default function AppLayout() {
       <Stack screenOptions={{ headerShown: false }} >
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="post/[id]" options={{animation:"fade_from_bottom"}}/>
+        <Stack.Screen name="community/[id]" options={{ animation: "slide_from_right" }} />
       </Stack>
     </View>
   );
