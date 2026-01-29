@@ -2,7 +2,6 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import {
     AppWindow,
     ChevronRight,
-    Footprints,
     Gem,
     Grid,
     Languages,
@@ -128,7 +127,6 @@ export default function Settings({ onClose }: SettingsProps) {
                 : "User")
             }
           />
-          <SettingItem Icon={Footprints} label="Step data source" />
           <SettingItem Icon={Languages} label="Language" value="English" />
           <SettingItem
             Icon={ShieldCheck}
