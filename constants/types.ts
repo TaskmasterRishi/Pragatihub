@@ -33,16 +33,34 @@ export type PostListItemProps = {
 };
 
 // ────────────────────────────────────────────────────────
+// Comment Types
+// ────────────────────────────────────────────────────────
+
+export type Comment = {
+  id: string;
+  post_id: string;
+  content: string;
+  created_at: string;
+  upvotes: number;
+  user: {
+    id: string;
+    name: string;
+    image: string | null;
+  };
+  replies?: Comment[];
+};
+
+// ────────────────────────────────────────────────────────
 // Themed Component Types
 // ────────────────────────────────────────────────────────
 
-export type ThemedTextProps = React.ComponentProps<'text'> & {
+export type ThemedTextProps = React.ComponentProps<"text"> & {
   lightColor?: string;
   darkColor?: string;
-  type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
+  type?: "default" | "title" | "defaultSemiBold" | "subtitle" | "link";
 };
 
-export type ThemedViewProps = React.ComponentProps<'view'> & {
+export type ThemedViewProps = React.ComponentProps<"view"> & {
   lightColor?: string;
   darkColor?: string;
 };
@@ -51,27 +69,33 @@ export type ThemedViewProps = React.ComponentProps<'view'> & {
 // Link Types
 // ────────────────────────────────────────────────────────
 
-export type ExternalLinkProps = Omit<ComponentProps<typeof Link>, 'href'> & { 
-  href: Href & string 
+export type ExternalLinkProps = Omit<ComponentProps<typeof Link>, "href"> & {
+  href: Href & string;
 };
 
 // ────────────────────────────────────────────────────────
 // Icon Types
 // ────────────────────────────────────────────────────────
 
-export type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
+export type IconMapping = Record<
+  SymbolViewProps["name"],
+  ComponentProps<typeof MaterialIcons>["name"]
+>;
 export type IconSymbolName = keyof typeof ICON_MAPPING;
 
 // Icon mapping constant
 export const ICON_MAPPING = {
-  'house.fill': 'home',
-  'paperplane.fill': 'send',
-  'chevron.left.forwardslash.chevron.right': 'code',
-  'chevron.right': 'chevron-right',
-} as const satisfies Record<string, ComponentProps<typeof MaterialIcons>['name']>;
+  "house.fill": "home",
+  "paperplane.fill": "send",
+  "chevron.left.forwardslash.chevron.right": "code",
+  "chevron.right": "chevron-right",
+} as const satisfies Record<
+  string,
+  ComponentProps<typeof MaterialIcons>["name"]
+>;
 
 // ────────────────────────────────────────────────────────
 // Auth Types
 // ────────────────────────────────────────────────────────
 
-export type AuthMode = 'login' | 'register';
+export type AuthMode = "login" | "register";
