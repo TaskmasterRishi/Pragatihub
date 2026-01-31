@@ -1,0 +1,104 @@
+[
+  {
+    "id": "comment-1",
+    "post_id": "post-1",
+    "content": "Great post! React Native has indeed revolutionized mobile development.",
+    "created_at": "2025-02-12T10:00:00Z",
+    "upvotes": 5,
+    "user": {
+      "id": "user-2",
+      "name": "u/ReactFan",
+      "image": "https://notjustdev-dummy.s3.us-east-2.amazonaws.com/avatars/2.png"
+    },
+    "replies": [
+      {
+        "id": "comment-1-1",
+        "post_id": "post-1",
+        "content": "I agree, the performance is amazing now.",
+        "created_at": "2025-02-12T10:30:00Z",
+        "upvotes": 2,
+        "user": {
+          "id": "user-3",
+          "name": "u/MobileDev",
+          "image": "https://notjustdev-dummy.s3.us-east-2.amazonaws.com/avatars/3.png"
+        }
+      }
+    ]
+  },
+  {
+    "id": "comment-2",
+    "post_id": "post-1",
+    "content": "I disagree, Flutter is better for performance.",
+    "created_at": "2025-02-12T11:00:00Z",
+    "upvotes": 2,
+    "user": {
+      "id": "user-3",
+      "name": "u/FlutterDev",
+      "image": "https://notjustdev-dummy.s3.us-east-2.amazonaws.com/avatars/3.png"
+    },
+    "replies": [
+      {
+        "id": "comment-2-1",
+        "post_id": "post-1",
+        "content": "Flutter has great widgets, but React Native has better ecosystem.",
+        "created_at": "2025-02-12T11:30:00Z",
+        "upvotes": 1,
+        "user": {
+          "id": "user-2",
+          "name": "u/ReactFan",
+          "image": "https://notjustdev-dummy.s3.us-east-2.amazonaws.com/avatars/2.png"
+        }
+      }
+    ]
+  },
+  {
+    "id": "comment-3",
+    "post_id": "post-2",
+    "content": "Next.js is amazing! Server-side rendering makes a huge difference.",
+    "created_at": "2025-02-11T16:00:00Z",
+    "upvotes": 8,
+    "user": {
+      "id": "user-4",
+      "name": "u/NextJSUser",
+      "image": "https://notjustdev-dummy.s3.us-east-2.amazonaws.com/avatars/4.png"
+    }
+  },
+  {
+    "id": "comment-4",
+    "post_id": "post-2",
+    "content": "Have you tried the new app router? It's a game changer.",
+    "created_at": "2025-02-11T17:00:00Z",
+    "upvotes": 12,
+    "user": {
+      "id": "user-5",
+      "name": "u/AppRouterFan",
+      "image": "https://notjustdev-dummy.s3.us-east-2.amazonaws.com/avatars/5.png"
+    },
+    "replies": [
+      {
+        "id": "comment-4-1",
+        "post_id": "post-2",
+        "content": "Yes, it's so much cleaner than pages router.",
+        "created_at": "2025-02-11T17:30:00Z",
+        "upvotes": 4,
+        "user": {
+          "id": "user-5",
+          "name": "u/NextJSUser",
+          "image": "https://notjustdev-dummy.s3.us-east-2.amazonaws.com/avatars/5.png"
+        }
+      },
+      {
+        "id": "comment-4-2",
+        "post_id": "post-2",
+        "content": "Still getting used to it, but loving the performance.",
+        "created_at": "2025-02-11T18:00:00Z",
+        "upvotes": 3,
+        "user": {
+          "id": "user-7",
+          "name": "u/WebDev",
+          "image": "https://notjustdev-dummy.s3.us-east-2.amazonaws.com/avatars/7.png"
+        }
+      }
+    ]
+  }
+]
