@@ -1,0 +1,187 @@
+{
+  "users": {
+    "description": "Stores registered user information",
+    "columns": {
+      "id": {
+        "type": "VARCHAR(50)",
+        "primary_key": true,
+        "nullable": false
+      },
+      "name": {
+        "type": "VARCHAR(100)",
+        "nullable": false
+      },
+      "email": {
+        "type": "VARCHAR(150)",
+        "unique": true,
+        "nullable": false
+      },
+      "image": {
+        "type": "TEXT",
+        "nullable": true
+      },
+      "created_at": {
+        "type": "TIMESTAMP",
+        "default": "CURRENT_TIMESTAMP"
+      }
+    }
+  },
+
+  "groups": {
+    "description": "Stores community/group information",
+    "columns": {
+      "id": {
+        "type": "VARCHAR(50)",
+        "primary_key": true,
+        "nullable": false
+      },
+      "name": {
+        "type": "VARCHAR(150)",
+        "unique": true,
+        "nullable": false
+      },
+      "image": {
+        "type": "TEXT",
+        "nullable": true
+      },
+      "created_at": {
+        "type": "TIMESTAMP",
+        "default": "CURRENT_TIMESTAMP"
+      }
+    }
+  },
+
+  "user_groups": {
+    "description": "Maps users to groups (many-to-many)",
+    "columns": {
+      "user_id": {
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "foreign_key": "users.id"
+      },
+      "group_id": {
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "foreign_key": "groups.id"
+      },
+      "joined_at": {
+        "type": "TIMESTAMP",
+        "default": "CURRENT_TIMESTAMP"
+      }
+    },
+    "primary_key": ["user_id", "group_id"]
+  },
+
+  "posts": {
+    "description": "Stores posts created by users inside groups",
+    "columns": {
+      "id": {
+        "type": "VARCHAR(50)",
+        "primary_key": true,
+        "nullable": false
+      },
+      "title": {
+        "type": "VARCHAR(255)",
+        "nullable": false
+      },
+      "description": {
+        "type": "TEXT",
+        "nullable": true
+      },
+      "image": {
+        "type": "TEXT",
+        "nullable": true
+      },
+      "created_at": {
+        "type": "TIMESTAMP",
+        "nullable": false
+      },
+      "user_id": {
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "foreign_key": "users.id"
+      },
+      "group_id": {
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "foreign_key": "groups.id"
+      }
+    }
+  },
+
+  "post_upvotes": {
+    "description": "Tracks which users upvoted which posts",
+    "columns": {
+      "post_id": {
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "foreign_key": "posts.id"
+      },
+      "user_id": {
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "foreign_key": "users.id"
+      },
+      "created_at": {
+        "type": "TIMESTAMP",
+        "default": "CURRENT_TIMESTAMP"
+      }
+    },
+    "primary_key": ["post_id", "user_id"]
+  },
+
+  "comments": {
+    "description": "Stores comments and nested replies on posts",
+    "columns": {
+      "id": {
+        "type": "VARCHAR(50)",
+        "primary_key": true,
+        "nullable": false
+      },
+      "post_id": {
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "foreign_key": "posts.id"
+      },
+      "user_id": {
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "foreign_key": "users.id"
+      },
+      "parent_id": {
+        "type": "VARCHAR(50)",
+        "nullable": true,
+        "foreign_key": "comments.id"
+      },
+      "comment": {
+        "type": "TEXT",
+        "nullable": false
+      },
+      "created_at": {
+        "type": "TIMESTAMP",
+        "nullable": false
+      }
+    }
+  },
+
+  "comment_upvotes": {
+    "description": "Tracks upvotes on comments",
+    "columns": {
+      "comment_id": {
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "foreign_key": "comments.id"
+      },
+      "user_id": {
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "foreign_key": "users.id"
+      },
+      "created_at": {
+        "type": "TIMESTAMP",
+        "default": "CURRENT_TIMESTAMP"
+      }
+    },
+    "primary_key": ["comment_id", "user_id"]
+  }
+}

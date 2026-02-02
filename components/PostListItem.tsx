@@ -8,13 +8,7 @@ import {
   Share2,
   Trophy,
 } from "lucide-react-native";
-import React, {
-  memo,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -100,7 +94,7 @@ const PostImage = memo(({ uri }: { uri: string }) => {
         toValue: 1,
         duration: 900,
         useNativeDriver: true,
-      })
+      }),
     );
     loop.start();
     return () => loop.stop();
@@ -110,7 +104,7 @@ const PostImage = memo(({ uri }: { uri: string }) => {
     Image.getSize(
       uri,
       (w, h) => setAspectRatio(w / h),
-      () => setAspectRatio(1)
+      () => setAspectRatio(1),
     );
   }, [uri]);
 
@@ -228,16 +222,26 @@ function PostListItem({
         {/* Header */}
         <View className="flex-row items-center mb-4">
           <Image
-            source={{ uri: post.group.image }}
+            source={{
+              uri: post.user.image || "https://via.placeholder.com/150",
+            }}
             className="w-10 h-10 rounded-full"
           />
 
           <View className="ml-3 flex-1">
-            <Text style={{ color: text }} className="font-semibold text-base">
-              {post.group.name}
-            </Text>
+            <View className="flex-row items-center gap-1">
+              <Text style={{ color: text }} className="font-semibold text-sm">
+                {post.group.name}
+              </Text>
+              <Text style={{ color: muted }} className="text-xs">
+                •
+              </Text>
+              <Text style={{ color: muted }} className="text-xs">
+                {formatDistanceToNowStrict(new Date(post.created_at))} ago
+              </Text>
+            </View>
             <Text style={{ color: muted }} className="text-xs">
-              {formatDistanceToNowStrict(new Date(post.created_at))} ago
+              Posted by {post.user.name}
             </Text>
           </View>
 

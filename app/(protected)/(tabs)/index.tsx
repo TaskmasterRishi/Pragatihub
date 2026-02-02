@@ -1,6 +1,7 @@
-import posts from "@/assets/data/posts.json";
 import PostListItem from "@/components/PostListItem";
+import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { supabase } from "@/lib/Supabase";
 import { useEffect, useState } from "react";
 import { FlatList, View } from "react-native";
 
@@ -9,12 +10,65 @@ const PAGE_SIZE = 5;
 export default function HomeScreen() {
   const backgroundColor = useThemeColor({}, "background");
 
+  const [posts, setPosts] = useState<Post[]>([]);
+
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const fetchPosts = async () => {
+    const { data, error } = await supabase.from("posts").select(`
+        *,
+        group:groups(*),
+        user:users!posts_user_id_fkey(*)
+      `);
+
+    if (error) {
+      console.log("Posts fetch error:", error);
+      return;
+    }
+
+    if (!data) {
+      console.log("No posts data returned");
+      setPosts([]);
+      return;
+    }
+
+    console.log("Fetched posts:", data.length);
+
+    // For each post, get the upvotes and comments count
+    const postsWithCounts = await Promise.all(
+      data.map(async (post) => {
+        // Get upvotes count
+        const { count: upvotesCount } = await supabase
+          .from("post_upvotes")
+          .select("*", { count: "exact", head: true })
+          .eq("post_id", post.id);
+
+        // Get comments count
+        const { count: commentsCount } = await supabase
+          .from("comments")
+          .select("*", { count: "exact", head: true })
+          .eq("post_id", post.id);
+
+        return {
+          ...post,
+          upvotes: upvotesCount || 0,
+          nr_of_comments: commentsCount || 0,
+        };
+      }),
+    );
+
+    console.log("Posts with counts:", JSON.stringify(postsWithCounts, null, 2));
+    setPosts(postsWithCounts);
+  };
+
   const [page, setPage] = useState(1);
   const [visiblePosts, setVisiblePosts] = useState(posts.slice(0, PAGE_SIZE));
 
   useEffect(() => {
     setVisiblePosts(posts.slice(0, page * PAGE_SIZE));
-  }, [page]);
+  }, [page, posts]);
 
   return (
     <View style={{ flex: 1, backgroundColor }}>

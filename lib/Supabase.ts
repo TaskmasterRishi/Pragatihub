@@ -20,4 +20,4 @@ AppState.addEventListener('change', (state) => {
   } else {
     supabase.auth.stopAutoRefresh();
   }
-});
+}); 

@@ -1,12 +1,13 @@
-import comments from "@/assets/data/comments.json";
-import posts from "@/assets/data/posts.json";
 import CommentInput from "@/components/CommentInput";
 import CommentItem from "@/components/CommentItem";
 import PostListItem from "@/components/PostListItem";
+import { Comment, Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { supabase } from "@/lib/Supabase";
 import { useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -28,10 +29,97 @@ export default function DetailedPost() {
   const { id } = useLocalSearchParams();
   const textColor = useThemeColor({}, "text");
   const background = useThemeColor({}, "background");
-  const detailedPost = posts.find((post) => post.id === id);
-  const initialComments = comments.filter((comment) => comment.post_id === id);
-  const [allComments, setAllComments] = useState(initialComments);
+  const border = useThemeColor({}, "border");
+
+  const [detailedPost, setDetailedPost] = useState<Post | null>(null);
+  const [allComments, setAllComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchPostAndComments();
+  }, [id]);
+
+  const fetchPostAndComments = async () => {
+    setLoading(true);
+
+    // Fetch post with aggregated counts
+    const { data: postData, error: postError } = await supabase
+      .from("posts")
+      .select(
+        `
+        *,
+        group:groups(*),
+        user:users!posts_user_id_fkey(*),
+        upvotes:post_upvotes(count),
+        comments:comments(count)
+      `,
+      )
+      .eq("id", id)
+      .single();
+
+    if (postError) {
+      console.log("Post fetch error:", postError);
+      setLoading(false);
+      return;
+    }
+
+    // Transform post data
+    const transformedPost = {
+      ...postData,
+      upvotes: postData.upvotes?.[0]?.count || 0,
+      nr_of_comments: postData.comments?.[0]?.count || 0,
+    };
+    setDetailedPost(transformedPost);
+
+    // Fetch comments for this post
+    const { data: commentsData, error: commentsError } = await supabase
+      .from("comments")
+      .select(
+        `
+        *,
+        user:users!comments_user_id_fkey(*),
+        upvotes:comment_upvotes(count)
+      `,
+      )
+      .eq("post_id", id)
+      .is("parent_id", null); // Only top-level comments for now
+
+    if (commentsError) {
+      console.log("Comments fetch error:", commentsError);
+    } else {
+      // Transform comments data
+      const transformedComments =
+        commentsData?.map((comment) => ({
+          id: comment.id,
+          post_id: comment.post_id,
+          content: comment.comment,
+          created_at: comment.created_at,
+          upvotes: comment.upvotes?.[0]?.count || 0,
+          user: comment.user,
+          replies: [],
+        })) || [];
+      setAllComments(transformedComments);
+    }
+
+    setLoading(false);
+  };
+
   const topLevelComments = addDepthToComments(allComments);
+
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: background,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <ActivityIndicator size="large" color={textColor} />
+      </View>
+    );
+  }
 
   if (!detailedPost) {
     return (
@@ -66,7 +154,7 @@ export default function DetailedPost() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: useThemeColor({}, "background") }}>
+    <View style={{ flex: 1, backgroundColor: background }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -76,27 +164,27 @@ export default function DetailedPost() {
           data={topLevelComments}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
-            <View style={{ backgroundColor: useThemeColor({}, "background") }}>
+            <View style={{ backgroundColor: background }}>
               <View style={{ paddingTop: 8 }}>
                 <PostListItem post={detailedPost} isDetailedPost={true} />
               </View>
               <View
                 style={{
                   height: 8,
-                  backgroundColor: useThemeColor({}, "background"),
+                  backgroundColor: background,
                 }}
               />
               <View
                 style={{
                   height: 1,
-                  backgroundColor: useThemeColor({}, "border"),
+                  backgroundColor: border,
                   marginHorizontal: 16,
                 }}
               />
               <View
                 style={{
                   height: 8,
-                  backgroundColor: useThemeColor({}, "background"),
+                  backgroundColor: background,
                 }}
               />
               <Text
@@ -123,10 +211,10 @@ export default function DetailedPost() {
           )}
           contentContainerStyle={{
             paddingBottom: 140, // Extra padding for input
-            backgroundColor: useThemeColor({}, "background"),
+            backgroundColor: background,
           }}
           showsVerticalScrollIndicator={false}
-          style={{ backgroundColor: useThemeColor({}, "background") }}
+          style={{ backgroundColor: background }}
         />
         <View
           style={{
@@ -134,7 +222,7 @@ export default function DetailedPost() {
             bottom: 0,
             left: 0,
             right: 0,
-            backgroundColor: useThemeColor({}, "background"),
+            backgroundColor: background,
             paddingBottom: Platform.OS === "ios" ? 34 : 16, // Safe area padding
           }}
         >
