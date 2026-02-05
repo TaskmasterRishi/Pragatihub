@@ -20,6 +20,7 @@ import {
 
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import JoinCommunityButton from "@/components/JoinCommunityButton";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
@@ -245,18 +246,7 @@ function PostListItem({
             </Text>
           </View>
 
-          <AnimatedIconButton
-            style={{
-              backgroundColor: primary,
-              paddingHorizontal: 14,
-              paddingVertical: 6,
-              borderRadius: 999,
-            }}
-          >
-            <Text style={{ color: "white" }} className="font-semibold">
-              Join
-            </Text>
-          </AnimatedIconButton>
+          <JoinCommunityButton communityId={post.group.id} />
         </View>
 
         <Link href={`/post/${post.id}`} asChild>
