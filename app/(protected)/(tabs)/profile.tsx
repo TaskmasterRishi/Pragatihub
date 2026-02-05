@@ -22,6 +22,9 @@ import {
 import Settings from "@/components/Settings";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { updateUserImage } from "@/lib/actions/users";
+import { supabase } from "@/lib/Supabase";
+import { Post } from "@/constants/types";
+import PostListItem from "@/components/PostListItem";
 import { Pen } from "lucide-react-native";
 
 export default function ProfileScreen() {
@@ -29,6 +32,8 @@ export default function ProfileScreen() {
   const { user } = useUser();
   const [updatingImage, setUpdatingImage] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
 
   const onSelectImage = async () => {
     try {
@@ -115,6 +120,59 @@ export default function ProfileScreen() {
       }),
     ]).start();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetchUserPosts(user.id);
+  }, [user?.id]);
+
+  const fetchUserPosts = async (userId: string) => {
+    setPostsLoading(true);
+
+    const { data, error } = await supabase
+      .from("posts")
+      .select(
+        `
+        *,
+        group:groups(*),
+        user:users!posts_user_id_fkey(*)
+      `,
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error || !data) {
+      if (error) {
+        console.log("Profile posts fetch error:", error);
+      }
+      setUserPosts([]);
+      setPostsLoading(false);
+      return;
+    }
+
+    const postsWithCounts = await Promise.all(
+      data.map(async (post) => {
+        const { count: upvotesCount } = await supabase
+          .from("post_upvotes")
+          .select("*", { count: "exact", head: true })
+          .eq("post_id", post.id);
+
+        const { count: commentsCount } = await supabase
+          .from("comments")
+          .select("*", { count: "exact", head: true })
+          .eq("post_id", post.id);
+
+        return {
+          ...post,
+          upvotes: upvotesCount || 0,
+          nr_of_comments: commentsCount || 0,
+        };
+      }),
+    );
+
+    setUserPosts(postsWithCounts);
+    setPostsLoading(false);
+  };
 
   const handleTabPress = (tab: ProfileTab) => {
     const scaleAnim = tab === "posts" ? postsTabScale : commentsTabScale;
@@ -360,19 +418,18 @@ export default function ProfileScreen() {
 
           {/* Content area */}
           <View
-            className="mt-4 flex-1 rounded-2xl p-6 overflow-hidden"
-            style={{ backgroundColor: cardColor, minHeight: 200 }}
+            className="mt-4 flex-1"
             onLayout={(event) => {
               const { width } = event.nativeEvent.layout;
               setContentWidth(width);
             }}
           >
-            <View className="flex-row relative" style={{ flex: 1 }}>
+            <View className="flex-row relative">
               {/* Posts Section */}
               <Animated.View
                 style={{
                   position: "absolute",
-                  width: contentWidth > 0 ? contentWidth - 48 : "100%",
+                  width: contentWidth > 0 ? contentWidth : "100%",
                   left: 0,
                   right: 0,
                   transform: [
@@ -385,35 +442,46 @@ export default function ProfileScreen() {
                       }),
                     },
                   ],
-                  flex: 1,
                 }}
               >
-                <View className="items-center justify-center py-8">
-                  <FileText
-                    size={48}
-                    color={textSecondaryColor}
-                    className="opacity-50"
-                  />
-                  <Text
-                    className="text-center font-medium"
-                    style={{ color: textColor }}
-                  >
-                    No posts yet
-                  </Text>
-                  <Text
-                    className="mt-1 text-center text-sm"
-                    style={{ color: textSecondaryColor }}
-                  >
-                    Your posts will appear here
-                  </Text>
-                </View>
+                {postsLoading ? (
+                  <View className="items-center justify-center py-8">
+                    <ActivityIndicator size="small" color={textSecondaryColor} />
+                  </View>
+                ) : userPosts.length > 0 ? (
+                  <View className="gap-3">
+                    {userPosts.map((post) => (
+                      <PostListItem key={post.id} post={post} />
+                    ))}
+                  </View>
+                ) : (
+                  <View className="items-center justify-center py-8">
+                    <FileText
+                      size={48}
+                      color={textSecondaryColor}
+                      className="opacity-50"
+                    />
+                    <Text
+                      className="text-center font-medium"
+                      style={{ color: textColor }}
+                    >
+                      No posts yet
+                    </Text>
+                    <Text
+                      className="mt-1 text-center text-sm"
+                      style={{ color: textSecondaryColor }}
+                    >
+                      Your posts will appear here
+                    </Text>
+                  </View>
+                )}
               </Animated.View>
 
               {/* Comments Section */}
               <Animated.View
                 style={{
                   position: "absolute",
-                  width: contentWidth > 0 ? contentWidth - 48 : "100%",
+                  width: contentWidth > 0 ? contentWidth : "100%",
                   left: 0,
                   right: 0,
                   transform: [
@@ -426,7 +494,6 @@ export default function ProfileScreen() {
                       }),
                     },
                   ],
-                  flex: 1,
                 }}
               >
                 <View className="items-center justify-center py-8">
