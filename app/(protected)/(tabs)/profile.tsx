@@ -21,6 +21,7 @@ import {
 
 import Settings from "@/components/Settings";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { updateUserImage } from "@/lib/actions/users";
 import { Pen } from "lucide-react-native";
 
 export default function ProfileScreen() {
@@ -43,9 +44,19 @@ export default function ProfileScreen() {
         setUpdatingImage(true);
         const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
 
-        await user?.setProfileImage({
-          file: base64,
-        });
+        await user?.setProfileImage({ file: base64 });
+        await user?.reload();
+
+        if (user?.id) {
+          const { error } = await updateUserImage({
+            id: user.id,
+            image: user.imageUrl ?? null,
+          });
+
+          if (error) {
+            console.log("Update user image error:", error);
+          }
+        }
 
         // No need to manually refresh, Clerk generic hook should pick it up or we rely on re-render
       }

@@ -27,6 +27,7 @@ function addDepthToComments(comments: any[]): any[] {
 
 export default function DetailedPost() {
   const { id } = useLocalSearchParams();
+  const postId = Array.isArray(id) ? id[0] : id;
   const textColor = useThemeColor({}, "text");
   const background = useThemeColor({}, "background");
   const border = useThemeColor({}, "border");
@@ -36,8 +37,9 @@ export default function DetailedPost() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!postId) return;
     fetchPostAndComments();
-  }, [id]);
+  }, [postId]);
 
   const fetchPostAndComments = async () => {
     setLoading(true);
@@ -54,7 +56,7 @@ export default function DetailedPost() {
         comments:comments(count)
       `,
       )
-      .eq("id", id)
+      .eq("id", postId)
       .single();
 
     if (postError) {
@@ -81,7 +83,7 @@ export default function DetailedPost() {
         upvotes:comment_upvotes(count)
       `,
       )
-      .eq("post_id", id)
+      .eq("post_id", postId)
       .is("parent_id", null); // Only top-level comments for now
 
     if (commentsError) {
@@ -139,7 +141,7 @@ export default function DetailedPost() {
   const handleAddComment = (content: string) => {
     const newComment = {
       id: `comment-${Date.now()}`,
-      post_id: id as string,
+      post_id: postId as string,
       content,
       created_at: new Date().toISOString(),
       upvotes: 0,
@@ -154,7 +156,7 @@ export default function DetailedPost() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: background }}>
+    <View style={{ flex: 1, backgroundColor: background, margin: 16 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -178,7 +180,6 @@ export default function DetailedPost() {
                 style={{
                   height: 1,
                   backgroundColor: border,
-                  marginHorizontal: 16,
                 }}
               />
               <View
@@ -201,13 +202,11 @@ export default function DetailedPost() {
             </View>
           }
           renderItem={({ item }) => (
-            <View style={{ marginHorizontal: 12 }}>
-              <CommentItem
-                comment={item}
-                depth={item.depth}
-                isLastInThread={item.isLastInThread}
-              />
-            </View>
+            <CommentItem
+              comment={item}
+              depth={item.depth}
+              isLastInThread={item.isLastInThread}
+            />
           )}
           contentContainerStyle={{
             paddingBottom: 140, // Extra padding for input
@@ -223,7 +222,6 @@ export default function DetailedPost() {
             left: 0,
             right: 0,
             backgroundColor: background,
-            paddingBottom: Platform.OS === "ios" ? 34 : 16, // Safe area padding
           }}
         >
           <CommentInput onSubmit={handleAddComment} />

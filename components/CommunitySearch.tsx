@@ -1,7 +1,7 @@
-import groupsData from "@/assets/data/groups.json";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { fetchGroups } from "@/lib/actions/groups";
 import { Search, X } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     Image,
     Pressable,
@@ -14,7 +14,7 @@ import {
 type Group = {
   id: string;
   name: string;
-  image: string;
+  image: string | null;
 };
 
 type CommunitySearchProps = {
@@ -26,7 +26,6 @@ export default function CommunitySearch({
   selectedCommunity,
   onCommunitySelect,
 }: CommunitySearchProps) {
-  const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
   const primaryColor = useThemeColor({}, "primary");
   const mutedColor = useThemeColor({}, "textMuted");
@@ -35,10 +34,63 @@ export default function CommunitySearch({
 
   const [showCommunitySearch, setShowCommunitySearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [communities, setCommunities] = useState<Group[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const filteredCommunities = (groupsData as Group[]).filter((group) =>
-    group.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCommunities = async () => {
+      setIsLoading(true);
+      setLoadError(null);
+
+      const { data, error } = await fetchGroups();
+
+      if (!isMounted) return;
+
+      if (error) {
+        setCommunities([]);
+        setLoadError(error.message ?? "Failed to load communities");
+      } else {
+        setCommunities(data ?? []);
+      }
+
+      setIsLoading(false);
+    };
+
+    loadCommunities();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredCommunities = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return communities;
+    return communities.filter((group) =>
+      group.name.toLowerCase().includes(q),
+    );
+  }, [communities, searchQuery]);
+
+  const renderAvatar = (image: string | null, size: number) => {
+    if (image) {
+      return (
+        <Image
+          source={{ uri: image }}
+          className={size === 40 ? "w-10 h-10 rounded-full" : "w-8 h-8 rounded-full"}
+        />
+      );
+    }
+
+    return (
+      <View
+        style={{ backgroundColor: borderColor, width: size, height: size }}
+        className="rounded-full"
+      />
+    );
+  };
 
   return (
     <View>
@@ -50,10 +102,7 @@ export default function CommunitySearch({
         >
           {selectedCommunity ? (
             <>
-              <Image
-                source={{ uri: selectedCommunity.image }}
-                className="w-10 h-10 rounded-full"
-              />
+              {renderAvatar(selectedCommunity.image, 40)}
               <View className="flex-1">
                 <Text style={{ color: mutedColor }} className="text-xs">
                   Community
@@ -132,7 +181,15 @@ export default function CommunitySearch({
 
           {/* Results List */}
           <ScrollView scrollEnabled nestedScrollEnabled={false}>
-            {filteredCommunities.length > 0 ? (
+            {isLoading ? (
+              <View className="px-4 py-6 items-center">
+                <Text style={{ color: mutedColor }}>Loading communities...</Text>
+              </View>
+            ) : loadError ? (
+              <View className="px-4 py-6 items-center">
+                <Text style={{ color: mutedColor }}>{loadError}</Text>
+              </View>
+            ) : filteredCommunities.length > 0 ? (
               filteredCommunities.map((item) => (
                 <Pressable
                   key={item.id}
@@ -151,10 +208,7 @@ export default function CommunitySearch({
                   }}
                   className="flex-row items-center gap-3 px-4 py-2"
                 >
-                  <Image
-                    source={{ uri: item.image }}
-                    className="w-8 h-8 rounded-full"
-                  />
+                  {renderAvatar(item.image, 32)}
                   <View className="flex-1">
                     <Text
                       style={{ color: textColor }}

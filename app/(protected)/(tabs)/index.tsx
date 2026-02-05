@@ -11,17 +11,23 @@ export default function HomeScreen() {
   const backgroundColor = useThemeColor({}, "background");
 
   const [posts, setPosts] = useState<Post[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchPosts();
   }, []);
 
   const fetchPosts = async () => {
-    const { data, error } = await supabase.from("posts").select(`
+    const { data, error } = await supabase
+      .from("posts")
+      .select(
+        `
         *,
         group:groups(*),
         user:users!posts_user_id_fkey(*)
-      `);
+      `,
+      )
+      .order("created_at", { ascending: false });
 
     if (error) {
       console.log("Posts fetch error:", error);
@@ -78,6 +84,14 @@ export default function HomeScreen() {
         renderItem={({ item }) => <PostListItem post={item} />}
         contentContainerStyle={{
           paddingBottom: 120, // space for floating tab bar
+          padding: 20,
+        }}
+        refreshing={refreshing}
+        onRefresh={async () => {
+          setRefreshing(true);
+          setPage(1);
+          await fetchPosts();
+          setRefreshing(false);
         }}
         onEndReached={() => {
           if (page * PAGE_SIZE < posts.length) {

@@ -1,9 +1,9 @@
-import groups from "@/assets/data/groups.json";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { fetchGroups, type Group } from "@/lib/actions/groups";
 import { useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { Search, Users } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -12,8 +12,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-
-type Group = (typeof groups)[number];
 
 function CommunityCard({
   item,
@@ -67,6 +65,9 @@ function CommunityCard({
 export default function CommunitiesScreen() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const backgroundColor = useThemeColor({}, "background");
   const cardColor = useThemeColor({}, "card");
@@ -76,15 +77,43 @@ export default function CommunitiesScreen() {
   const inputBg = useThemeColor({}, "input");
   const placeholderColor = useThemeColor({}, "placeholder");
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadGroups = async () => {
+      setIsLoading(true);
+      setLoadError(null);
+
+      const { data, error } = await fetchGroups();
+
+      if (!isMounted) return;
+
+      if (error) {
+        setGroups([]);
+        setLoadError(error.message ?? "Failed to load communities");
+      } else {
+        setGroups(data ?? []);
+      }
+
+      setIsLoading(false);
+    };
+
+    loadGroups();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const filteredGroups = useMemo(() => {
     if (!searchQuery.trim()) return groups;
     const q = searchQuery.trim().toLowerCase();
     return groups.filter(
       (g) =>
         g.name.toLowerCase().includes(q) ||
-        g.id.toLowerCase().includes(q)
+        g.id.toLowerCase().includes(q),
     );
-  }, [searchQuery]);
+  }, [searchQuery, groups]);
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
@@ -125,7 +154,13 @@ export default function CommunitiesScreen() {
           <View style={styles.empty}>
             <Users size={48} color={textSecondaryColor} />
             <Text style={[styles.emptyText, { color: textSecondaryColor }]}>
-              {searchQuery.trim() ? "No communities match your search" : "No communities yet"}
+              {isLoading
+                ? "Loading communities..."
+                : loadError
+                  ? loadError
+                  : searchQuery.trim()
+                    ? "No communities match your search"
+                    : "No communities yet"}
             </Text>
           </View>
         }

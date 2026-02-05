@@ -1,19 +1,22 @@
 import CommunitySearch from "@/components/CommunitySearch";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { createPost } from "@/lib/actions/posts";
+import { useUser } from "@clerk/clerk-expo";
 import { useRouter } from "expo-router";
 import { X } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Alert, Platform, Pressable, Text, TextInput, ToastAndroid, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 type Group = {
   id: string;
   name: string;
-  image: string;
+  image: string | null;
 };
 
 export default function CreateScreen() {
   const router = useRouter();
+  const { user } = useUser();
 
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
@@ -23,9 +26,45 @@ export default function CreateScreen() {
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedCommunity, setSelectedCommunity] = useState<Group | null>(
     null,
   );
+
+  const canPost =
+    title.trim().length > 0 && !!selectedCommunity?.id && !!user?.id;
+
+  const handleCreatePost = async () => {
+    if (!canPost || !selectedCommunity || !user) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    const { error } = await createPost({
+      title: title.trim(),
+      description: body.trim().length > 0 ? body.trim() : null,
+      groupId: selectedCommunity.id,
+      userId: user.id,
+    });
+
+    if (error) {
+      console.log("Create post error:", error);
+      setIsSubmitting(false);
+      return;
+    }
+
+    setIsSubmitting(false);
+    if (Platform.OS === "android") {
+      ToastAndroid.show("Post created", ToastAndroid.SHORT);
+    } else {
+      Alert.alert("Success", "Post created");
+    }
+
+    setTitle("");
+    setBody("");
+    setSelectedCommunity(null);
+    router.replace("/(protected)/(tabs)");
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor }}>
@@ -51,8 +90,12 @@ export default function CreateScreen() {
           <Pressable
             style={{ backgroundColor: primaryColor }}
             className="px-4 py-1.5 rounded-full"
+            disabled={!canPost || isSubmitting}
+            onPress={handleCreatePost}
           >
-            <Text className="text-white font-semibold">Post</Text>
+            <Text className="text-white font-semibold">
+              {isSubmitting ? "Posting..." : "Post"}
+            </Text>
           </Pressable>
         </View>
       </View>

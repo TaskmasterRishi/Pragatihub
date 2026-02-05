@@ -1,11 +1,35 @@
-import { useAuth } from "@clerk/clerk-expo";
+import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Redirect, Stack } from "expo-router";
+import { useEffect } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { syncUserToSupabase } from "@/lib/actions/users";
 
 export default function AppLayout() {
   const { isSignedIn } = useAuth();
+  const { isLoaded, user } = useUser();
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    if (!isLoaded || !user) {
+      return;
+    }
+
+    const email = user.primaryEmailAddress?.emailAddress;
+    if (!email) {
+      console.log("User sync skipped: missing primary email");
+      return;
+    }
+
+    syncUserToSupabase({
+      id: user.id,
+      email,
+      name: user.fullName ?? user.username ?? "Anonymous",
+      image: user.imageUrl ?? null,
+    }).catch((error) => {
+      console.log("User sync error:", error);
+    });
+  }, [isLoaded, user]);
 
   if (!isSignedIn) {
     return <Redirect href="/(auth)" />;

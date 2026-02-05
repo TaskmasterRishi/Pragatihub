@@ -214,8 +214,8 @@ function PostListItem({
           backgroundColor: card,
           borderRadius: 20,
           padding: 16,
-          margin: 16,
           borderWidth: 1,
+          marginBottom: 20,
           borderColor: border,
         }}
       >
