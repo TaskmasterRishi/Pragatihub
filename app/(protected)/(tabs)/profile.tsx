@@ -451,7 +451,11 @@ export default function ProfileScreen() {
                 ) : userPosts.length > 0 ? (
                   <View className="gap-3">
                     {userPosts.map((post) => (
-                      <PostListItem key={post.id} post={post} />
+                      <PostListItem
+                        key={post.id}
+                        post={post}
+                        hideJoinButton={true}
+                      />
                     ))}
                   </View>
                 ) : (

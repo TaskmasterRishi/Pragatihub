@@ -198,15 +198,20 @@ function AnimatedIconButton({
 function PostListItem({
   post,
   isDetailedPost = false,
+  showJoinButton = true,
+  hideJoinButton = false,
 }: {
   post: Post;
   isDetailedPost?: boolean;
+  showJoinButton?: boolean;
+  hideJoinButton?: boolean;
 }) {
   const text = useThemeColor({}, "text");
   const muted = useThemeColor({}, "textMuted");
   const primary = useThemeColor({}, "primary");
   const card = useThemeColor({}, "card");
   const border = useThemeColor({}, "border");
+  const shouldShowJoinButton = showJoinButton && !hideJoinButton;
 
   return (
     <FadeInView>
@@ -246,7 +251,9 @@ function PostListItem({
             </Text>
           </View>
 
-          <JoinCommunityButton communityId={post.group.id} />
+          {shouldShowJoinButton && (
+            <JoinCommunityButton communityId={post.group.id} />
+          )}
         </View>
 
         <Link href={`/post/${post.id}`} asChild>

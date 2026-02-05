@@ -218,7 +218,9 @@ export default function CommunityPage() {
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <PostListItem post={item} />}
+        renderItem={({ item }) => (
+          <PostListItem post={item} hideJoinButton={true} />
+        )}
         contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
         refreshing={postsRefreshing}
