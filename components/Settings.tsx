@@ -12,11 +12,21 @@ import {
     Wallet,
     X,
 } from "lucide-react-native";
-import React from "react";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import React, { useState } from "react";
+import {
+  Modal,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Image } from "expo-image";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { createGroup } from "@/lib/actions/groups";
 
 interface SettingsProps {
   onClose: () => void;
@@ -33,9 +43,18 @@ export default function Settings({ onClose }: SettingsProps) {
   const textSecondaryColor = useThemeColor({}, "textSecondary");
   const primaryColor = useThemeColor({}, "primary");
   const borderColor = useThemeColor({}, "border");
+  const inputBg = useThemeColor({}, "input");
+  const placeholderColor = useThemeColor({}, "placeholder");
 
   // Mock switch states
   const [isDarkMode, setIsDarkMode] = React.useState(false);
+  const [showCreateCommunity, setShowCreateCommunity] = useState(false);
+  const [communityName, setCommunityName] = useState("");
+  const [communityImage, setCommunityImage] = useState<string | null>(null);
+  const [isCreatingCommunity, setIsCreatingCommunity] = useState(false);
+  const [createCommunityError, setCreateCommunityError] = useState<string | null>(
+    null,
+  );
 
   const SettingItem = ({
     Icon,
@@ -197,6 +216,22 @@ export default function Settings({ onClose }: SettingsProps) {
           />
         </View>
 
+        {/* Community */}
+        <View
+          className="mb-6 rounded-2xl p-4"
+          style={{
+            backgroundColor: cardColor,
+          }}
+        >
+          <SettingItem
+            Icon={Users}
+            label="Create Community"
+            onPress={() => setShowCreateCommunity(true)}
+            showChevron={false}
+            style={{ borderBottomWidth: 0 }}
+          />
+        </View>
+
         {/* Logout Button */}
         <TouchableOpacity
           onPress={() => signOut()}
@@ -208,6 +243,153 @@ export default function Settings({ onClose }: SettingsProps) {
           <Text className="text-base font-semibold text-red-500">Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal
+        visible={showCreateCommunity}
+        animationType="slide"
+        onRequestClose={() => setShowCreateCommunity(false)}
+        transparent
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.4)",
+            justifyContent: "center",
+            padding: 20,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: cardColor,
+              borderRadius: 16,
+              padding: 20,
+              borderWidth: 1,
+              borderColor,
+            }}
+          >
+            <Text style={{ color: textColor, fontSize: 18, fontWeight: "700" }}>
+              Create Community
+            </Text>
+            <Text
+              style={{
+                color: textSecondaryColor,
+                fontSize: 13,
+                marginTop: 6,
+                marginBottom: 16,
+              }}
+            >
+              Fill the details to create a new community.
+            </Text>
+
+            <Text style={{ color: textSecondaryColor, marginBottom: 6 }}>
+              Name (required)
+            </Text>
+            <TextInput
+              value={communityName}
+              onChangeText={setCommunityName}
+              placeholder="Community name"
+              placeholderTextColor={placeholderColor}
+              style={{
+                backgroundColor: inputBg,
+                color: textColor,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                marginBottom: 12,
+              }}
+            />
+
+            <Text style={{ color: textSecondaryColor, marginBottom: 6 }}>
+              Image (optional)
+            </Text>
+            <TouchableOpacity
+              onPress={async () => {
+                const result = await ImagePicker.launchImageLibraryAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsEditing: true,
+                  aspect: [1, 1],
+                  quality: 0.7,
+                });
+
+                if (!result.canceled) {
+                  setCommunityImage(result.assets[0].uri ?? null);
+                }
+              }}
+              className="items-center rounded-xl py-3"
+              style={{ backgroundColor: inputBg, marginBottom: 12 }}
+            >
+              <Text style={{ color: textColor, fontWeight: "600" }}>
+                {communityImage ? "Change Image" : "Pick Image"}
+              </Text>
+            </TouchableOpacity>
+            {communityImage && (
+              <View style={{ alignItems: "center", marginBottom: 12 }}>
+                <Image
+                  source={{ uri: communityImage }}
+                  style={{ width: 96, height: 96, borderRadius: 48 }}
+                />
+              </View>
+            )}
+
+            {createCommunityError && (
+              <Text style={{ color: "tomato", marginBottom: 12 }}>
+                {createCommunityError}
+              </Text>
+            )}
+
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowCreateCommunity(false);
+                  setCreateCommunityError(null);
+                }}
+                className="flex-1 items-center rounded-xl py-3"
+                style={{ backgroundColor: backgroundColor }}
+              >
+                <Text style={{ color: textColor, fontWeight: "600" }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!communityName.trim()) {
+                    setCreateCommunityError("Name is required.");
+                    return;
+                  }
+
+                  setIsCreatingCommunity(true);
+                  setCreateCommunityError(null);
+
+                  const { error } = await createGroup({
+                    name: communityName.trim(),
+                    image: communityImage,
+                  });
+
+                  if (error) {
+                    setCreateCommunityError(
+                      error.message ?? "Failed to create community.",
+                    );
+                    setIsCreatingCommunity(false);
+                    return;
+                  }
+
+                  setIsCreatingCommunity(false);
+                  setCommunityName("");
+                  setCommunityImage(null);
+                  setShowCreateCommunity(false);
+                }}
+                disabled={isCreatingCommunity}
+                className="flex-1 items-center rounded-xl py-3"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <Text style={{ color: "white", fontWeight: "600" }}>
+                  {isCreatingCommunity ? "Creating..." : "Create"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

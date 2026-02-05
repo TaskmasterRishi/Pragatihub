@@ -68,6 +68,7 @@ export default function CommunitiesScreen() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const backgroundColor = useThemeColor({}, "background");
   const cardColor = useThemeColor({}, "card");
@@ -104,6 +105,22 @@ export default function CommunitiesScreen() {
       isMounted = false;
     };
   }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setLoadError(null);
+
+    const { data, error } = await fetchGroups();
+
+    if (error) {
+      setGroups([]);
+      setLoadError(error.message ?? "Failed to load communities");
+    } else {
+      setGroups(data ?? []);
+    }
+
+    setRefreshing(false);
+  };
 
   const filteredGroups = useMemo(() => {
     if (!searchQuery.trim()) return groups;
@@ -150,6 +167,8 @@ export default function CommunitiesScreen() {
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Users size={48} color={textSecondaryColor} />
