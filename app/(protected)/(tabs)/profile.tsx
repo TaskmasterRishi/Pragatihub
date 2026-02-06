@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   FileText,
   MessageSquare,
+  Users,
   Settings as SettingsIcon,
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
@@ -13,6 +14,7 @@ import {
   Animated,
   Image,
   Modal,
+  RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -26,6 +28,7 @@ import { supabase } from "@/lib/Supabase";
 import { Post } from "@/constants/types";
 import PostListItem from "@/components/PostListItem";
 import { Pen } from "lucide-react-native";
+import { Group } from "@/lib/actions/groups";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -34,6 +37,11 @@ export default function ProfileScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [userCommunities, setUserCommunities] = useState<Group[]>([]);
+  const [communitiesLoading, setCommunitiesLoading] = useState(false);
+  const [karmaCount, setKarmaCount] = useState(0);
+  const [postCount, setPostCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   const onSelectImage = async () => {
     try {
@@ -80,50 +88,33 @@ export default function ProfileScreen() {
   const primaryColor = useThemeColor({}, "primary");
   const primaryForeground = useThemeColor({}, "primaryForeground");
 
-  type ProfileTab = "posts" | "comments";
+  type ProfileTab = "posts" | "comments" | "communities";
   const [activeTab, setActiveTab] = useState<ProfileTab>("posts");
   const [tabContainerWidth, setTabContainerWidth] = useState(0);
+  const tabIndex = useRef(new Animated.Value(0)).current;
 
   // Animation values
   const postsTabScale = useRef(new Animated.Value(1)).current;
   const commentsTabScale = useRef(new Animated.Value(1)).current;
-  const tabIndicatorPosition = useRef(new Animated.Value(0)).current;
-  const postsContentPosition = useRef(new Animated.Value(0)).current;
-  const commentsContentPosition = useRef(new Animated.Value(-1)).current;
+  const communitiesTabScale = useRef(new Animated.Value(1)).current;
   const [contentWidth, setContentWidth] = useState(0);
 
   // Animate when tab changes
   useEffect(() => {
-    // Animate tab indicator position
-    Animated.spring(tabIndicatorPosition, {
-      toValue: activeTab === "posts" ? 0 : 1,
+    const index =
+      activeTab === "posts" ? 0 : activeTab === "comments" ? 1 : 2;
+    Animated.spring(tabIndex, {
+      toValue: index,
       useNativeDriver: true,
       tension: 65,
       friction: 10,
     }).start();
-
-    // Animate content sections horizontally
-    // When posts is active: posts at center (0), comments at left (-1)
-    // When comments is active: posts at right (1), comments at center (0)
-    Animated.parallel([
-      Animated.spring(postsContentPosition, {
-        toValue: activeTab === "posts" ? 0 : 1,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 10,
-      }),
-      Animated.spring(commentsContentPosition, {
-        toValue: activeTab === "posts" ? -1 : 0,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 10,
-      }),
-    ]).start();
   }, [activeTab]);
 
   useEffect(() => {
     if (!user?.id) return;
     fetchUserPosts(user.id);
+    fetchUserCommunities(user.id);
   }, [user?.id]);
 
   const fetchUserPosts = async (userId: string) => {
@@ -146,6 +137,8 @@ export default function ProfileScreen() {
         console.log("Profile posts fetch error:", error);
       }
       setUserPosts([]);
+      setPostCount(0);
+      setKarmaCount(0);
       setPostsLoading(false);
       return;
     }
@@ -177,11 +170,55 @@ export default function ProfileScreen() {
     );
 
     setUserPosts(postsWithCounts);
+    setPostCount(postsWithCounts.length);
+    setKarmaCount(
+      postsWithCounts.reduce((total, post) => total + (post.upvotes ?? 0), 0),
+    );
     setPostsLoading(false);
   };
 
+  const fetchUserCommunities = async (userId: string) => {
+    setCommunitiesLoading(true);
+
+    const { data, error } = await supabase
+      .from("user_groups")
+      .select("group:groups(id, name, image)")
+      .eq("user_id", userId);
+
+    if (error || !data) {
+      if (error) {
+        console.log("Profile communities fetch error:", error);
+      }
+      setUserCommunities([]);
+      setCommunitiesLoading(false);
+      return;
+    }
+
+    const groups = data
+      .map((item) => item.group)
+      .filter(Boolean) as Group[];
+
+    setUserCommunities(groups);
+    setCommunitiesLoading(false);
+  };
+
+  const handleRefresh = async () => {
+    if (!user?.id) return;
+    setRefreshing(true);
+    await Promise.all([
+      fetchUserPosts(user.id),
+      fetchUserCommunities(user.id),
+    ]);
+    setRefreshing(false);
+  };
+
   const handleTabPress = (tab: ProfileTab) => {
-    const scaleAnim = tab === "posts" ? postsTabScale : commentsTabScale;
+    const scaleAnim =
+      tab === "posts"
+        ? postsTabScale
+        : tab === "comments"
+          ? commentsTabScale
+          : communitiesTabScale;
     
     // Scale down on press
     Animated.sequence([
@@ -200,9 +237,7 @@ export default function ProfileScreen() {
     setActiveTab(tab);
   };
 
-  // Mock counts (Reddit-style)
-  const karmaCount = "0";
-  const postCount = "0";
+  // Counts
 
   return (
     <View className="flex-1" style={{ backgroundColor }}>
@@ -210,6 +245,13 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 40 }}
         className="flex-1"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={primaryForeground}
+          />
+        }
       >
         {/* Custom Header Area */}
         <View
@@ -322,7 +364,7 @@ export default function ProfileScreen() {
         </View>
 
         <View className="px-4 pt-16">
-          {/* Tabs - Posts | Comments */}
+          {/* Tabs - Posts | Comments | Communities */}
           <View
             className="mt-2 flex-row rounded-2xl px-1 py-1 relative"
             style={{ backgroundColor: cardColor }}
@@ -339,14 +381,18 @@ export default function ProfileScreen() {
                   left: 4,
                   top: 4,
                   bottom: 4,
-                  width: (tabContainerWidth - 8) / 2,
+                  width: (tabContainerWidth - 8) / 3,
                   backgroundColor: primaryColor,
                   borderRadius: 12,
                   transform: [
                     {
-                      translateX: tabIndicatorPosition.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, tabContainerWidth / 2],
+                      translateX: tabIndex.interpolate({
+                        inputRange: [0, 1, 2],
+                        outputRange: [
+                          0,
+                          tabContainerWidth / 3,
+                          (tabContainerWidth / 3) * 2,
+                        ],
                       }),
                     },
                   ],
@@ -420,6 +466,39 @@ export default function ProfileScreen() {
                 </Text>
               </TouchableOpacity>
             </Animated.View>
+            <Animated.View
+              style={{
+                flex: 1,
+                transform: [{ scale: communitiesTabScale }],
+                zIndex: 1,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => handleTabPress("communities")}
+                className="flex-1 flex-row items-center justify-center rounded-xl py-3 gap-2"
+              >
+                <Users
+                  size={18}
+                  color={
+                    activeTab === "communities"
+                      ? primaryForeground
+                      : textSecondaryColor
+                  }
+                  className="mr-2"
+                />
+                <Text
+                  className="font-semibold"
+                  style={{
+                    color:
+                      activeTab === "communities"
+                        ? primaryForeground
+                        : textSecondaryColor,
+                  }}
+                >
+                  Communities
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
           </View>
 
           {/* Content area */}
@@ -430,26 +509,25 @@ export default function ProfileScreen() {
               setContentWidth(width);
             }}
           >
-            <View className="flex-row relative">
+            <Animated.View
+              style={{
+                flexDirection: "row",
+                width: contentWidth > 0 ? contentWidth * 3 : "300%",
+                transform: [
+                  {
+                    translateX: tabIndex.interpolate({
+                      inputRange: [0, 1, 2],
+                      outputRange:
+                        contentWidth > 0
+                          ? [0, -contentWidth, -contentWidth * 2]
+                          : [0, -300, -600],
+                    }),
+                  },
+                ],
+              }}
+            >
               {/* Posts Section */}
-              <Animated.View
-                style={{
-                  position: "absolute",
-                  width: contentWidth > 0 ? contentWidth : "100%",
-                  left: 0,
-                  right: 0,
-                  transform: [
-                    {
-                      translateX: postsContentPosition.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: contentWidth > 0 
-                          ? [0, contentWidth]
-                          : [0, 300],
-                      }),
-                    },
-                  ],
-                }}
-              >
+              <View style={{ width: contentWidth > 0 ? contentWidth : "100%" }}>
                 {postsLoading ? (
                   <View className="items-center justify-center py-8">
                     <ActivityIndicator size="small" color={textSecondaryColor} />
@@ -485,27 +563,10 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                 )}
-              </Animated.View>
+              </View>
 
               {/* Comments Section */}
-              <Animated.View
-                style={{
-                  position: "absolute",
-                  width: contentWidth > 0 ? contentWidth : "100%",
-                  left: 0,
-                  right: 0,
-                  transform: [
-                    {
-                      translateX: commentsContentPosition.interpolate({
-                        inputRange: [-1, 0],
-                        outputRange: contentWidth > 0 
-                          ? [-contentWidth, 0]
-                          : [-300, 0],
-                      }),
-                    },
-                  ],
-                }}
-              >
+              <View style={{ width: contentWidth > 0 ? contentWidth : "100%" }}>
                 <View className="items-center justify-center py-8">
                   <MessageSquare
                     size={48}
@@ -525,8 +586,67 @@ export default function ProfileScreen() {
                     Your comments will appear here
                   </Text>
                 </View>
-              </Animated.View>
-            </View>
+              </View>
+
+              {/* Communities Section */}
+              <View style={{ width: contentWidth > 0 ? contentWidth : "100%" }}>
+                {communitiesLoading ? (
+                  <View className="items-center justify-center py-8">
+                    <ActivityIndicator size="small" color={textSecondaryColor} />
+                  </View>
+                ) : userCommunities.length > 0 ? (
+                  <View className="gap-3">
+                    {userCommunities.map((group) => (
+                      <TouchableOpacity
+                        key={group.id}
+                        className="flex-row items-center gap-3 rounded-2xl px-4 py-3"
+                        style={{ backgroundColor: cardColor }}
+                        onPress={() => router.push(`/community/${group.id}`)}
+                      >
+                        <Image
+                          source={{ uri: group.image ?? undefined }}
+                          className="h-12 w-12 rounded-xl bg-gray-200"
+                        />
+                        <View className="flex-1">
+                          <Text
+                            className="text-base font-semibold"
+                            style={{ color: textColor }}
+                          >
+                            {group.name}
+                          </Text>
+                          <Text
+                            className="text-sm"
+                            style={{ color: textSecondaryColor }}
+                          >
+                            Tap to view community
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : (
+                  <View className="items-center justify-center py-8">
+                    <Users
+                      size={48}
+                      color={textSecondaryColor}
+                      className="opacity-50"
+                    />
+                    <Text
+                      className="text-center font-medium"
+                      style={{ color: textColor }}
+                    >
+                      No communities yet
+                    </Text>
+                    <Text
+                      className="mt-1 text-center text-sm"
+                      style={{ color: textSecondaryColor }}
+                    >
+                      Communities you join will appear here
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </Animated.View>
           </View>
         </View>
       </ScrollView>
