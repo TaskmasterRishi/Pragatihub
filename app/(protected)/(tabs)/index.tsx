@@ -51,6 +51,12 @@ export default function HomeScreen() {
           .select("*", { count: "exact", head: true })
           .eq("post_id", post.id);
 
+        // Get downvotes count
+        const { count: downvotesCount } = await supabase
+          .from("post_downvotes")
+          .select("*", { count: "exact", head: true })
+          .eq("post_id", post.id);
+
         // Get comments count
         const { count: commentsCount } = await supabase
           .from("comments")
@@ -60,6 +66,7 @@ export default function HomeScreen() {
         return {
           ...post,
           upvotes: upvotesCount || 0,
+          downvotes: downvotesCount || 0,
           nr_of_comments: commentsCount || 0,
         };
       }),

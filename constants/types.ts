@@ -14,6 +14,7 @@ export type Post = {
   image: string | null;
   created_at: string;
   upvotes: number;
+  downvotes: number;
   nr_of_comments: number;
   group: {
     id: string;
@@ -42,6 +43,7 @@ export type Comment = {
   content: string;
   created_at: string;
   upvotes: number;
+  downvotes: number;
   user: {
     id: string;
     name: string;

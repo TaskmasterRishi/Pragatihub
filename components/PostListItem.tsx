@@ -1,8 +1,6 @@
 import { formatDistanceToNowStrict } from "date-fns";
 import { Link } from "expo-router";
 import {
-  ArrowBigDown,
-  ArrowBigUp,
   Loader2,
   MessageSquare,
   Share2,
@@ -21,6 +19,7 @@ import {
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import JoinCommunityButton from "@/components/JoinCommunityButton";
+import VoteButtons from "@/components/VoteButtons";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
@@ -300,17 +299,12 @@ function PostListItem({
               paddingVertical: 4,
             }}
           >
-            <AnimatedIconButton>
-              <ArrowBigUp size={22} color={text} />
-            </AnimatedIconButton>
-
-            <Text style={{ color: text }} className="mx-3 font-semibold">
-              {post.upvotes}
-            </Text>
-
-            <AnimatedIconButton>
-              <ArrowBigDown size={22} color={text} />
-            </AnimatedIconButton>
+            <VoteButtons
+              type="post"
+              itemId={post.id}
+              initialUpvotes={post.upvotes}
+              initialDownvotes={post.downvotes}
+            />
           </View>
 
           {/* Comments */}

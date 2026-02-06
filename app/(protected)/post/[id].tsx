@@ -53,6 +53,7 @@ export default function DetailedPost() {
         group:groups(*),
         user:users!posts_user_id_fkey(*),
         upvotes:post_upvotes(count),
+        downvotes:post_downvotes(count),
         comments:comments(count)
       `,
       )
@@ -69,6 +70,7 @@ export default function DetailedPost() {
     const transformedPost = {
       ...postData,
       upvotes: postData.upvotes?.[0]?.count || 0,
+      downvotes: postData.downvotes?.[0]?.count || 0,
       nr_of_comments: postData.comments?.[0]?.count || 0,
     };
     setDetailedPost(transformedPost);
@@ -80,7 +82,8 @@ export default function DetailedPost() {
         `
         *,
         user:users!comments_user_id_fkey(*),
-        upvotes:comment_upvotes(count)
+        upvotes:comment_upvotes(count),
+        downvotes:comment_downvotes(count)
       `,
       )
       .eq("post_id", postId)
@@ -97,6 +100,7 @@ export default function DetailedPost() {
           content: comment.comment,
           created_at: comment.created_at,
           upvotes: comment.upvotes?.[0]?.count || 0,
+          downvotes: comment.downvotes?.[0]?.count || 0,
           user: comment.user,
           replies: [],
         })) || [];
@@ -145,6 +149,7 @@ export default function DetailedPost() {
       content,
       created_at: new Date().toISOString(),
       upvotes: 0,
+      downvotes: 0,
       user: {
         id: "user-current", // Mock current user
         name: "u/You",

@@ -2,13 +2,12 @@ import { Comment } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { formatDistanceToNowStrict } from "date-fns";
 import {
-    ArrowBigDown,
-    ArrowBigUp,
     CornerDownRight,
     MessageCircle,
 } from "lucide-react-native";
 import React from "react";
 import { Image, Pressable, Text, View } from "react-native";
+import VoteButtons from "@/components/VoteButtons";
 
 type CommentItemProps = {
   comment: Comment;
@@ -114,23 +113,14 @@ function CommentContent({ comment, isReply = false }: CommentDisplayProps) {
             backgroundColor: card,
           }}
         >
-          <Pressable style={{ marginRight: isReply ? 4 : 6 }}>
-            <ArrowBigUp size={isReply ? 12 : 14} color={text} />
-          </Pressable>
-          <Text
-            style={{
-              color: text,
-              fontWeight: "600",
-              marginHorizontal: isReply ? 4 : 4,
-              fontSize: 12,
-            }}
-            numberOfLines={1}
-          >
-            {comment.upvotes}
-          </Text>
-          <Pressable style={{ marginLeft: isReply ? 4 : 6 }}>
-            <ArrowBigDown size={isReply ? 12 : 14} color={text} />
-          </Pressable>
+          <VoteButtons
+            type="comment"
+            itemId={comment.id}
+            initialUpvotes={comment.upvotes}
+            initialDownvotes={comment.downvotes}
+            size={isReply ? 12 : 14}
+            compact={true}
+          />
         </View>
 
         {!isReply && (

@@ -119,6 +119,11 @@ export default function CommunityPage() {
           .select("*", { count: "exact", head: true })
           .eq("post_id", post.id);
 
+        const { count: downvotesCount } = await supabase
+          .from("post_downvotes")
+          .select("*", { count: "exact", head: true })
+          .eq("post_id", post.id);
+
         const { count: commentsCount } = await supabase
           .from("comments")
           .select("*", { count: "exact", head: true })
@@ -127,6 +132,7 @@ export default function CommunityPage() {
         return {
           ...post,
           upvotes: upvotesCount || 0,
+          downvotes: downvotesCount || 0,
           nr_of_comments: commentsCount || 0,
         };
       }),
