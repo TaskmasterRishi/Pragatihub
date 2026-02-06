@@ -4,6 +4,7 @@ import PostListItem from "@/components/PostListItem";
 import { Comment, Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
+import { useUser } from "@clerk/clerk-expo";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -11,9 +12,11 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function addDepthToComments(comments: any[]): any[] {
   // Add depth information to all top-level comments
@@ -31,10 +34,13 @@ export default function DetailedPost() {
   const textColor = useThemeColor({}, "text");
   const background = useThemeColor({}, "background");
   const border = useThemeColor({}, "border");
+  const { user } = useUser();
+  const insets = useSafeAreaInsets();
 
   const [detailedPost, setDetailedPost] = useState<Post | null>(null);
   const [allComments, setAllComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   useEffect(() => {
     if (!postId) return;
@@ -75,7 +81,7 @@ export default function DetailedPost() {
     };
     setDetailedPost(transformedPost);
 
-    // Fetch comments for this post
+    // Fetch all comments for this post (including replies)
     const { data: commentsData, error: commentsError } = await supabase
       .from("comments")
       .select(
@@ -87,16 +93,16 @@ export default function DetailedPost() {
       `,
       )
       .eq("post_id", postId)
-      .is("parent_id", null); // Only top-level comments for now
+      .order("created_at", { ascending: true });
 
     if (commentsError) {
       console.log("Comments fetch error:", commentsError);
     } else {
-      // Transform comments data
-      const transformedComments =
+      const mapped =
         commentsData?.map((comment) => ({
           id: comment.id,
           post_id: comment.post_id,
+          parent_id: comment.parent_id,
           content: comment.comment,
           created_at: comment.created_at,
           upvotes: comment.upvotes?.[0]?.count || 0,
@@ -104,7 +110,28 @@ export default function DetailedPost() {
           user: comment.user,
           replies: [],
         })) || [];
-      setAllComments(transformedComments);
+
+      const byId = new Map<string, Comment & { parent_id?: string | null }>();
+      mapped.forEach((comment) => {
+        byId.set(comment.id, comment);
+      });
+
+      const topLevel: Comment[] = [];
+      mapped.forEach((comment) => {
+        if (comment.parent_id) {
+          const parent = byId.get(comment.parent_id);
+          if (parent) {
+            parent.replies = parent.replies || [];
+            parent.replies.push(comment);
+          } else {
+            topLevel.push(comment);
+          }
+        } else {
+          topLevel.push(comment);
+        }
+      });
+
+      setAllComments(topLevel);
     }
 
     setLoading(false);
@@ -142,96 +169,137 @@ export default function DetailedPost() {
     );
   }
 
-  const handleAddComment = (content: string) => {
-    const newComment = {
-      id: `comment-${Date.now()}`,
-      post_id: postId as string,
-      content,
-      created_at: new Date().toISOString(),
-      upvotes: 0,
-      downvotes: 0,
-      user: {
-        id: "user-current", // Mock current user
-        name: "u/You",
-        image: null,
-      },
-      replies: [], // Initialize empty replies array
+  const generateCommentId = () =>
+    `comment_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+  const handleAddComment = async (content: string) => {
+    if (!postId || !user?.id || submittingComment) return;
+    setSubmittingComment(true);
+
+    const { data, error } = await supabase
+      .from("comments")
+      .insert({
+        id: generateCommentId(),
+        post_id: postId,
+        user_id: user.id,
+        comment: content,
+        parent_id: null,
+        created_at: new Date().toISOString(),
+      })
+      .select(
+        `
+        *,
+        user:users!comments_user_id_fkey(*),
+        upvotes:comment_upvotes(count),
+        downvotes:comment_downvotes(count)
+      `,
+      )
+      .single();
+
+    if (error || !data) {
+      console.log("Add comment error:", error);
+      setSubmittingComment(false);
+      return;
+    }
+
+    const newComment: Comment = {
+      id: data.id,
+      post_id: data.post_id,
+      content: data.comment,
+      created_at: data.created_at,
+      upvotes: data.upvotes?.[0]?.count || 0,
+      downvotes: data.downvotes?.[0]?.count || 0,
+      user: data.user,
+      replies: [],
     };
-    setAllComments((prev: any) => [...prev, newComment]);
+
+    setAllComments((prev) => [newComment, ...prev]);
+    setDetailedPost((prev) =>
+      prev
+        ? {
+            ...prev,
+            nr_of_comments: prev.nr_of_comments + 1,
+          }
+        : prev,
+    );
+    setSubmittingComment(false);
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: background, margin: 16 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "transparent" }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 16}
       >
-        <FlatList
-          data={topLevelComments}
-          keyExtractor={(item) => item.id}
-          ListHeaderComponent={
-            <View style={{ backgroundColor: background }}>
-              <View style={{ paddingTop: 8 }}>
-                <PostListItem post={detailedPost} isDetailedPost={true} />
+        <View style={{ flex: 1, margin: 16 }}>
+          <FlatList
+            data={topLevelComments}
+            keyExtractor={(item) => item.id}
+            ListHeaderComponent={
+              <View style={{ backgroundColor: background }}>
+                <View style={{ paddingTop: 8 }}>
+                  <PostListItem post={detailedPost} isDetailedPost={true} />
+                </View>
+                <View
+                  style={{
+                    height: 8,
+                    backgroundColor: background,
+                  }}
+                />
+                <View
+                  style={{
+                    height: 1,
+                    backgroundColor: border,
+                  }}
+                />
+                <View
+                  style={{
+                    height: 8,
+                    backgroundColor: background,
+                  }}
+                />
+                <Text
+                  style={{
+                    color: textColor,
+                    fontSize: 18,
+                    fontWeight: "bold",
+                    paddingHorizontal: 16,
+                    paddingBottom: 16,
+                  }}
+                >
+                  Comments ({allComments.length})
+                </Text>
               </View>
-              <View
-                style={{
-                  height: 8,
-                  backgroundColor: background,
-                }}
+            }
+            renderItem={({ item }) => (
+              <CommentItem
+                comment={item}
+                depth={item.depth}
+                isLastInThread={item.isLastInThread}
               />
-              <View
-                style={{
-                  height: 1,
-                  backgroundColor: border,
-                }}
-              />
-              <View
-                style={{
-                  height: 8,
-                  backgroundColor: background,
-                }}
-              />
-              <Text
-                style={{
-                  color: textColor,
-                  fontSize: 18,
-                  fontWeight: "bold",
-                  paddingHorizontal: 16,
-                  paddingBottom: 16,
-                }}
-              >
-                Comments ({allComments.length})
-              </Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <CommentItem
-              comment={item}
-              depth={item.depth}
-              isLastInThread={item.isLastInThread}
+            )}
+            contentContainerStyle={{
+              paddingBottom: insets.bottom + 120,
+              backgroundColor: background,
+            }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={{ backgroundColor: background }}
+          />
+          <View
+            style={{
+              paddingBottom: insets.bottom + 8,
+              backgroundColor: "transparent",
+            }}
+          >
+            <CommentInput
+              onSubmit={handleAddComment}
+              containerStyle={{ marginBottom: 0 }}
             />
-          )}
-          contentContainerStyle={{
-            paddingBottom: 140, // Extra padding for input
-            backgroundColor: background,
-          }}
-          showsVerticalScrollIndicator={false}
-          style={{ backgroundColor: background }}
-        />
-        <View
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            backgroundColor: background,
-          }}
-        >
-          <CommentInput onSubmit={handleAddComment} />
+          </View>
         </View>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }

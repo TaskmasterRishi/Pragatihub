@@ -25,9 +25,10 @@ import Settings from "@/components/Settings";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { updateUserImage } from "@/lib/actions/users";
 import { supabase } from "@/lib/Supabase";
-import { Post } from "@/constants/types";
+import { Comment, Post } from "@/constants/types";
 import PostListItem from "@/components/PostListItem";
 import { Pen } from "lucide-react-native";
+import CommentItem from "@/components/CommentItem";
 import { Group } from "@/lib/actions/groups";
 
 export default function ProfileScreen() {
@@ -37,6 +38,10 @@ export default function ProfileScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [userComments, setUserComments] = useState<
+    (Comment & { post?: { id: string; title: string } })[]
+  >([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
   const [userCommunities, setUserCommunities] = useState<Group[]>([]);
   const [communitiesLoading, setCommunitiesLoading] = useState(false);
   const [karmaCount, setKarmaCount] = useState(0);
@@ -114,6 +119,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!user?.id) return;
     fetchUserPosts(user.id);
+    fetchUserComments(user.id);
     fetchUserCommunities(user.id);
   }, [user?.id]);
 
@@ -202,11 +208,54 @@ export default function ProfileScreen() {
     setCommunitiesLoading(false);
   };
 
+  const fetchUserComments = async (userId: string) => {
+    setCommentsLoading(true);
+
+    const { data, error } = await supabase
+      .from("comments")
+      .select(
+        `
+        *,
+        user:users!comments_user_id_fkey(*),
+        post:posts(id, title),
+        upvotes:comment_upvotes(count),
+        downvotes:comment_downvotes(count)
+      `,
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error || !data) {
+      if (error) {
+        console.log("Profile comments fetch error:", error);
+      }
+      setUserComments([]);
+      setCommentsLoading(false);
+      return;
+    }
+
+    const comments = data.map((comment) => ({
+      id: comment.id,
+      post_id: comment.post_id,
+      content: comment.comment,
+      created_at: comment.created_at,
+      upvotes: comment.upvotes?.[0]?.count || 0,
+      downvotes: comment.downvotes?.[0]?.count || 0,
+      user: comment.user,
+      replies: [],
+      post: comment.post ? { id: comment.post.id, title: comment.post.title } : undefined,
+    }));
+
+    setUserComments(comments);
+    setCommentsLoading(false);
+  };
+
   const handleRefresh = async () => {
     if (!user?.id) return;
     setRefreshing(true);
     await Promise.all([
       fetchUserPosts(user.id),
+      fetchUserComments(user.id),
       fetchUserCommunities(user.id),
     ]);
     setRefreshing(false);
@@ -504,6 +553,7 @@ export default function ProfileScreen() {
           {/* Content area */}
           <View
             className="mt-4 flex-1"
+            style={{ overflow: "hidden" }}
             onLayout={(event) => {
               const { width } = event.nativeEvent.layout;
               setContentWidth(width);
@@ -567,25 +617,59 @@ export default function ProfileScreen() {
 
               {/* Comments Section */}
               <View style={{ width: contentWidth > 0 ? contentWidth : "100%" }}>
-                <View className="items-center justify-center py-8">
-                  <MessageSquare
-                    size={48}
-                    color={textSecondaryColor}
-                    className=" opacity-50"
-                  />
-                  <Text
-                    className="text-center font-medium"
-                    style={{ color: textColor }}
-                  >
-                    No comments yet
-                  </Text>
-                  <Text
-                    className="mt-1 text-center text-sm"
-                    style={{ color: textSecondaryColor }}
-                  >
-                    Your comments will appear here
-                  </Text>
-                </View>
+                {commentsLoading ? (
+                  <View className="items-center justify-center py-8">
+                    <ActivityIndicator size="small" color={textSecondaryColor} />
+                  </View>
+                ) : userComments.length > 0 ? (
+                  <View className="gap-3">
+                    {userComments.map((comment) => (
+                      <View key={comment.id}>
+                        {comment.post && (
+                          <TouchableOpacity
+                            onPress={() => router.push(`/post/${comment.post_id}`)}
+                            className="mb-2 rounded-xl px-3 py-2"
+                            style={{ backgroundColor: cardColor }}
+                          >
+                            <Text
+                              className="text-xs font-semibold"
+                              style={{ color: textSecondaryColor }}
+                            >
+                              Commented on
+                            </Text>
+                            <Text
+                              className="text-sm font-semibold"
+                              style={{ color: textColor }}
+                            >
+                              {comment.post.title}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        <CommentItem comment={comment} />
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View className="items-center justify-center py-8">
+                    <MessageSquare
+                      size={48}
+                      color={textSecondaryColor}
+                      className=" opacity-50"
+                    />
+                    <Text
+                      className="text-center font-medium"
+                      style={{ color: textColor }}
+                    >
+                      No comments yet
+                    </Text>
+                    <Text
+                      className="mt-1 text-center text-sm"
+                      style={{ color: textSecondaryColor }}
+                    >
+                      Your comments will appear here
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* Communities Section */}

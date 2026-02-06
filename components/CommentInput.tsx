@@ -1,16 +1,18 @@
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { Send } from "lucide-react-native";
 import React, { useState } from "react";
-import { Pressable, TextInput, View } from "react-native";
+import { Pressable, TextInput, View, type ViewStyle } from "react-native";
 
 type CommentInputProps = {
   onSubmit: (content: string) => void;
   placeholder?: string;
+  containerStyle?: ViewStyle;
 };
 
 export default function CommentInput({
   onSubmit,
   placeholder = "Add a comment...",
+  containerStyle,
 }: CommentInputProps) {
   const [content, setContent] = useState("");
   const text = useThemeColor({}, "text");
@@ -28,25 +30,28 @@ export default function CommentInput({
 
   return (
     <View
-      style={{
-        backgroundColor: card,
-        borderRadius: 20,
-        paddingHorizontal: 20,
-        paddingVertical: 5,
-        marginHorizontal: 16,
-        marginBottom: 48,
-        marginTop: 8,
-        borderWidth: 1,
-        borderColor: border,
-        flexDirection: "row",
-        alignItems: "flex-end",
-        // Add subtle shadow
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 4,
-      }}
+      style={[
+        {
+          backgroundColor: card,
+          borderRadius: 20,
+          paddingHorizontal: 20,
+          paddingVertical: 5,
+          marginHorizontal: 16,
+          marginBottom: 48,
+          marginTop: 8,
+          borderWidth: 1,
+          borderColor: border,
+          flexDirection: "row",
+          alignItems: "flex-end",
+          // Add subtle shadow
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 4,
+        },
+        containerStyle,
+      ]}
     >
       <TextInput
         value={content}
