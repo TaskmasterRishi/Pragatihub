@@ -23,6 +23,7 @@ export default function HomeScreen() {
       .select(
         `
         *,
+        post_media:post_media(*),
         group:groups(*),
         user:users!posts_user_id_fkey(*)
       `,

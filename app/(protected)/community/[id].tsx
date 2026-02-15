@@ -93,6 +93,7 @@ export default function CommunityPage() {
       .select(
         `
         *,
+        post_media:post_media(*),
         group:groups(*),
         user:users!posts_user_id_fkey(*)
       `,

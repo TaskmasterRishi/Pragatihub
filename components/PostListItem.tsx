@@ -1,11 +1,7 @@
 import { formatDistanceToNowStrict } from "date-fns";
 import { Link } from "expo-router";
-import {
-  Loader2,
-  MessageSquare,
-  Share2,
-  Trophy,
-} from "lucide-react-native";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { Loader2, MessageSquare, Share2, Trophy } from "lucide-react-native";
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -16,10 +12,10 @@ import {
   View,
 } from "react-native";
 
-import { Post } from "@/constants/types";
-import { useThemeColor } from "@/hooks/use-theme-color";
 import JoinCommunityButton from "@/components/JoinCommunityButton";
 import VoteButtons from "@/components/VoteButtons";
+import { Post } from "@/constants/types";
+import { useThemeColor } from "@/hooks/use-theme-color";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
@@ -163,6 +159,152 @@ const PostImage = memo(({ uri }: { uri: string }) => {
   );
 });
 
+const PostVideo = memo(
+  ({ uri, nativeControls = false }: { uri: string; nativeControls?: boolean }) => {
+  const player = useVideoPlayer({ uri }, (createdPlayer) => {
+    createdPlayer.loop = true;
+    createdPlayer.muted = true;
+    createdPlayer.play();
+  });
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+  const loadingOpacity = useRef(new Animated.Value(1)).current;
+  const loadingRotate = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(loadingRotate, {
+        toValue: 1,
+        duration: 900,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  useEffect(() => {
+    const setRatioFromTrack = (track?: any) => {
+      const width = track?.size?.width;
+      const height = track?.size?.height;
+      if (
+        typeof width === "number" &&
+        typeof height === "number" &&
+        height > 0
+      ) {
+        setAspectRatio(width / height);
+        Animated.timing(loadingOpacity, {
+          toValue: 0,
+          duration: 180,
+          useNativeDriver: true,
+        }).start();
+      }
+    };
+
+    const setRatioFromTracks = (tracks?: any[]) => {
+      const trackWithSize = tracks?.find(
+        (track) => track?.size?.width && track?.size?.height,
+      );
+      setRatioFromTrack(trackWithSize);
+    };
+
+    const playerAny = player as any;
+    setRatioFromTracks(playerAny?.availableVideoTracks);
+    setRatioFromTrack(playerAny?.videoTrack);
+
+    const sourceLoadSubscription = playerAny?.addListener?.(
+      "sourceLoad",
+      (payload: any) => {
+        setRatioFromTracks(payload?.availableVideoTracks);
+      },
+    );
+    const videoTrackSubscription = playerAny?.addListener?.(
+      "videoTrackChange",
+      (payload: any) => {
+        setRatioFromTrack(payload?.videoTrack);
+      },
+    );
+
+    return () => {
+      sourceLoadSubscription?.remove?.();
+      videoTrackSubscription?.remove?.();
+    };
+  }, [player]);
+
+  if (!aspectRatio) {
+    const spin = loadingRotate.interpolate({
+      inputRange: [0, 1],
+      outputRange: ["0deg", "360deg"],
+    });
+
+    return (
+      <View
+        style={{
+          width: "100%",
+          aspectRatio: 1,
+          maxHeight: SCREEN_WIDTH * 1.25,
+          borderRadius: 16,
+          backgroundColor: "#00000010",
+          overflow: "hidden",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Animated.View
+          style={{
+            opacity: loadingOpacity,
+            transform: [{ rotate: spin }],
+          }}
+        >
+          <Loader2 size={28} color="#999" />
+        </Animated.View>
+      </View>
+    );
+  }
+
+  return (
+    <View
+      style={{
+        width: "100%",
+        aspectRatio,
+        borderRadius: 16,
+        backgroundColor: "#000",
+        overflow: "hidden",
+      }}
+    >
+      <VideoView
+        style={{ flex: 1 }}
+        player={player}
+        nativeControls={nativeControls}
+        fullscreenOptions={{ enable: true }}
+        allowsPictureInPicture
+        contentFit="contain"
+      />
+    </View>
+  );
+},
+);
+
+const PostLinkPreview = memo(({ uri }: { uri: string }) => {
+  const muted = useThemeColor({}, "textMuted");
+  const border = useThemeColor({}, "border");
+
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: border,
+        borderRadius: 14,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+      }}
+    >
+      <Text style={{ color: muted, fontSize: 12 }} numberOfLines={1}>
+        {uri}
+      </Text>
+    </View>
+  );
+});
+
 /* ───────────────────────────────────────────── */
 /* Animated Icon Button */
 /* ───────────────────────────────────────────── */
@@ -211,6 +353,16 @@ function PostListItem({
   const card = useThemeColor({}, "card");
   const border = useThemeColor({}, "border");
   const shouldShowJoinButton = showJoinButton && !hideJoinButton;
+  const orderedMedia = [...(post.post_media ?? [])].sort(
+    (a, b) => a.media_order - b.media_order,
+  );
+  const firstMedia = orderedMedia[0];
+  const primaryMediaUrl =
+    firstMedia?.media_url ??
+    (post.post_type === "video" ? (post.link_url ?? null) : post.image);
+  const isVideoPost =
+    firstMedia?.media_type === "video" ||
+    (post.post_type === "video" && !!primaryMediaUrl);
 
   return (
     <FadeInView>
@@ -271,10 +423,28 @@ function PostListItem({
                 </Text>
               )}
 
-              {post.image && <PostImage uri={post.image} />}
+              {post.post_type === "link" && !!post.link_url && (
+                <PostLinkPreview uri={post.link_url} />
+              )}
+
+              {!!primaryMediaUrl && !isVideoPost && (
+                <PostImage uri={primaryMediaUrl} />
+              )}
             </View>
           </Pressable>
         </Link>
+
+        {!!primaryMediaUrl && isVideoPost && (
+          isDetailedPost ? (
+            <PostVideo uri={primaryMediaUrl} nativeControls />
+          ) : (
+            <Link href={`/post/${post.id}`} asChild>
+              <Pressable>
+                <PostVideo uri={primaryMediaUrl} />
+              </Pressable>
+            </Link>
+          )
+        )}
 
         {/* Divider */}
         <View

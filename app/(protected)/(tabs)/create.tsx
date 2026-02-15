@@ -35,21 +35,14 @@ type Group = {
 
 const POST_MEDIA_BUCKET =
   process.env.EXPO_PUBLIC_SUPABASE_POST_MEDIA_BUCKET ?? "post-media";
+const MAX_UPLOAD_BYTES = Number(
+  process.env.EXPO_PUBLIC_MAX_UPLOAD_BYTES ?? 50 * 1024 * 1024,
+);
 
 type PickedMedia = {
   uri: string;
   fileName?: string | null;
   mimeType?: string | null;
-};
-
-const base64ToArrayBuffer = (base64: string) => {
-  const binaryString = atob(base64);
-  const length = binaryString.length;
-  const bytes = new Uint8Array(length);
-  for (let i = 0; i < length; i += 1) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes.buffer;
 };
 
 export default function CreateScreen() {
@@ -145,6 +138,15 @@ export default function CreateScreen() {
     userId: string,
   ) => {
     try {
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseAnonKey) {
+        return {
+          publicUrl: null,
+          error: { message: "Supabase URL or anon key is missing." },
+        };
+      }
+
       const extensionFromMime = media.mimeType?.split("/")?.[1];
       const extensionFromName = media.fileName?.split(".").pop();
       const extensionFromUri = media.uri.split("?")[0].split(".").pop();
@@ -162,21 +164,67 @@ export default function CreateScreen() {
         await FileSystem.copyAsync({ from: media.uri, to: localUri });
       }
 
-      const base64 = await FileSystem.readAsStringAsync(localUri, {
-        encoding: "base64",
-      });
-      const arrayBuffer = base64ToArrayBuffer(base64);
+      const fileInfo = await FileSystem.getInfoAsync(localUri);
+      if (!fileInfo.exists) {
+        return {
+          publicUrl: null,
+          error: { message: "Selected file could not be read." },
+        };
+      }
+      const fileSize =
+        typeof (fileInfo as { size?: number }).size === "number"
+          ? (fileInfo as { size: number }).size
+          : null;
+      if (fileSize && fileSize > MAX_UPLOAD_BYTES) {
+        const maxMb = (MAX_UPLOAD_BYTES / (1024 * 1024)).toFixed(0);
+        const fileMb = (fileSize / (1024 * 1024)).toFixed(1);
+        return {
+          publicUrl: null,
+          error: {
+            message: `File is ${fileMb} MB. Max allowed is ${maxMb} MB.`,
+          },
+        };
+      }
 
-      const { error: uploadError } = await supabase.storage
-        .from(POST_MEDIA_BUCKET)
-        .upload(objectPath, arrayBuffer, {
-          contentType:
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const accessToken = session?.access_token ?? supabaseAnonKey;
+      const uploadUrl = `${supabaseUrl}/storage/v1/object/${POST_MEDIA_BUCKET}/${objectPath}`;
+
+      const uploadResult = await FileSystem.uploadAsync(uploadUrl, localUri, {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type":
             media.mimeType ?? (type === "photo" ? "image/jpeg" : "video/mp4"),
-          upsert: false,
-        });
+          "x-upsert": "false",
+        },
+      });
 
-      if (uploadError) {
-        return { publicUrl: null, error: uploadError };
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        const rawBody = uploadResult.body || "";
+        const isPayloadTooLarge =
+          uploadResult.status === 413 ||
+          rawBody.includes("Payload too large") ||
+          rawBody.includes("exceeded the maximum allowed size");
+        if (isPayloadTooLarge) {
+          const maxMb = (MAX_UPLOAD_BYTES / (1024 * 1024)).toFixed(0);
+          return {
+            publicUrl: null,
+            error: {
+              message: `Upload rejected: file exceeds server limit (${maxMb} MB).`,
+            },
+          };
+        }
+        return {
+          publicUrl: null,
+          error: {
+            message: `Upload failed (${uploadResult.status}): ${uploadResult.body || "unknown error"}`,
+          },
+        };
       }
 
       const { data: publicData } = supabase.storage

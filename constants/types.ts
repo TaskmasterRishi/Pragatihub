@@ -12,6 +12,16 @@ export type Post = {
   title: string;
   description: string | null;
   image: string | null;
+  link_url?: string | null;
+  post_type?: "text" | "link" | "photo" | "video" | "poll";
+  post_media?: {
+    id: string;
+    media_type: "text" | "link" | "photo" | "video" | "poll";
+    media_url: string;
+    media_order: number;
+    post_id?: string;
+    created_at?: string;
+  }[];
   created_at: string;
   upvotes: number;
   downvotes: number;
@@ -19,7 +29,7 @@ export type Post = {
   group: {
     id: string;
     name: string;
-    image: string;
+    image: string | null;
   };
   user: {
     id: string;
