@@ -1,4 +1,5 @@
 import CommunitySearch from "@/components/CommunitySearch";
+import CustomDialog, { CustomDialogAction } from "@/components/ui/custom-dialog";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { createPost, PostType } from "@/lib/actions/posts";
 import { supabase } from "@/lib/Supabase";
@@ -16,7 +17,6 @@ import {
 } from "lucide-react-native";
 import { useState } from "react";
 import {
-  Alert,
   Platform,
   Pressable,
   Switch,
@@ -67,6 +67,21 @@ export default function CreateScreen() {
   const [selectedCommunity, setSelectedCommunity] = useState<Group | null>(
     null,
   );
+  const [dialogVisible, setDialogVisible] = useState(false);
+  const [dialogTitle, setDialogTitle] = useState("");
+  const [dialogMessage, setDialogMessage] = useState("");
+  const [dialogActions, setDialogActions] = useState<CustomDialogAction[]>([]);
+
+  const showDialog = (
+    title: string,
+    message: string,
+    actions: CustomDialogAction[] = [{ label: "OK" }],
+  ) => {
+    setDialogTitle(title);
+    setDialogMessage(message);
+    setDialogActions(actions);
+    setDialogVisible(true);
+  };
 
   const hasPollMinOptions =
     pollOptions.map((opt) => opt.trim()).filter(Boolean).length >= 2;
@@ -248,7 +263,7 @@ export default function CreateScreen() {
     if (postType === "link") {
       const url = linkUrl.trim();
       if (!/^https?:\/\//i.test(url)) {
-        Alert.alert("Invalid URL", "Link must start with http:// or https://");
+        showDialog("Invalid URL", "Link must start with http:// or https://");
         return;
       }
     }
@@ -265,7 +280,7 @@ export default function CreateScreen() {
 
       if (uploadResult.error || !uploadResult.publicUrl) {
         console.log("Media upload error:", uploadResult.error);
-        Alert.alert(
+        showDialog(
           "Upload failed",
           uploadResult.error?.message ??
             `Could not upload ${postType}. Check storage bucket "${POST_MEDIA_BUCKET}" and try again.`,
@@ -299,7 +314,7 @@ export default function CreateScreen() {
 
     if (error) {
       console.log("Create post error:", error);
-      Alert.alert(
+      showDialog(
         "Could not create post",
         error.message ?? "An unexpected error occurred while creating the post.",
       );
@@ -310,8 +325,6 @@ export default function CreateScreen() {
     setIsSubmitting(false);
     if (Platform.OS === "android") {
       ToastAndroid.show("Post created", ToastAndroid.SHORT);
-    } else {
-      Alert.alert("Success", "Post created");
     }
 
     setTitle("");
@@ -619,6 +632,14 @@ export default function CreateScreen() {
           </View>
         </View>
       </KeyboardAwareScrollView>
+
+      <CustomDialog
+        visible={dialogVisible}
+        title={dialogTitle}
+        message={dialogMessage}
+        actions={dialogActions}
+        onClose={() => setDialogVisible(false)}
+      />
     </View>
   );
 }
