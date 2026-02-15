@@ -1,7 +1,14 @@
 import { formatDistanceToNowStrict } from "date-fns";
+import { useUser } from "@clerk/clerk-expo";
 import { Link } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { Loader2, MessageSquare, Share2, Trophy } from "lucide-react-native";
+import {
+  Check,
+  Loader2,
+  MessageSquare,
+  Share2,
+  Trophy,
+} from "lucide-react-native";
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -16,6 +23,7 @@ import JoinCommunityButton from "@/components/JoinCommunityButton";
 import VoteButtons from "@/components/VoteButtons";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { supabase } from "@/lib/Supabase";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
@@ -305,6 +313,320 @@ const PostLinkPreview = memo(({ uri }: { uri: string }) => {
   );
 });
 
+type PollOption = {
+  id: string;
+  option_text: string;
+  option_order: number;
+  votes: number;
+};
+
+type PollState = {
+  id: string;
+  allowsMultiple: boolean;
+  endsAt: string;
+  options: PollOption[];
+  myVotes: Set<string>;
+  totalVotes: number;
+};
+
+const PostPoll = memo(({ postId }: { postId: string }) => {
+  const { user } = useUser();
+  const text = useThemeColor({}, "text");
+  const muted = useThemeColor({}, "textMuted");
+  const border = useThemeColor({}, "border");
+  const primary = useThemeColor({}, "primary");
+  const card = useThemeColor({}, "card");
+
+  const [poll, setPoll] = useState<PollState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submittingOptionId, setSubmittingOptionId] = useState<string | null>(
+    null,
+  );
+
+  const loadPoll = useCallback(async () => {
+    setLoading(true);
+    const { data: pollData, error: pollError } = await supabase
+      .from("post_polls")
+      .select("id, allows_multiple, ends_at")
+      .eq("post_id", postId)
+      .maybeSingle();
+
+    if (pollError || !pollData) {
+      if (pollError) {
+        console.log("Poll fetch error:", pollError);
+      }
+      setPoll(null);
+      setLoading(false);
+      return;
+    }
+
+    const [{ data: optionsData, error: optionsError }, { data: votesData, error: votesError }] =
+      await Promise.all([
+        supabase
+          .from("post_poll_options")
+          .select("id, option_text, option_order")
+          .eq("poll_id", pollData.id)
+          .order("option_order", { ascending: true }),
+        supabase.from("post_poll_votes").select("option_id, user_id").eq("poll_id", pollData.id),
+      ]);
+
+    if (optionsError || votesError || !optionsData) {
+      console.log("Poll options/votes fetch error:", optionsError || votesError);
+      setPoll(null);
+      setLoading(false);
+      return;
+    }
+
+    const voteCounts = new Map<string, number>();
+    const myVotes = new Set<string>();
+
+    (votesData ?? []).forEach((vote) => {
+      voteCounts.set(vote.option_id, (voteCounts.get(vote.option_id) ?? 0) + 1);
+      if (vote.user_id === user?.id) {
+        myVotes.add(vote.option_id);
+      }
+    });
+
+    const options: PollOption[] = optionsData.map((option) => ({
+      ...option,
+      votes: voteCounts.get(option.id) ?? 0,
+    }));
+
+    setPoll({
+      id: pollData.id,
+      allowsMultiple: pollData.allows_multiple,
+      endsAt: pollData.ends_at,
+      options,
+      myVotes,
+      totalVotes: options.reduce((sum, option) => sum + option.votes, 0),
+    });
+    setLoading(false);
+  }, [postId, user?.id]);
+
+  useEffect(() => {
+    loadPoll();
+  }, [loadPoll]);
+
+  const updatePollVoteState = (optionId: string) => {
+    setPoll((prev) => {
+      if (!prev) return prev;
+
+      const options = prev.options.map((option) => ({ ...option }));
+      const myVotes = new Set(prev.myVotes);
+      const isAlreadyVoted = myVotes.has(optionId);
+
+      if (prev.allowsMultiple) {
+        const targetOption = options.find((option) => option.id === optionId);
+        if (!targetOption) return prev;
+
+        if (isAlreadyVoted) {
+          myVotes.delete(optionId);
+          targetOption.votes = Math.max(0, targetOption.votes - 1);
+        } else {
+          myVotes.add(optionId);
+          targetOption.votes += 1;
+        }
+      } else {
+        if (isAlreadyVoted) {
+          options.forEach((option) => {
+            if (option.id === optionId) {
+              option.votes = Math.max(0, option.votes - 1);
+            }
+          });
+          myVotes.clear();
+        } else {
+          myVotes.forEach((selectedOptionId) => {
+            options.forEach((option) => {
+              if (option.id === selectedOptionId) {
+                option.votes = Math.max(0, option.votes - 1);
+              }
+            });
+          });
+          myVotes.clear();
+          myVotes.add(optionId);
+          options.forEach((option) => {
+            if (option.id === optionId) {
+              option.votes += 1;
+            }
+          });
+        }
+      }
+
+      return {
+        ...prev,
+        options,
+        myVotes,
+        totalVotes: options.reduce((sum, option) => sum + option.votes, 0),
+      };
+    });
+  };
+
+  const handleVote = async (optionId: string) => {
+    if (!user?.id || !poll || submittingOptionId) return;
+    if (new Date(poll.endsAt).getTime() <= Date.now()) return;
+
+    const isAlreadyVoted = poll.myVotes.has(optionId);
+    setSubmittingOptionId(optionId);
+
+    if (poll.allowsMultiple) {
+      if (isAlreadyVoted) {
+        const { error } = await supabase
+          .from("post_poll_votes")
+          .delete()
+          .eq("poll_id", poll.id)
+          .eq("option_id", optionId)
+          .eq("user_id", user.id);
+        if (error) {
+          console.log("Poll vote remove error:", error);
+          setSubmittingOptionId(null);
+          return;
+        }
+      } else {
+        const { error } = await supabase.from("post_poll_votes").insert({
+          poll_id: poll.id,
+          option_id: optionId,
+          user_id: user.id,
+        });
+        if (error) {
+          console.log("Poll vote add error:", error);
+          setSubmittingOptionId(null);
+          return;
+        }
+      }
+    } else if (isAlreadyVoted) {
+      const { error } = await supabase
+        .from("post_poll_votes")
+        .delete()
+        .eq("poll_id", poll.id)
+        .eq("user_id", user.id);
+      if (error) {
+        console.log("Poll vote remove error:", error);
+        setSubmittingOptionId(null);
+        return;
+      }
+    } else {
+      const { error: removeError } = await supabase
+        .from("post_poll_votes")
+        .delete()
+        .eq("poll_id", poll.id)
+        .eq("user_id", user.id);
+
+      if (removeError) {
+        console.log("Poll vote reset error:", removeError);
+        setSubmittingOptionId(null);
+        return;
+      }
+
+      const { error: addError } = await supabase.from("post_poll_votes").insert({
+        poll_id: poll.id,
+        option_id: optionId,
+        user_id: user.id,
+      });
+
+      if (addError) {
+        console.log("Poll vote add error:", addError);
+        setSubmittingOptionId(null);
+        return;
+      }
+    }
+
+    updatePollVoteState(optionId);
+    setSubmittingOptionId(null);
+  };
+
+  if (loading) {
+    return (
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: border,
+          borderRadius: 16,
+          paddingVertical: 18,
+          alignItems: "center",
+        }}
+      >
+        <Loader2 size={20} color={muted} />
+      </View>
+    );
+  }
+
+  if (!poll || poll.options.length === 0) {
+    return null;
+  }
+
+  const isExpired = new Date(poll.endsAt).getTime() <= Date.now();
+  const pollMeta = isExpired
+    ? `Ended ${formatDistanceToNowStrict(new Date(poll.endsAt))} ago`
+    : `Ends in ${formatDistanceToNowStrict(new Date(poll.endsAt))}`;
+
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: border,
+        borderRadius: 16,
+        padding: 10,
+        gap: 8,
+      }}
+    >
+      {poll.options.map((option) => {
+        const isSelected = poll.myVotes.has(option.id);
+        const percentage =
+          poll.totalVotes > 0 ? Math.round((option.votes / poll.totalVotes) * 100) : 0;
+
+        return (
+          <Pressable
+            key={option.id}
+            disabled={isExpired || !!submittingOptionId}
+            onPress={() => handleVote(option.id)}
+            style={{
+              borderWidth: 1,
+              borderColor: isSelected ? primary : border,
+              borderRadius: 12,
+              overflow: "hidden",
+              backgroundColor: card,
+              opacity: submittingOptionId && submittingOptionId !== option.id ? 0.6 : 1,
+            }}
+          >
+            <View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                bottom: 0,
+                width: `${percentage}%`,
+                backgroundColor: `${primary}22`,
+              }}
+            />
+            <View
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                flexDirection: "row",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: text, fontWeight: "500", flex: 1 }}>
+                {option.option_text}
+              </Text>
+
+              {isSelected && <Check size={16} color={primary} />}
+              <Text style={{ color: muted, marginLeft: 8, fontSize: 12 }}>
+                {option.votes} ({percentage}%)
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+
+      <Text style={{ color: muted, fontSize: 12 }}>
+        {poll.totalVotes} vote{poll.totalVotes === 1 ? "" : "s"} •{" "}
+        {poll.allowsMultiple ? "Multiple choices" : "Single choice"} • {pollMeta}
+      </Text>
+    </View>
+  );
+});
+
 /* ───────────────────────────────────────────── */
 /* Animated Icon Button */
 /* ───────────────────────────────────────────── */
@@ -363,6 +685,7 @@ function PostListItem({
   const isVideoPost =
     firstMedia?.media_type === "video" ||
     (post.post_type === "video" && !!primaryMediaUrl);
+  const isPollPost = post.post_type === "poll";
 
   return (
     <FadeInView>
@@ -433,6 +756,8 @@ function PostListItem({
             </View>
           </Pressable>
         </Link>
+
+        {isPollPost && <PostPoll postId={post.id} />}
 
         {!!primaryMediaUrl && isVideoPost && (
           isDetailedPost ? (
