@@ -1,5 +1,6 @@
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { fetchGroups } from "@/lib/actions/groups";
+import { supabase } from "@/lib/Supabase";
+import { useUser } from "@clerk/clerk-expo";
 import { Search, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -26,6 +27,7 @@ export default function CommunitySearch({
   selectedCommunity,
   onCommunitySelect,
 }: CommunitySearchProps) {
+  const { user } = useUser();
   const textColor = useThemeColor({}, "text");
   const primaryColor = useThemeColor({}, "primary");
   const mutedColor = useThemeColor({}, "textMuted");
@@ -45,7 +47,16 @@ export default function CommunitySearch({
       setIsLoading(true);
       setLoadError(null);
 
-      const { data, error } = await fetchGroups();
+      if (!user?.id) {
+        setCommunities([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("user_groups")
+        .select("group:groups(id, name, image)")
+        .eq("user_id", user.id);
 
       if (!isMounted) return;
 
@@ -53,7 +64,11 @@ export default function CommunitySearch({
         setCommunities([]);
         setLoadError(error.message ?? "Failed to load communities");
       } else {
-        setCommunities(data ?? []);
+        const groups = (data ?? [])
+          .map((item: { group?: Group | null }) => item.group)
+          .filter(Boolean) as Group[];
+        groups.sort((a, b) => a.name.localeCompare(b.name));
+        setCommunities(groups);
       }
 
       setIsLoading(false);
@@ -64,7 +79,7 @@ export default function CommunitySearch({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [user?.id]);
 
   const filteredCommunities = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

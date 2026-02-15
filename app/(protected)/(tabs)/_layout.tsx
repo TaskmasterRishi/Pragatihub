@@ -88,7 +88,6 @@ export default function TabLayout() {
         name="create"
         options={{
           title: "Create",
-          tabBarStyle :{ display: 'none' },
           tabBarIcon: ({ focused }) => (
             <Plus
               size={30}

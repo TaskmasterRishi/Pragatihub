@@ -183,6 +183,148 @@ export type Database = {
           },
         ]
       }
+      post_media: {
+        Row: {
+          created_at: string
+          id: string
+          media_order: number
+          media_type: Database["public"]["Enums"]["post_type"]
+          media_url: string
+          post_id: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          media_order?: number
+          media_type: Database["public"]["Enums"]["post_type"]
+          media_url: string
+          post_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          media_order?: number
+          media_type?: Database["public"]["Enums"]["post_type"]
+          media_url?: string
+          post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_media_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_poll_options: {
+        Row: {
+          created_at: string
+          id: string
+          option_order: number
+          option_text: string
+          poll_id: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          option_order: number
+          option_text: string
+          poll_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          option_order?: number
+          option_text?: string
+          poll_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_poll_options_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "post_polls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_poll_votes: {
+        Row: {
+          created_at: string
+          option_id: string
+          poll_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          option_id: string
+          poll_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          option_id?: string
+          poll_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_poll_votes_option_id_fkey"
+            columns: ["option_id"]
+            isOneToOne: false
+            referencedRelation: "post_poll_options"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_poll_votes_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "post_polls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_poll_votes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_polls: {
+        Row: {
+          allows_multiple: boolean
+          created_at: string
+          ends_at: string
+          id: string
+          post_id: string
+        }
+        Insert: {
+          allows_multiple?: boolean
+          created_at?: string
+          ends_at: string
+          id: string
+          post_id: string
+        }
+        Update: {
+          allows_multiple?: boolean
+          created_at?: string
+          ends_at?: string
+          id?: string
+          post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_polls_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: true
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_upvotes: {
         Row: {
           created_at: string | null
@@ -223,6 +365,10 @@ export type Database = {
           group_id: string
           id: string
           image: string | null
+          link_url: string | null
+          nsfw: boolean
+          post_type: Database["public"]["Enums"]["post_type"]
+          spoiler: boolean
           title: string
           user_id: string
         }
@@ -232,6 +378,10 @@ export type Database = {
           group_id: string
           id: string
           image?: string | null
+          link_url?: string | null
+          nsfw?: boolean
+          post_type?: Database["public"]["Enums"]["post_type"]
+          spoiler?: boolean
           title: string
           user_id?: string
         }
@@ -241,6 +391,10 @@ export type Database = {
           group_id?: string
           id?: string
           image?: string | null
+          link_url?: string | null
+          nsfw?: boolean
+          post_type?: Database["public"]["Enums"]["post_type"]
+          spoiler?: boolean
           title?: string
           user_id?: string
         }
@@ -327,7 +481,7 @@ export type Database = {
       requesting_user_id_uuid: { Args: never; Returns: string }
     }
     Enums: {
-      [_ in never]: never
+      post_type: "text" | "link" | "photo" | "video" | "poll"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -454,6 +608,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      post_type: ["text", "link", "photo", "video", "poll"],
+    },
   },
 } as const

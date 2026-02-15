@@ -1,4 +1,5 @@
 import { useUser } from "@clerk/clerk-expo";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import {
@@ -55,12 +56,15 @@ export default function ProfileScreen() {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.5,
-        base64: true,
       });
 
-      if (!result.canceled && result.assets[0].base64) {
+      const firstAsset = result.assets?.[0];
+      if (!result.canceled && firstAsset?.uri) {
         setUpdatingImage(true);
-        const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        const imageBase64 = await FileSystem.readAsStringAsync(firstAsset.uri, {
+          encoding: "base64",
+        });
+        const base64 = `data:image/jpeg;base64,${imageBase64}`;
 
         await user?.setProfileImage({ file: base64 });
         await user?.reload();

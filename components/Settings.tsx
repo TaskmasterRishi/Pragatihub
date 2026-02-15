@@ -311,8 +311,9 @@ export default function Settings({ onClose }: SettingsProps) {
                   quality: 0.7,
                 });
 
-                if (!result.canceled) {
-                  setCommunityImage(result.assets[0].uri ?? null);
+                const firstAsset = result.assets?.[0];
+                if (!result.canceled && firstAsset?.uri) {
+                  setCommunityImage(firstAsset.uri);
                 }
               }}
               className="items-center rounded-xl py-3"
