@@ -1,9 +1,10 @@
-import { formatDistanceToNowStrict } from "date-fns";
 import { useUser } from "@clerk/clerk-expo";
+import { formatDistanceToNowStrict } from "date-fns";
 import { Link } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
   Check,
+  EllipsisVertical,
   Loader2,
   MessageSquare,
   Share2,
@@ -14,8 +15,12 @@ import {
   Animated,
   Dimensions,
   Image,
+  Modal,
   Pressable,
+  Share,
+  StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 
@@ -24,6 +29,7 @@ import VoteButtons from "@/components/VoteButtons";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
@@ -168,128 +174,134 @@ const PostImage = memo(({ uri }: { uri: string }) => {
 });
 
 const PostVideo = memo(
-  ({ uri, nativeControls = false }: { uri: string; nativeControls?: boolean }) => {
-  const player = useVideoPlayer({ uri }, (createdPlayer) => {
-    createdPlayer.loop = true;
-    createdPlayer.muted = true;
-    createdPlayer.play();
-  });
-  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
-  const loadingOpacity = useRef(new Animated.Value(1)).current;
-  const loadingRotate = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(loadingRotate, {
-        toValue: 1,
-        duration: 900,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, []);
-
-  useEffect(() => {
-    const setRatioFromTrack = (track?: any) => {
-      const width = track?.size?.width;
-      const height = track?.size?.height;
-      if (
-        typeof width === "number" &&
-        typeof height === "number" &&
-        height > 0
-      ) {
-        setAspectRatio(width / height);
-        Animated.timing(loadingOpacity, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }).start();
-      }
-    };
-
-    const setRatioFromTracks = (tracks?: any[]) => {
-      const trackWithSize = tracks?.find(
-        (track) => track?.size?.width && track?.size?.height,
-      );
-      setRatioFromTrack(trackWithSize);
-    };
-
-    const playerAny = player as any;
-    setRatioFromTracks(playerAny?.availableVideoTracks);
-    setRatioFromTrack(playerAny?.videoTrack);
-
-    const sourceLoadSubscription = playerAny?.addListener?.(
-      "sourceLoad",
-      (payload: any) => {
-        setRatioFromTracks(payload?.availableVideoTracks);
-      },
-    );
-    const videoTrackSubscription = playerAny?.addListener?.(
-      "videoTrackChange",
-      (payload: any) => {
-        setRatioFromTrack(payload?.videoTrack);
-      },
-    );
-
-    return () => {
-      sourceLoadSubscription?.remove?.();
-      videoTrackSubscription?.remove?.();
-    };
-  }, [player]);
-
-  if (!aspectRatio) {
-    const spin = loadingRotate.interpolate({
-      inputRange: [0, 1],
-      outputRange: ["0deg", "360deg"],
+  ({
+    uri,
+    nativeControls = false,
+  }: {
+    uri: string;
+    nativeControls?: boolean;
+  }) => {
+    const player = useVideoPlayer({ uri }, (createdPlayer) => {
+      createdPlayer.loop = true;
+      createdPlayer.muted = true;
+      createdPlayer.play();
     });
+    const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+    const loadingOpacity = useRef(new Animated.Value(1)).current;
+    const loadingRotate = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+      const loop = Animated.loop(
+        Animated.timing(loadingRotate, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      );
+      loop.start();
+      return () => loop.stop();
+    }, []);
+
+    useEffect(() => {
+      const setRatioFromTrack = (track?: any) => {
+        const width = track?.size?.width;
+        const height = track?.size?.height;
+        if (
+          typeof width === "number" &&
+          typeof height === "number" &&
+          height > 0
+        ) {
+          setAspectRatio(width / height);
+          Animated.timing(loadingOpacity, {
+            toValue: 0,
+            duration: 180,
+            useNativeDriver: true,
+          }).start();
+        }
+      };
+
+      const setRatioFromTracks = (tracks?: any[]) => {
+        const trackWithSize = tracks?.find(
+          (track) => track?.size?.width && track?.size?.height,
+        );
+        setRatioFromTrack(trackWithSize);
+      };
+
+      const playerAny = player as any;
+      setRatioFromTracks(playerAny?.availableVideoTracks);
+      setRatioFromTrack(playerAny?.videoTrack);
+
+      const sourceLoadSubscription = playerAny?.addListener?.(
+        "sourceLoad",
+        (payload: any) => {
+          setRatioFromTracks(payload?.availableVideoTracks);
+        },
+      );
+      const videoTrackSubscription = playerAny?.addListener?.(
+        "videoTrackChange",
+        (payload: any) => {
+          setRatioFromTrack(payload?.videoTrack);
+        },
+      );
+
+      return () => {
+        sourceLoadSubscription?.remove?.();
+        videoTrackSubscription?.remove?.();
+      };
+    }, [player]);
+
+    if (!aspectRatio) {
+      const spin = loadingRotate.interpolate({
+        inputRange: [0, 1],
+        outputRange: ["0deg", "360deg"],
+      });
+
+      return (
+        <View
+          style={{
+            width: "100%",
+            aspectRatio: 1,
+            maxHeight: SCREEN_WIDTH * 1.25,
+            borderRadius: 16,
+            backgroundColor: "#00000010",
+            overflow: "hidden",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Animated.View
+            style={{
+              opacity: loadingOpacity,
+              transform: [{ rotate: spin }],
+            }}
+          >
+            <Loader2 size={28} color="#999" />
+          </Animated.View>
+        </View>
+      );
+    }
 
     return (
       <View
         style={{
           width: "100%",
-          aspectRatio: 1,
-          maxHeight: SCREEN_WIDTH * 1.25,
+          aspectRatio,
           borderRadius: 16,
-          backgroundColor: "#00000010",
+          backgroundColor: "#000",
           overflow: "hidden",
-          justifyContent: "center",
-          alignItems: "center",
         }}
       >
-        <Animated.View
-          style={{
-            opacity: loadingOpacity,
-            transform: [{ rotate: spin }],
-          }}
-        >
-          <Loader2 size={28} color="#999" />
-        </Animated.View>
+        <VideoView
+          style={{ flex: 1 }}
+          player={player}
+          nativeControls={nativeControls}
+          fullscreenOptions={{ enable: true }}
+          allowsPictureInPicture
+          contentFit="contain"
+        />
       </View>
     );
-  }
-
-  return (
-    <View
-      style={{
-        width: "100%",
-        aspectRatio,
-        borderRadius: 16,
-        backgroundColor: "#000",
-        overflow: "hidden",
-      }}
-    >
-      <VideoView
-        style={{ flex: 1 }}
-        player={player}
-        nativeControls={nativeControls}
-        fullscreenOptions={{ enable: true }}
-        allowsPictureInPicture
-        contentFit="contain"
-      />
-    </View>
-  );
-},
+  },
 );
 
 const PostLinkPreview = memo(({ uri }: { uri: string }) => {
@@ -360,18 +372,26 @@ const PostPoll = memo(({ postId }: { postId: string }) => {
       return;
     }
 
-    const [{ data: optionsData, error: optionsError }, { data: votesData, error: votesError }] =
-      await Promise.all([
-        supabase
-          .from("post_poll_options")
-          .select("id, option_text, option_order")
-          .eq("poll_id", pollData.id)
-          .order("option_order", { ascending: true }),
-        supabase.from("post_poll_votes").select("option_id, user_id").eq("poll_id", pollData.id),
-      ]);
+    const [
+      { data: optionsData, error: optionsError },
+      { data: votesData, error: votesError },
+    ] = await Promise.all([
+      supabase
+        .from("post_poll_options")
+        .select("id, option_text, option_order")
+        .eq("poll_id", pollData.id)
+        .order("option_order", { ascending: true }),
+      supabase
+        .from("post_poll_votes")
+        .select("option_id, user_id")
+        .eq("poll_id", pollData.id),
+    ]);
 
     if (optionsError || votesError || !optionsData) {
-      console.log("Poll options/votes fetch error:", optionsError || votesError);
+      console.log(
+        "Poll options/votes fetch error:",
+        optionsError || votesError,
+      );
       setPoll(null);
       setLoading(false);
       return;
@@ -517,11 +537,13 @@ const PostPoll = memo(({ postId }: { postId: string }) => {
         return;
       }
 
-      const { error: addError } = await supabase.from("post_poll_votes").insert({
-        poll_id: poll.id,
-        option_id: optionId,
-        user_id: user.id,
-      });
+      const { error: addError } = await supabase
+        .from("post_poll_votes")
+        .insert({
+          poll_id: poll.id,
+          option_id: optionId,
+          user_id: user.id,
+        });
 
       if (addError) {
         console.log("Poll vote add error:", addError);
@@ -572,7 +594,9 @@ const PostPoll = memo(({ postId }: { postId: string }) => {
       {poll.options.map((option) => {
         const isSelected = poll.myVotes.has(option.id);
         const percentage =
-          poll.totalVotes > 0 ? Math.round((option.votes / poll.totalVotes) * 100) : 0;
+          poll.totalVotes > 0
+            ? Math.round((option.votes / poll.totalVotes) * 100)
+            : 0;
 
         return (
           <Pressable
@@ -585,7 +609,10 @@ const PostPoll = memo(({ postId }: { postId: string }) => {
               borderRadius: 12,
               overflow: "hidden",
               backgroundColor: card,
-              opacity: submittingOptionId && submittingOptionId !== option.id ? 0.6 : 1,
+              opacity:
+                submittingOptionId && submittingOptionId !== option.id
+                  ? 0.6
+                  : 1,
             }}
           >
             <View
@@ -621,7 +648,8 @@ const PostPoll = memo(({ postId }: { postId: string }) => {
 
       <Text style={{ color: muted, fontSize: 12 }}>
         {poll.totalVotes} vote{poll.totalVotes === 1 ? "" : "s"} •{" "}
-        {poll.allowsMultiple ? "Multiple choices" : "Single choice"} • {pollMeta}
+        {poll.allowsMultiple ? "Multiple choices" : "Single choice"} •{" "}
+        {pollMeta}
       </Text>
     </View>
   );
@@ -663,17 +691,26 @@ function PostListItem({
   isDetailedPost = false,
   showJoinButton = true,
   hideJoinButton = false,
+  showOwnerActions = false,
+  onEditPost,
+  onDeletePost,
+  onSharePost,
 }: {
   post: Post;
   isDetailedPost?: boolean;
   showJoinButton?: boolean;
   hideJoinButton?: boolean;
+  showOwnerActions?: boolean;
+  onEditPost?: (post: Post) => void;
+  onDeletePost?: (post: Post) => void;
+  onSharePost?: (post: Post) => void;
 }) {
   const text = useThemeColor({}, "text");
   const muted = useThemeColor({}, "textMuted");
-  const primary = useThemeColor({}, "primary");
   const card = useThemeColor({}, "card");
   const border = useThemeColor({}, "border");
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 0);
   const shouldShowJoinButton = showJoinButton && !hideJoinButton;
   const orderedMedia = [...(post.post_media ?? [])].sort(
     (a, b) => a.media_order - b.media_order,
@@ -686,158 +723,330 @@ function PostListItem({
     firstMedia?.media_type === "video" ||
     (post.post_type === "video" && !!primaryMediaUrl);
   const isPollPost = post.post_type === "poll";
+  const [ownerSheetVisible, setOwnerSheetVisible] = useState(false);
+  const updatedAt = post.updated_at ?? post.edited_at ?? null;
+  const isEdited =
+    post.is_edited === true ||
+    (typeof updatedAt === "string" &&
+      new Date(updatedAt).getTime() - new Date(post.created_at).getTime() >
+        1000);
+
+  const handleShare = async () => {
+    if (onSharePost) {
+      onSharePost(post);
+      return;
+    }
+
+    try {
+      await Share.share({
+        message: `${post.title}\n\nhttps://pragatihub.app/post/${post.id}`,
+      });
+    } catch (error) {
+      console.log("Share post error:", error);
+    }
+  };
+
+  const openOwnerMenu = () => {
+    setOwnerSheetVisible(true);
+  };
 
   return (
     <FadeInView>
-      <View
-        style={{
-          backgroundColor: card,
-          borderRadius: 20,
-          padding: 16,
-          borderWidth: 1,
-          marginBottom: 20,
-          borderColor: border,
-        }}
-      >
-        {/* Header */}
-        <View className="flex-row items-center mb-4">
-          <Image
-            source={{
-              uri: post.user.image || "https://via.placeholder.com/150",
-            }}
-            className="w-10 h-10 rounded-full"
-          />
-
-          <View className="ml-3 flex-1">
-            <View className="flex-row items-center gap-1">
-              <Text style={{ color: text }} className="font-semibold text-sm">
-                {post.group.name}
-              </Text>
-              <Text style={{ color: muted }} className="text-xs">
-                •
-              </Text>
-              <Text style={{ color: muted }} className="text-xs">
-                {formatDistanceToNowStrict(new Date(post.created_at))} ago
-              </Text>
-            </View>
-            <Text style={{ color: muted }} className="text-xs">
-              Posted by {post.user.name}
-            </Text>
-          </View>
-
-          {shouldShowJoinButton && (
-            <JoinCommunityButton communityId={post.group.id} />
-          )}
-        </View>
-
-        <Link href={`/post/${post.id}`} asChild>
-          <Pressable>
-            <View className="gap-3">
-              <Text style={{ color: text }} className="text-lg font-bold">
-                {post.title}
-              </Text>
-
-              {post.description && (
-                <Text
-                  style={{ color: muted }}
-                  numberOfLines={isDetailedPost ? undefined : 2}
-                >
-                  {post.description}
-                </Text>
-              )}
-
-              {post.post_type === "link" && !!post.link_url && (
-                <PostLinkPreview uri={post.link_url} />
-              )}
-
-              {!!primaryMediaUrl && !isVideoPost && (
-                <PostImage uri={primaryMediaUrl} />
-              )}
-            </View>
-          </Pressable>
-        </Link>
-
-        {isPollPost && <PostPoll postId={post.id} />}
-
-        {!!primaryMediaUrl && isVideoPost && (
-          isDetailedPost ? (
-            <PostVideo uri={primaryMediaUrl} nativeControls />
-          ) : (
-            <Link href={`/post/${post.id}`} asChild>
-              <Pressable>
-                <PostVideo uri={primaryMediaUrl} />
-              </Pressable>
-            </Link>
-          )
-        )}
-
-        {/* Divider */}
+      <>
         <View
           style={{
-            height: 1,
-            backgroundColor: border,
-            marginVertical: 14,
+            backgroundColor: card,
+            borderRadius: 20,
+            padding: 16,
+            borderWidth: 1,
+            marginBottom: 20,
+            borderColor: border,
           }}
-        />
-
-        {/* Footer */}
-        <View className="flex-row items-center">
-          {/* Votes */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: border,
-              borderRadius: 999,
-              paddingHorizontal: 6,
-              paddingVertical: 4,
-            }}
-          >
-            <VoteButtons
-              type="post"
-              itemId={post.id}
-              initialUpvotes={post.upvotes}
-              initialDownvotes={post.downvotes}
+        >
+          {/* Header */}
+          <View className="flex-row items-center mb-4">
+            <Image
+              source={{
+                uri: post.user.image || "https://via.placeholder.com/150",
+              }}
+              className="w-10 h-10 rounded-full"
             />
+
+            <View className="ml-3 flex-1">
+              <View className="flex-row items-center gap-1">
+                <Text style={{ color: text }} className="font-semibold text-sm">
+                  {post.group.name}
+                </Text>
+                <Text style={{ color: muted }} className="text-xs">
+                  •
+                </Text>
+                <Text style={{ color: muted }} className="text-xs">
+                  {formatDistanceToNowStrict(new Date(post.created_at))} ago
+                </Text>
+              </View>
+              <Text style={{ color: muted }} className="text-xs">
+                Posted by {post.user.name}
+              </Text>
+            </View>
+
+            {showOwnerActions ? (
+              <Pressable
+                onPress={openOwnerMenu}
+                hitSlop={8}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <EllipsisVertical size={18} color={muted} />
+              </Pressable>
+            ) : (
+              shouldShowJoinButton && (
+                <JoinCommunityButton communityId={post.group.id} />
+              )
+            )}
           </View>
 
-          {/* Comments */}
-          <View className="flex-row items-center ml-4 gap-1">
-            <MessageSquare size={20} color={muted} />
-            <Text style={{ color: muted }}>{post.nr_of_comments}</Text>
-          </View>
+          {isEdited && (
+            <Text
+              style={{
+                color: muted,
+                fontSize: 12,
+                fontWeight: "600",
+                marginTop: -8,
+                marginBottom: 12,
+              }}
+            >
+              Edited
+            </Text>
+          )}
 
-          {/* Actions */}
+          <Link href={`/post/${post.id}`} asChild>
+            <Pressable>
+              <View className="gap-3">
+                <Text style={{ color: text }} className="text-lg font-bold">
+                  {post.title}
+                </Text>
+
+                {post.description && (
+                  <Text
+                    style={{ color: muted }}
+                    numberOfLines={isDetailedPost ? undefined : 2}
+                  >
+                    {post.description}
+                  </Text>
+                )}
+
+                {post.post_type === "link" && !!post.link_url && (
+                  <PostLinkPreview uri={post.link_url} />
+                )}
+
+                {!!primaryMediaUrl && !isVideoPost && (
+                  <PostImage uri={primaryMediaUrl} />
+                )}
+              </View>
+            </Pressable>
+          </Link>
+
+          {isPollPost && <PostPoll postId={post.id} />}
+
+          {!!primaryMediaUrl &&
+            isVideoPost &&
+            (isDetailedPost ? (
+              <PostVideo uri={primaryMediaUrl} nativeControls />
+            ) : (
+              <Link href={`/post/${post.id}`} asChild>
+                <Pressable>
+                  <PostVideo uri={primaryMediaUrl} />
+                </Pressable>
+              </Link>
+            ))}
+
+          {/* Divider */}
           <View
-            className="ml-auto flex-row items-center"
             style={{
-              borderWidth: 1,
-              borderColor: border,
-              borderRadius: 999,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
+              height: 1,
+              backgroundColor: border,
+              marginVertical: 14,
             }}
-          >
-            <AnimatedIconButton>
-              <Trophy size={20} color={muted} />
-            </AnimatedIconButton>
+          />
 
+          {/* Footer */}
+          <View className="flex-row items-center">
+            {/* Votes */}
             <View
               style={{
-                width: 1,
-                height: 18,
-                backgroundColor: border,
-                marginHorizontal: 10,
+                flexDirection: "row",
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: border,
+                borderRadius: 999,
+                paddingHorizontal: 6,
+                paddingVertical: 4,
               }}
-            />
+            >
+              <VoteButtons
+                type="post"
+                itemId={post.id}
+                initialUpvotes={post.upvotes}
+                initialDownvotes={post.downvotes}
+              />
+            </View>
 
-            <AnimatedIconButton>
-              <Share2 size={20} color={muted} />
-            </AnimatedIconButton>
+            {/* Comments */}
+            <View className="flex-row items-center ml-4 gap-1">
+              <MessageSquare size={20} color={muted} />
+              <Text style={{ color: muted }}>{post.nr_of_comments}</Text>
+            </View>
+
+            {/* Actions */}
+            <View
+              className="ml-auto flex-row items-center"
+              style={{
+                borderWidth: 1,
+                borderColor: border,
+                borderRadius: 999,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+              }}
+            >
+              <AnimatedIconButton>
+                <Trophy size={20} color={muted} />
+              </AnimatedIconButton>
+
+              <View
+                style={{
+                  width: 1,
+                  height: 18,
+                  backgroundColor: border,
+                  marginHorizontal: 10,
+                }}
+              />
+
+              <AnimatedIconButton>
+                <Share2 size={20} color={muted} />
+              </AnimatedIconButton>
+            </View>
           </View>
         </View>
-      </View>
+
+        <Modal
+          transparent
+          visible={ownerSheetVisible}
+          animationType="fade"
+          statusBarTranslucent
+          navigationBarTranslucent
+          onRequestClose={() => setOwnerSheetVisible(false)}
+        >
+          <View
+            style={{
+              flex: 1,
+            }}
+          >
+            <Pressable
+              style={{
+                ...StyleSheet.absoluteFillObject,
+                backgroundColor: "rgba(0,0,0,0.35)",
+              }}
+              onPress={() => setOwnerSheetVisible(false)}
+            />
+            <Pressable
+              onPress={(event) => event.stopPropagation()}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: card,
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingHorizontal: 16,
+                paddingTop: 14,
+                paddingBottom: bottomInset + 32,
+                marginBottom: -bottomInset,
+                borderTopWidth: 1,
+                borderColor: border,
+                gap: 8,
+              }}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 4,
+                  borderRadius: 999,
+                  backgroundColor: border,
+                  alignSelf: "center",
+                  marginBottom: 8,
+                }}
+              />
+
+              <TouchableOpacity
+                onPress={() => {
+                  setOwnerSheetVisible(false);
+                  onEditPost?.(post);
+                }}
+                style={{
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                }}
+              >
+                <Text style={{ color: text, fontSize: 16, fontWeight: "600" }}>
+                  Edit
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setOwnerSheetVisible(false);
+                  void handleShare();
+                }}
+                style={{
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                }}
+              >
+                <Text style={{ color: text, fontSize: 16, fontWeight: "600" }}>
+                  Share
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setOwnerSheetVisible(false);
+                  onDeletePost?.(post);
+                }}
+                style={{
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                }}
+              >
+                <Text
+                  style={{ color: "#ef4444", fontSize: 16, fontWeight: "600" }}
+                >
+                  Delete
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setOwnerSheetVisible(false)}
+                style={{
+                  marginTop: 4,
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                  backgroundColor: `${muted}20`,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ color: text, fontSize: 15, fontWeight: "600" }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </Pressable>
+          </View>
+        </Modal>
+      </>
     </FadeInView>
   );
 }

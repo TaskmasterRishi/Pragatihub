@@ -6,18 +6,23 @@ import {
   ChevronLeft,
   FileText,
   MessageSquare,
+  Pen,
   Users,
   Settings as SettingsIcon,
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   ActivityIndicator,
   Animated,
   Image,
   Modal,
   RefreshControl,
+  Share,
   ScrollView,
   Text,
+  TextInput,
+  ToastAndroid,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -28,9 +33,10 @@ import { updateUserImage } from "@/lib/actions/users";
 import { supabase } from "@/lib/Supabase";
 import { Comment, Post } from "@/constants/types";
 import PostListItem from "@/components/PostListItem";
-import { Pen } from "lucide-react-native";
 import CommentItem from "@/components/CommentItem";
 import { Group } from "@/lib/actions/groups";
+import CustomDialog, { CustomDialogAction } from "@/components/ui/custom-dialog";
+import { deletePost } from "@/lib/actions/posts";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -48,6 +54,14 @@ export default function ProfileScreen() {
   const [karmaCount, setKarmaCount] = useState(0);
   const [postCount, setPostCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [dialogVisible, setDialogVisible] = useState(false);
+  const [dialogTitle, setDialogTitle] = useState("");
+  const [dialogMessage, setDialogMessage] = useState("");
+  const [dialogActions, setDialogActions] = useState<CustomDialogAction[]>([]);
 
   const onSelectImage = async () => {
     try {
@@ -106,7 +120,6 @@ export default function ProfileScreen() {
   const postsTabScale = useRef(new Animated.Value(1)).current;
   const commentsTabScale = useRef(new Animated.Value(1)).current;
   const communitiesTabScale = useRef(new Animated.Value(1)).current;
-  const [contentWidth, setContentWidth] = useState(0);
 
   // Animate when tab changes
   useEffect(() => {
@@ -118,7 +131,7 @@ export default function ProfileScreen() {
       tension: 65,
       friction: 10,
     }).start();
-  }, [activeTab]);
+  }, [activeTab, tabIndex]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -176,6 +189,10 @@ export default function ProfileScreen() {
           upvotes: upvotesCount || 0,
           downvotes: downvotesCount || 0,
           nr_of_comments: commentsCount || 0,
+          is_edited:
+            typeof post.updated_at === "string" &&
+            new Date(post.updated_at).getTime() >
+              new Date(post.created_at).getTime(),
         };
       }),
     );
@@ -289,6 +306,103 @@ export default function ProfileScreen() {
     ]).start();
     
     setActiveTab(tab);
+  };
+
+  const handleOpenEditPost = (post: Post) => {
+    setEditingPost(post);
+    setEditTitle(post.title);
+    setEditDescription(post.description ?? "");
+  };
+
+  const handleSaveEditedPost = async () => {
+    if (!editingPost || !user?.id || savingEdit) return;
+    const title = editTitle.trim();
+    const description = editDescription.trim();
+    if (!title) {
+      Alert.alert("Title required", "Please enter a title for your post.");
+      return;
+    }
+
+    setSavingEdit(true);
+    const { error } = await supabase
+      .from("posts")
+      .update({
+        title,
+        description: description.length > 0 ? description : null,
+      })
+      .eq("id", editingPost.id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setSavingEdit(false);
+      Alert.alert("Could not update post", error.message ?? "Try again.");
+      return;
+    }
+
+    const editedAt = new Date().toISOString();
+    setUserPosts((prev) =>
+      prev.map((post) =>
+        post.id === editingPost.id
+          ? {
+              ...post,
+              title,
+              description: description.length > 0 ? description : null,
+              updated_at: editedAt,
+              is_edited: true,
+            }
+          : post,
+      ),
+    );
+    setEditingPost(null);
+    setEditTitle("");
+    setEditDescription("");
+    setSavingEdit(false);
+  };
+
+  const handleDeletePost = (post: Post) => {
+    setDialogTitle("Delete post?");
+    setDialogMessage("This action cannot be undone.");
+    setDialogActions([
+      { label: "Cancel", variant: "cancel" },
+      {
+        label: "Delete",
+        variant: "destructive",
+        onPress: async () => {
+          if (!user?.id) return;
+          const { error, storageWarning } = await deletePost(post.id, user.id);
+
+          if (error) {
+            Alert.alert("Could not delete post", error.message ?? "Try again.");
+            return;
+          }
+
+          setUserPosts((prev) => prev.filter((item) => item.id !== post.id));
+          setPostCount((prev) => Math.max(0, prev - 1));
+          setKarmaCount((prev) => Math.max(0, prev - (post.upvotes ?? 0)));
+
+          if (storageWarning) {
+            Alert.alert(
+              "Post deleted with warning",
+              `Media cleanup issue: ${storageWarning}`,
+            );
+          }
+        },
+      },
+    ]);
+    setDialogVisible(true);
+  };
+
+  const handleSharePost = async (post: Post) => {
+    try {
+      await Share.share({
+        message: `${post.title}\n\nhttps://pragatihub.app/post/${post.id}`,
+      });
+    } catch (error) {
+      console.log("Profile share post error:", error);
+      if (ToastAndroid?.show) {
+        ToastAndroid.show("Could not share post", ToastAndroid.SHORT);
+      }
+    }
   };
 
   // Counts
@@ -421,7 +535,12 @@ export default function ProfileScreen() {
           {/* Tabs - Posts | Comments | Communities */}
           <View
             className="mt-2 flex-row rounded-2xl px-1 py-1 relative"
-            style={{ backgroundColor: cardColor }}
+            style={{
+              backgroundColor: cardColor,
+              zIndex: 2,
+              elevation: 2,
+              minHeight: 52,
+            }}
             onLayout={(event) => {
               const { width } = event.nativeEvent.layout;
               setTabContainerWidth(width);
@@ -444,8 +563,8 @@ export default function ProfileScreen() {
                         inputRange: [0, 1, 2],
                         outputRange: [
                           0,
-                          tabContainerWidth / 3,
-                          (tabContainerWidth / 3) * 2,
+                          (tabContainerWidth - 8) / 3,
+                          ((tabContainerWidth - 8) / 3) * 2,
                         ],
                       }),
                     },
@@ -556,33 +675,9 @@ export default function ProfileScreen() {
           </View>
 
           {/* Content area */}
-          <View
-            className="mt-4 flex-1"
-            style={{ overflow: "hidden" }}
-            onLayout={(event) => {
-              const { width } = event.nativeEvent.layout;
-              setContentWidth(width);
-            }}
-          >
-            <Animated.View
-              style={{
-                flexDirection: "row",
-                width: contentWidth > 0 ? contentWidth * 3 : "300%",
-                transform: [
-                  {
-                    translateX: tabIndex.interpolate({
-                      inputRange: [0, 1, 2],
-                      outputRange:
-                        contentWidth > 0
-                          ? [0, -contentWidth, -contentWidth * 2]
-                          : [0, -300, -600],
-                    }),
-                  },
-                ],
-              }}
-            >
-              {/* Posts Section */}
-              <View style={{ width: contentWidth > 0 ? contentWidth : "100%" }}>
+          <View className="mt-4">
+            {activeTab === "posts" && (
+              <View>
                 {postsLoading ? (
                   <View className="items-center justify-center py-8">
                     <ActivityIndicator size="small" color={textSecondaryColor} />
@@ -594,6 +689,10 @@ export default function ProfileScreen() {
                         key={post.id}
                         post={post}
                         hideJoinButton={true}
+                        showOwnerActions={true}
+                        onEditPost={handleOpenEditPost}
+                        onDeletePost={handleDeletePost}
+                        onSharePost={handleSharePost}
                       />
                     ))}
                   </View>
@@ -619,9 +718,10 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </View>
+            )}
 
-              {/* Comments Section */}
-              <View style={{ width: contentWidth > 0 ? contentWidth : "100%" }}>
+            {activeTab === "comments" && (
+              <View>
                 {commentsLoading ? (
                   <View className="items-center justify-center py-8">
                     <ActivityIndicator size="small" color={textSecondaryColor} />
@@ -676,9 +776,10 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </View>
+            )}
 
-              {/* Communities Section */}
-              <View style={{ width: contentWidth > 0 ? contentWidth : "100%" }}>
+            {activeTab === "communities" && (
+              <View>
                 {communitiesLoading ? (
                   <View className="items-center justify-center py-8">
                     <ActivityIndicator size="small" color={textSecondaryColor} />
@@ -735,7 +836,7 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </View>
-            </Animated.View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -747,6 +848,88 @@ export default function ProfileScreen() {
       >
         <Settings onClose={() => setShowSettings(false)} />
       </Modal>
+
+      <Modal
+        visible={!!editingPost}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setEditingPost(null)}
+      >
+        <View
+          className="flex-1 items-center justify-center px-5"
+          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+        >
+          <View
+            className="w-full rounded-2xl p-4"
+            style={{ backgroundColor: cardColor }}
+          >
+            <Text
+              className="mb-3 text-lg font-semibold"
+              style={{ color: textColor }}
+            >
+              Edit post
+            </Text>
+
+            <TextInput
+              value={editTitle}
+              onChangeText={setEditTitle}
+              placeholder="Post title"
+              placeholderTextColor={textSecondaryColor}
+              className="mb-3 rounded-xl px-3 py-2"
+              style={{
+                color: textColor,
+                borderWidth: 1,
+                borderColor: `${textSecondaryColor}55`,
+              }}
+            />
+
+            <TextInput
+              value={editDescription}
+              onChangeText={setEditDescription}
+              placeholder="Post description"
+              placeholderTextColor={textSecondaryColor}
+              multiline
+              textAlignVertical="top"
+              className="mb-4 rounded-xl px-3 py-2"
+              style={{
+                color: textColor,
+                minHeight: 110,
+                borderWidth: 1,
+                borderColor: `${textSecondaryColor}55`,
+              }}
+            />
+
+            <View className="flex-row justify-end gap-2">
+              <TouchableOpacity
+                onPress={() => setEditingPost(null)}
+                className="rounded-xl px-4 py-2"
+                style={{ backgroundColor: `${textSecondaryColor}25` }}
+                disabled={savingEdit}
+              >
+                <Text style={{ color: textColor }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveEditedPost}
+                className="rounded-xl px-4 py-2"
+                style={{ backgroundColor: primaryColor }}
+                disabled={savingEdit}
+              >
+                <Text style={{ color: primaryForeground }}>
+                  {savingEdit ? "Saving..." : "Save"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <CustomDialog
+        visible={dialogVisible}
+        title={dialogTitle}
+        message={dialogMessage}
+        actions={dialogActions}
+        onClose={() => setDialogVisible(false)}
+      />
     </View>
   );
 }

@@ -23,6 +23,9 @@ export type Post = {
     created_at?: string;
   }[];
   created_at: string;
+  updated_at?: string | null;
+  edited_at?: string | null;
+  is_edited?: boolean;
   upvotes: number;
   downvotes: number;
   nr_of_comments: number;
