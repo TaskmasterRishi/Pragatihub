@@ -60,6 +60,8 @@ export const Colors = {
     background: neutralLight[50],
     backgroundSecondary: neutralLight[100],
     card: '#e0e5ed',
+    tabBarBackground: neutralLight[100],
+    tabBarBorder: neutralLight[300],
     cardForeground: neutralLight[900],
     
     // Text colors
@@ -100,6 +102,8 @@ export const Colors = {
     background: neutralDark[50],
     backgroundSecondary: neutralDark[100],
     card: neutralDark[100],
+    tabBarBackground: neutralDark[200],
+    tabBarBorder: neutralDark[300],
     cardForeground: neutralDark[900],
     
     // Text colors
@@ -115,8 +119,8 @@ export const Colors = {
     // Interactive elements
     tint: primaryDark,
     icon: neutralDark[600],
-    tabIconDefault: neutralLight[400],
-    tabIconSelected: primaryLight,
+    tabIconDefault: neutralLight[300],
+    tabIconSelected: infoDark,
     
     // Semantic colors
     success: successDark,
