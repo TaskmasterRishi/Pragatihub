@@ -1,17 +1,21 @@
+import HomeTopBar from "@/components/HomeTopBar";
 import PostListItem from "@/components/PostListItem";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FlatList, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PAGE_SIZE = 5;
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     fetchPosts();
@@ -78,11 +82,32 @@ export default function HomeScreen() {
   };
 
   const [page, setPage] = useState(1);
-  const [visiblePosts, setVisiblePosts] = useState(posts.slice(0, PAGE_SIZE));
+  const [visiblePosts, setVisiblePosts] = useState<Post[]>([]);
+
+  const filteredPosts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return posts;
+    return posts.filter((post) => {
+      const title = post.title?.toLowerCase() ?? "";
+      const description = post.description?.toLowerCase() ?? "";
+      const community = post.group?.name?.toLowerCase() ?? "";
+      const author = post.user?.name?.toLowerCase() ?? "";
+      return (
+        title.includes(q) ||
+        description.includes(q) ||
+        community.includes(q) ||
+        author.includes(q)
+      );
+    });
+  }, [posts, searchQuery]);
 
   useEffect(() => {
-    setVisiblePosts(posts.slice(0, page * PAGE_SIZE));
-  }, [page, posts]);
+    setVisiblePosts(filteredPosts.slice(0, page * PAGE_SIZE));
+  }, [page, filteredPosts]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
 
   return (
     <View style={{ flex: 1, backgroundColor }}>
@@ -90,9 +115,14 @@ export default function HomeScreen() {
         data={visiblePosts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <PostListItem post={item} />}
+        ListHeaderComponent={
+          <HomeTopBar
+            searchQuery={searchQuery}
+            onChangeSearchQuery={setSearchQuery}
+          />
+        }
         contentContainerStyle={{
-          paddingBottom: 120, // space for floating tab bar
-          padding: 20,
+          paddingHorizontal: 20,
         }}
         refreshing={refreshing}
         onRefresh={async () => {
@@ -102,7 +132,7 @@ export default function HomeScreen() {
           setRefreshing(false);
         }}
         onEndReached={() => {
-          if (page * PAGE_SIZE < posts.length) {
+          if (page * PAGE_SIZE < filteredPosts.length) {
             setPage((p) => p + 1);
           }
         }}
