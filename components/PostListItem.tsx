@@ -709,6 +709,8 @@ function PostListItem({
   const muted = useThemeColor({}, "textMuted");
   const card = useThemeColor({}, "card");
   const border = useThemeColor({}, "border");
+  const cardBorder = useThemeColor({ light: "#cbd5e1" }, "border");
+  const background = useThemeColor({}, "background");
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 0);
   const shouldShowJoinButton = showJoinButton && !hideJoinButton;
@@ -756,35 +758,55 @@ function PostListItem({
         <View
           style={{
             backgroundColor: card,
-            borderRadius: 20,
-            padding: 16,
+            borderRadius: 18,
+            padding: 14,
             borderWidth: 1,
-            marginBottom: 20,
-            borderColor: border,
+            marginBottom: 14,
+            borderColor: cardBorder,
+            shadowColor: "#0b1220",
+            shadowOpacity: 0.06,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 3,
           }}
         >
           {/* Header */}
-          <View className="flex-row items-center mb-4">
+          <View className="flex-row items-center mb-3">
             <Image
               source={{
                 uri: post.user.image || "https://via.placeholder.com/150",
               }}
-              className="w-10 h-10 rounded-full"
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: `${border}99`,
+              }}
             />
 
             <View className="ml-3 flex-1">
               <View className="flex-row items-center gap-1">
-                <Text style={{ color: text }} className="font-semibold text-sm">
+                <Text
+                  style={{ color: text, fontWeight: "700", fontSize: 13 }}
+                  numberOfLines={1}
+                >
                   {post.group.name}
                 </Text>
                 <Text style={{ color: muted }} className="text-xs">
                   •
                 </Text>
-                <Text style={{ color: muted }} className="text-xs">
+                <Text
+                  style={{ color: muted, fontSize: 11, fontWeight: "500" }}
+                  numberOfLines={1}
+                >
                   {formatDistanceToNowStrict(new Date(post.created_at))} ago
                 </Text>
               </View>
-              <Text style={{ color: muted }} className="text-xs">
+              <Text
+                style={{ color: muted, fontSize: 12, marginTop: 2 }}
+                numberOfLines={1}
+              >
                 Posted by {post.user.name}
               </Text>
             </View>
@@ -827,13 +849,20 @@ function PostListItem({
           <Link href={`/post/${post.id}`} asChild>
             <Pressable>
               <View className="gap-3">
-                <Text style={{ color: text }} className="text-lg font-bold">
+                <Text
+                  style={{
+                    color: text,
+                    fontSize: 19,
+                    lineHeight: 25,
+                    fontWeight: "800",
+                  }}
+                >
                   {post.title}
                 </Text>
 
                 {post.description && (
                   <Text
-                    style={{ color: muted }}
+                    style={{ color: muted, fontSize: 14, lineHeight: 20 }}
                     numberOfLines={isDetailedPost ? undefined : 2}
                   >
                     {post.description}
@@ -870,7 +899,8 @@ function PostListItem({
             style={{
               height: 1,
               backgroundColor: border,
-              marginVertical: 14,
+              marginTop: 12,
+              marginBottom: 10,
             }}
           />
 
@@ -884,6 +914,7 @@ function PostListItem({
                 borderWidth: 1,
                 borderColor: border,
                 borderRadius: 999,
+                backgroundColor: background,
                 paddingHorizontal: 6,
                 paddingVertical: 4,
               }}
@@ -897,9 +928,22 @@ function PostListItem({
             </View>
 
             {/* Comments */}
-            <View className="flex-row items-center ml-4 gap-1">
-              <MessageSquare size={20} color={muted} />
-              <Text style={{ color: muted }}>{post.nr_of_comments}</Text>
+            <View
+              className="flex-row items-center ml-3"
+              style={{
+                borderWidth: 1,
+                borderColor: border,
+                borderRadius: 999,
+                backgroundColor: background,
+                paddingHorizontal: 9,
+                paddingVertical: 6,
+                gap: 5,
+              }}
+            >
+              <MessageSquare size={16} color={muted} />
+              <Text style={{ color: muted, fontWeight: "600", fontSize: 12 }}>
+                {post.nr_of_comments}
+              </Text>
             </View>
 
             {/* Actions */}
@@ -909,12 +953,13 @@ function PostListItem({
                 borderWidth: 1,
                 borderColor: border,
                 borderRadius: 999,
-                paddingHorizontal: 10,
-                paddingVertical: 6,
+                backgroundColor: background,
+                paddingHorizontal: 9,
+                paddingVertical: 5,
               }}
             >
               <AnimatedIconButton>
-                <Trophy size={20} color={muted} />
+                <Trophy size={17} color={muted} />
               </AnimatedIconButton>
 
               <View
@@ -927,7 +972,7 @@ function PostListItem({
               />
 
               <AnimatedIconButton>
-                <Share2 size={20} color={muted} />
+                <Share2 size={17} color={muted} />
               </AnimatedIconButton>
             </View>
           </View>

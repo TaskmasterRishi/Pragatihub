@@ -14,7 +14,11 @@ export default function JoinCommunityButton({
 }: JoinCommunityButtonProps) {
   const primary = useThemeColor({}, "primary");
   const muted = useThemeColor({}, "textMuted");
-  const border = useThemeColor({}, "border");
+  const joinedBorder = useThemeColor({ light: "#94a3b8" }, "border");
+  const joinedBackground = useThemeColor(
+    { light: "#f8fafc", dark: "transparent" },
+    "background",
+  );
   const { user, isLoaded } = useUser();
   const [isJoining, setIsJoining] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
@@ -61,9 +65,9 @@ export default function JoinCommunityButton({
       }}
       disabled={!isLoaded || isJoined || isJoining}
       style={{
-        backgroundColor: isJoined ? "transparent" : primary,
-        borderColor: isJoined ? border : "transparent",
-        borderWidth: isJoined ? 1 : 0,
+        backgroundColor: isJoined ? joinedBackground : primary,
+        borderColor: isJoined ? joinedBorder : "transparent",
+        borderWidth: isJoined ? 1.25 : 0,
         paddingHorizontal: 14,
         paddingVertical: 6,
         borderRadius: 999,

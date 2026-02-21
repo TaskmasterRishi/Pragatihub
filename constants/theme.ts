@@ -61,7 +61,7 @@ export const Colors = {
     backgroundSecondary: neutralLight[100],
     card: '#e0e5ed',
     tabBarBackground: neutralLight[100],
-    tabBarBorder: neutralLight[300],
+    tabBarBorder: neutralLight[400],
     cardForeground: neutralLight[900],
     
     // Text colors
