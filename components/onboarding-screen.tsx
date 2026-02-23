@@ -1,3 +1,4 @@
+import AppLoader from "@/components/AppLoader";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -9,14 +10,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Dimensions, Image, Text, TouchableOpacity, View } from "react-native";
 import Animated, {
   Extrapolate,
   FadeIn,
@@ -398,7 +392,7 @@ export default function OnboardingScreen() {
   if (!isLoaded) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#fff" />
+        <AppLoader size="large" color="#fff" />
       </View>
     );
   }

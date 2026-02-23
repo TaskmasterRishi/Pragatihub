@@ -109,28 +109,36 @@ export default function HomeScreen() {
     setPage(1);
   }, [searchQuery]);
 
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setPage(1);
+    try {
+      await fetchPosts();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor }}>
+      {/* Floating top bar */}
+      <HomeTopBar
+        searchQuery={searchQuery}
+        onChangeSearchQuery={setSearchQuery}
+      />
+
       <FlatList
         data={visiblePosts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <PostListItem post={item} />}
-        ListHeaderComponent={
-          <HomeTopBar
-            searchQuery={searchQuery}
-            onChangeSearchQuery={setSearchQuery}
-          />
-        }
         contentContainerStyle={{
           paddingHorizontal: 20,
+          paddingTop: insets.top + 80,
         }}
         refreshing={refreshing}
-        onRefresh={async () => {
-          setRefreshing(true);
-          setPage(1);
-          await fetchPosts();
-          setRefreshing(false);
-        }}
+        onRefresh={handleRefresh}
+        progressViewOffset={insets.top + 80}
         onEndReached={() => {
           if (page * PAGE_SIZE < filteredPosts.length) {
             setPage((p) => p + 1);

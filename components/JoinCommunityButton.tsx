@@ -1,7 +1,8 @@
 import { useUser } from "@clerk/clerk-expo";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text } from "react-native";
+import { Pressable, Text } from "react-native";
 
+import AppLoader from "@/components/AppLoader";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { isUserInGroup, joinUserGroup } from "@/lib/actions/user-groups";
 
@@ -75,7 +76,7 @@ export default function JoinCommunityButton({
       }}
     >
       {isJoining ? (
-        <ActivityIndicator size="small" color="white" />
+        <AppLoader size="small" color="white" centered={false} />
       ) : (
         <Text
           style={{ color: isJoined ? muted : "white" }}

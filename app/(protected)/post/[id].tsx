@@ -1,3 +1,4 @@
+import AppLoader from "@/components/AppLoader";
 import CommentInput from "@/components/CommentInput";
 import CommentItem from "@/components/CommentItem";
 import PostListItem from "@/components/PostListItem";
@@ -8,7 +9,6 @@ import { useUser } from "@clerk/clerk-expo";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -146,11 +146,9 @@ export default function DetailedPost() {
         style={{
           flex: 1,
           backgroundColor: background,
-          justifyContent: "center",
-          alignItems: "center",
         }}
       >
-        <ActivityIndicator size="large" color={textColor} />
+        <AppLoader size="large" color={textColor} fullScreen />
       </View>
     );
   }

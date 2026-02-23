@@ -13,7 +13,6 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
-  ActivityIndicator,
   Animated,
   Image,
   Modal,
@@ -27,6 +26,7 @@ import {
   View,
 } from "react-native";
 
+import AppLoader from "@/components/AppLoader";
 import Settings from "@/components/Settings";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { updateUserImage } from "@/lib/actions/users";
@@ -135,9 +135,11 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (!user?.id) return;
-    fetchUserPosts(user.id);
-    fetchUserComments(user.id);
-    fetchUserCommunities(user.id);
+    void Promise.all([
+      fetchUserPosts(user.id),
+      fetchUserComments(user.id),
+      fetchUserCommunities(user.id),
+    ]);
   }, [user?.id]);
 
   const fetchUserPosts = async (userId: string) => {
@@ -273,14 +275,17 @@ export default function ProfileScreen() {
   };
 
   const handleRefresh = async () => {
-    if (!user?.id) return;
+    if (!user?.id || refreshing) return;
     setRefreshing(true);
-    await Promise.all([
-      fetchUserPosts(user.id),
-      fetchUserComments(user.id),
-      fetchUserCommunities(user.id),
-    ]);
-    setRefreshing(false);
+    try {
+      await Promise.all([
+        fetchUserPosts(user.id),
+        fetchUserComments(user.id),
+        fetchUserCommunities(user.id),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleTabPress = (tab: ProfileTab) => {
@@ -509,9 +514,18 @@ export default function ProfileScreen() {
                 }}
               />
               {updatingImage && (
-                <View className="absolute inset-0 items-center justify-center rounded-full">
-                  <ActivityIndicator size="small" color="#ffffff" />
-                </View>
+                <AppLoader
+                  size="small"
+                  color="#ffffff"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    left: 0,
+                    borderRadius: 9999,
+                  }}
+                />
               )}
               <TouchableOpacity
                 onPress={onSelectImage}
@@ -679,9 +693,11 @@ export default function ProfileScreen() {
             {activeTab === "posts" && (
               <View>
                 {postsLoading ? (
-                  <View className="items-center justify-center py-8">
-                    <ActivityIndicator size="small" color={textSecondaryColor} />
-                  </View>
+                  <AppLoader
+                    size="small"
+                    color={textSecondaryColor}
+                    style={{ paddingVertical: 32 }}
+                  />
                 ) : userPosts.length > 0 ? (
                   <View className="gap-3">
                     {userPosts.map((post) => (
@@ -723,9 +739,11 @@ export default function ProfileScreen() {
             {activeTab === "comments" && (
               <View>
                 {commentsLoading ? (
-                  <View className="items-center justify-center py-8">
-                    <ActivityIndicator size="small" color={textSecondaryColor} />
-                  </View>
+                  <AppLoader
+                    size="small"
+                    color={textSecondaryColor}
+                    style={{ paddingVertical: 32 }}
+                  />
                 ) : userComments.length > 0 ? (
                   <View className="gap-3">
                     {userComments.map((comment) => (
@@ -781,9 +799,11 @@ export default function ProfileScreen() {
             {activeTab === "communities" && (
               <View>
                 {communitiesLoading ? (
-                  <View className="items-center justify-center py-8">
-                    <ActivityIndicator size="small" color={textSecondaryColor} />
-                  </View>
+                  <AppLoader
+                    size="small"
+                    color={textSecondaryColor}
+                    style={{ paddingVertical: 32 }}
+                  />
                 ) : userCommunities.length > 0 ? (
                   <View className="gap-3">
                     {userCommunities.map((group) => (

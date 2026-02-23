@@ -1,3 +1,4 @@
+import AppLoader from "@/components/AppLoader";
 import PostListItem from "@/components/PostListItem";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -7,13 +8,7 @@ import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronLeft, Users } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { FlatList, Text, TouchableOpacity, View } from "react-native";
 
 const PAGE_SIZE = 5;
 
@@ -153,12 +148,10 @@ export default function CommunityPage() {
         style={{
           flex: 1,
           backgroundColor,
-          justifyContent: "center",
-          alignItems: "center",
           padding: 20,
         }}
       >
-        <ActivityIndicator size="large" color={textColor} />
+        <AppLoader size="large" color={textColor} fullScreen />
       </View>
     );
   }
@@ -305,9 +298,11 @@ export default function CommunityPage() {
         }
         ListEmptyComponent={
           postsLoading ? (
-            <View style={{ paddingVertical: 24, alignItems: "center" }}>
-              <ActivityIndicator size="small" color={textSecondaryColor} />
-            </View>
+            <AppLoader
+              size="small"
+              color={textSecondaryColor}
+              style={{ paddingVertical: 24 }}
+            />
           ) : (
             <Text style={{ color: textSecondaryColor, fontSize: 14 }}>
               No posts in this community yet.
