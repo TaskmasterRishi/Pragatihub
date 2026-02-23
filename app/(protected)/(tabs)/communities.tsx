@@ -1,33 +1,99 @@
+import GroupTabs from "@/components/GroupTabs";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroups, type Group } from "@/lib/actions/groups";
-import { useRouter } from "expo-router";
+import { supabase } from "@/lib/Supabase";
+import { useUser } from "@clerk/clerk-expo";
 import { Image } from "expo-image";
-import { Search, Users } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "expo-router";
+import { Compass, Search, Sparkles, Users } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 
-function CommunityCard({
-  item,
-  cardColor,
-  textColor,
-  textSecondaryColor,
-  borderColor,
-  onPress,
-}: {
+type VisibilityFilter = "all" | "joined" | "popular";
+type SortMode = "relevance" | "recent";
+
+type CommunityCardProps = {
   item: Group;
+  isJoined: boolean;
+  isNew: boolean;
   cardColor: string;
   textColor: string;
   textSecondaryColor: string;
   borderColor: string;
+  successColor: string;
+  infoColor: string;
+  successTextColor: string;
   onPress: () => void;
-}) {
+};
+
+const RECENT_WINDOW_DAYS = 14;
+
+const normalizeText = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const parseCreatedAt = (value: string | null) => {
+  if (!value) return 0;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
+const isRecentlyCreated = (group: Group) => {
+  const createdAt = parseCreatedAt(group.created_at);
+  if (!createdAt) return false;
+  const ageMs = Date.now() - createdAt;
+  return ageMs <= RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+};
+
+const getSearchScore = (group: Group, query: string, tokens: string[]) => {
+  if (!query) return 0;
+
+  const name = normalizeText(group.name);
+  const id = normalizeText(group.id);
+
+  let score = 0;
+
+  if (name === query) score += 120;
+  if (name.startsWith(query)) score += 60;
+  if (name.includes(query)) score += 30;
+  if (id.startsWith(query)) score += 24;
+  if (id.includes(query)) score += 12;
+
+  for (const token of tokens) {
+    if (name.startsWith(token)) score += 10;
+    if (name.includes(token)) score += 6;
+    if (id.includes(token)) score += 4;
+  }
+
+  return score;
+};
+
+function CommunityCard({
+  item,
+  isJoined,
+  isNew,
+  cardColor,
+  textColor,
+  textSecondaryColor,
+  borderColor,
+  successColor,
+  infoColor,
+  successTextColor,
+  onPress,
+}: CommunityCardProps) {
+  const badgeColor = isJoined ? successColor : infoColor;
+
   return (
     <Pressable
       onPress={onPress}
@@ -36,27 +102,43 @@ function CommunityCard({
         {
           backgroundColor: cardColor,
           borderColor,
-          opacity: pressed ? 0.9 : 1,
+          opacity: pressed ? 0.92 : 1,
         },
       ]}
     >
       <View style={styles.cardInner}>
         <Image
-          source={{ uri: item.image }}
+          source={{ uri: item.image ?? undefined }}
           style={styles.avatar}
         />
+
         <View style={styles.cardText}>
-          <Text style={[styles.name, { color: textColor }]} numberOfLines={1}>
-            {item.name}
-          </Text>
+          <View style={styles.cardTitleRow}>
+            <Text style={[styles.name, { color: textColor }]} numberOfLines={1}>
+              {item.name}
+            </Text>
+            {isNew && (
+              <View style={[styles.newBadge, { borderColor: infoColor }]}>
+                <Sparkles size={11} color={infoColor} />
+                <Text style={[styles.newBadgeText, { color: infoColor }]}>
+                  New
+                </Text>
+              </View>
+            )}
+          </View>
           <Text
             style={[styles.meta, { color: textSecondaryColor }]}
             numberOfLines={1}
           >
-            Community
+            {isJoined ? "Joined • visible in your feed" : "Popular community"}
           </Text>
         </View>
-        <Users size={20} color={textSecondaryColor} />
+
+        <View style={[styles.statusBadge, { backgroundColor: badgeColor }]}>
+          <Text style={[styles.statusBadgeText, { color: successTextColor }]}>
+            {isJoined ? "Joined" : "Join"}
+          </Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -64,8 +146,14 @@ function CommunityCard({
 
 export default function CommunitiesScreen() {
   const router = useRouter();
+  const { user } = useUser();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [groups, setGroups] = useState<Group[]>([]);
+  const [joinedGroupIds, setJoinedGroupIds] = useState<string[]>([]);
+  const [visibilityFilter, setVisibilityFilter] =
+    useState<VisibilityFilter>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("relevance");
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,90 +165,240 @@ export default function CommunitiesScreen() {
   const borderColor = useThemeColor({}, "border");
   const inputBg = useThemeColor({}, "input");
   const placeholderColor = useThemeColor({}, "placeholder");
+  const primaryForegroundColor = useThemeColor({}, "primaryForeground");
+  const successColor = useThemeColor({}, "success");
+  const infoColor = useThemeColor({}, "info");
 
-  useEffect(() => {
-    let isMounted = true;
+  const joinedSet = useMemo(() => new Set(joinedGroupIds), [joinedGroupIds]);
 
-    const loadGroups = async () => {
-      setIsLoading(true);
-      setLoadError(null);
-
-      const { data, error } = await fetchGroups();
-
-      if (!isMounted) return;
-
-      if (error) {
-        setGroups([]);
-        setLoadError(error.message ?? "Failed to load communities");
+  const loadCommunities = useCallback(
+    async (mode: "initial" | "refresh") => {
+      if (mode === "initial") {
+        setIsLoading(true);
       } else {
-        setGroups(data ?? []);
+        setRefreshing(true);
       }
 
-      setIsLoading(false);
-    };
+      setLoadError(null);
 
-    loadGroups();
+      const [groupsResult, userGroupsResult] = await Promise.all([
+        fetchGroups(),
+        user?.id
+          ? supabase
+              .from("user_groups")
+              .select("group_id")
+              .eq("user_id", user.id)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+      if (groupsResult.error) {
+        setGroups([]);
+        setLoadError(
+          groupsResult.error.message ?? "Failed to load communities",
+        );
+      } else {
+        setGroups(groupsResult.data ?? []);
+      }
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    setLoadError(null);
+      if (userGroupsResult.error) {
+        setJoinedGroupIds([]);
+        setLoadError(
+          (previous) =>
+            previous ??
+            userGroupsResult.error?.message ??
+            "Failed to load community visibility",
+        );
+      } else {
+        const ids = (userGroupsResult.data ?? []).map(
+          (entry) => entry.group_id,
+        );
+        setJoinedGroupIds(ids);
+      }
 
-    const { data, error } = await fetchGroups();
+      if (mode === "initial") {
+        setIsLoading(false);
+      } else {
+        setRefreshing(false);
+      }
+    },
+    [user?.id],
+  );
 
-    if (error) {
-      setGroups([]);
-      setLoadError(error.message ?? "Failed to load communities");
-    } else {
-      setGroups(data ?? []);
-    }
+  useEffect(() => {
+    void loadCommunities("initial");
+  }, [loadCommunities]);
 
-    setRefreshing(false);
+  const handleRefresh = () => {
+    void loadCommunities("refresh");
   };
 
-  const filteredGroups = useMemo(() => {
-    if (!searchQuery.trim()) return groups;
-    const q = searchQuery.trim().toLowerCase();
-    return groups.filter(
-      (g) =>
-        g.name.toLowerCase().includes(q) ||
-        g.id.toLowerCase().includes(q),
-    );
-  }, [searchQuery, groups]);
+  const searchTokens = useMemo(() => {
+    const normalized = normalizeText(searchQuery);
+    return normalized ? normalized.split(" ").filter(Boolean) : [];
+  }, [searchQuery]);
+
+  const normalizedQuery = useMemo(
+    () => normalizeText(searchQuery),
+    [searchQuery],
+  );
+
+  const visibleGroups = useMemo(() => {
+    let scopedGroups = groups;
+
+    if (visibilityFilter === "joined") {
+      scopedGroups = scopedGroups.filter((group) => joinedSet.has(group.id));
+    }
+
+    if (visibilityFilter === "popular") {
+      scopedGroups = scopedGroups.filter((group) => !joinedSet.has(group.id));
+    }
+
+    const hasQuery = normalizedQuery.length > 0;
+
+    if (hasQuery) {
+      return scopedGroups
+        .map((group) => ({
+          group,
+          score: getSearchScore(group, normalizedQuery, searchTokens),
+        }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          const dateDiff =
+            parseCreatedAt(b.group.created_at) -
+            parseCreatedAt(a.group.created_at);
+          if (dateDiff !== 0) return dateDiff;
+          return a.group.name.localeCompare(b.group.name);
+        })
+        .map((entry) => entry.group);
+    }
+
+    if (sortMode === "recent") {
+      return [...scopedGroups].sort((a, b) => {
+        const dateDiff =
+          parseCreatedAt(b.created_at) - parseCreatedAt(a.created_at);
+        if (dateDiff !== 0) return dateDiff;
+        return a.name.localeCompare(b.name);
+      });
+    }
+
+    if (sortMode === "relevance") {
+      return [...scopedGroups].sort((a, b) => {
+        const joinedDiff =
+          Number(joinedSet.has(b.id)) - Number(joinedSet.has(a.id));
+        if (joinedDiff !== 0) return joinedDiff;
+        const recentDiff =
+          Number(isRecentlyCreated(b)) - Number(isRecentlyCreated(a));
+        if (recentDiff !== 0) return recentDiff;
+        return a.name.localeCompare(b.name);
+      });
+    }
+
+    return scopedGroups;
+  }, [
+    groups,
+    joinedSet,
+    normalizedQuery,
+    searchTokens,
+    sortMode,
+    visibilityFilter,
+  ]);
+
+  const popularGroups = useMemo(() => {
+    return groups
+      .filter((group) => !joinedSet.has(group.id))
+      .sort((a, b) => {
+        const dateDiff =
+          parseCreatedAt(b.created_at) - parseCreatedAt(a.created_at);
+        if (dateDiff !== 0) return dateDiff;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, 8);
+  }, [groups, joinedSet]);
+
+  const showPopularRail =
+    !normalizedQuery &&
+    visibilityFilter !== "joined" &&
+    popularGroups.length > 0;
+
+  const activeTopTab =
+    visibilityFilter === "joined"
+      ? "Joined"
+      : visibilityFilter === "popular"
+        ? "Popular"
+        : "All";
+  const activeBottomTab = sortMode === "recent" ? "Newest" : "Relevant";
+
+  const visibleCountLabel = `${visibleGroups.length} visible of ${groups.length}`;
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: textColor }]}>Communities</Text>
         <Text style={[styles.subtitle, { color: textSecondaryColor }]}>
-          {groups.length} communities
+          {visibleCountLabel}
         </Text>
-        <View style={[styles.searchWrapper, { backgroundColor: inputBg, borderColor }]}>
-          <Search size={20} color={placeholderColor} style={styles.searchIcon} />
+
+        <View
+          style={[
+            styles.searchWrapper,
+            { backgroundColor: inputBg, borderColor },
+          ]}
+        >
+          <Search
+            size={20}
+            color={placeholderColor}
+            style={styles.searchIcon}
+          />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search communities..."
+            placeholder="Search by name or community id"
             placeholderTextColor={placeholderColor}
             style={[styles.searchInput, { color: textColor }]}
             returnKeyType="search"
           />
         </View>
+
+        <View style={styles.filtersBlock}>
+          <GroupTabs
+            topTab={activeTopTab}
+            bottomTab={activeBottomTab}
+            onChangeTopTab={(tab) => {
+              if (tab === "Joined") {
+                setVisibilityFilter("joined");
+                return;
+              }
+
+              if (tab === "Popular") {
+                setVisibilityFilter("popular");
+                return;
+              }
+
+              setVisibilityFilter("all");
+            }}
+            onChangeBottomTab={(tab) => {
+              setSortMode(tab === "Newest" ? "recent" : "relevance");
+            }}
+          />
+        </View>
       </View>
+
       <FlatList
-        data={filteredGroups}
+        data={visibleGroups}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <CommunityCard
             item={item}
+            isJoined={joinedSet.has(item.id)}
+            isNew={isRecentlyCreated(item)}
             cardColor={cardColor}
             textColor={textColor}
             textSecondaryColor={textSecondaryColor}
             borderColor={borderColor}
+            successColor={successColor}
+            infoColor={infoColor}
+            successTextColor={primaryForegroundColor}
             onPress={() => router.push(`/community/${item.id}`)}
           />
         )}
@@ -169,17 +407,74 @@ export default function CommunitiesScreen() {
         showsVerticalScrollIndicator={false}
         refreshing={refreshing}
         onRefresh={handleRefresh}
+        ListHeaderComponent={
+          showPopularRail ? (
+            <View style={styles.discoverySection}>
+              <View style={styles.discoveryHeader}>
+                <Compass size={17} color={textSecondaryColor} />
+                <Text style={[styles.discoveryTitle, { color: textColor }]}>
+                  Popular
+                </Text>
+              </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {popularGroups.map((group, index) => (
+                  <Pressable
+                    key={group.id}
+                    onPress={() => router.push(`/community/${group.id}`)}
+                    style={({ pressed }) => [
+                      styles.discoveryCard,
+                      {
+                        backgroundColor: cardColor,
+                        borderColor,
+                        marginLeft: index === 0 ? 0 : 10,
+                        opacity: pressed ? 0.92 : 1,
+                      },
+                    ]}
+                  >
+                    <Image
+                      source={{ uri: group.image ?? undefined }}
+                      style={styles.discoveryAvatar}
+                    />
+                    <Text
+                      style={[styles.discoveryName, { color: textColor }]}
+                      numberOfLines={1}
+                    >
+                      {group.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.discoveryMeta,
+                        { color: textSecondaryColor },
+                      ]}
+                    >
+                      Open community
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Users size={48} color={textSecondaryColor} />
+            {loadError ? (
+              <Users size={48} color={textSecondaryColor} />
+            ) : normalizedQuery ? (
+              <Search size={48} color={textSecondaryColor} />
+            ) : (
+              <Compass size={48} color={textSecondaryColor} />
+            )}
             <Text style={[styles.emptyText, { color: textSecondaryColor }]}>
               {isLoading
                 ? "Loading communities..."
                 : loadError
                   ? loadError
-                  : searchQuery.trim()
-                    ? "No communities match your search"
-                    : "No communities yet"}
+                  : normalizedQuery
+                    ? "No communities match this search"
+                    : visibilityFilter === "joined"
+                      ? "You have not joined any communities yet"
+                      : "No communities yet"}
             </Text>
           </View>
         }
@@ -222,10 +517,47 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 0,
   },
+  filtersBlock: {
+    marginTop: 14,
+  },
   listContent: {
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: 12,
     paddingBottom: 120,
+  },
+  discoverySection: {
+    marginBottom: 18,
+  },
+  discoveryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 6,
+  },
+  discoveryTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  discoveryCard: {
+    width: 150,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+  },
+  discoveryAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#e5e7eb",
+  },
+  discoveryName: {
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  discoveryMeta: {
+    marginTop: 2,
+    fontSize: 12,
   },
   card: {
     borderRadius: 16,
@@ -247,7 +579,13 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 14,
   },
+  cardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   name: {
+    flex: 1,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -255,13 +593,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
+  newBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  newBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  statusBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
   empty: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 48,
+    paddingHorizontal: 12,
   },
   emptyText: {
     marginTop: 12,
     fontSize: 16,
+    textAlign: "center",
   },
 });

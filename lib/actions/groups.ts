@@ -4,12 +4,13 @@ export type Group = {
   id: string;
   name: string;
   image: string | null;
+  created_at: string | null;
 };
 
 export async function fetchGroups() {
   const { data, error } = await supabase
     .from("groups")
-    .select("id, name, image")
+    .select("id, name, image, created_at")
     .order("name", { ascending: true });
 
   return { data: data as Group[] | null, error };
@@ -18,7 +19,7 @@ export async function fetchGroups() {
 export async function fetchGroupById(id: string) {
   const { data, error } = await supabase
     .from("groups")
-    .select("id, name, image")
+    .select("id, name, image, created_at")
     .eq("id", id)
     .single();
 
