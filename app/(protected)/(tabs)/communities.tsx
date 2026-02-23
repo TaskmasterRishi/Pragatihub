@@ -1,4 +1,3 @@
-import GroupTabs from "@/components/GroupTabs";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroups, type Group } from "@/lib/actions/groups";
 import { supabase } from "@/lib/Supabase";
@@ -19,6 +18,15 @@ import {
 
 type VisibilityFilter = "all" | "joined" | "popular";
 type SortMode = "relevance" | "recent";
+type TopTab = "All" | "Joined" | "Popular";
+type BottomTab = "Relevant" | "Newest";
+
+type GroupTabsProps = {
+  topTab?: TopTab;
+  bottomTab?: BottomTab;
+  onChangeTopTab?: (tab: TopTab) => void;
+  onChangeBottomTab?: (tab: BottomTab) => void;
+};
 
 type CommunityCardProps = {
   item: Group;
@@ -35,6 +43,8 @@ type CommunityCardProps = {
 };
 
 const RECENT_WINDOW_DAYS = 14;
+const TOP_TABS: TopTab[] = ["All", "Joined", "Popular"];
+const BOTTOM_TABS: BottomTab[] = ["Relevant", "Newest"];
 
 const normalizeText = (value: string) =>
   value
@@ -78,6 +88,85 @@ const getSearchScore = (group: Group, query: string, tokens: string[]) => {
 
   return score;
 };
+
+function GroupTabs({
+  topTab = "All",
+  bottomTab = "Relevant",
+  onChangeTopTab,
+  onChangeBottomTab,
+}: GroupTabsProps) {
+  const background = useThemeColor({}, "background");
+  const text = useThemeColor({}, "text");
+  const tint = useThemeColor({}, "tint");
+  const [selectedTop, setSelectedTop] = useState<TopTab>(topTab);
+  const [selectedBottom, setSelectedBottom] = useState<BottomTab>(bottomTab);
+
+  useEffect(() => {
+    setSelectedTop(topTab);
+  }, [topTab]);
+
+  useEffect(() => {
+    setSelectedBottom(bottomTab);
+  }, [bottomTab]);
+
+  const handleTopTab = (tab: TopTab) => {
+    setSelectedTop(tab);
+    onChangeTopTab?.(tab);
+  };
+
+  const handleBottomTab = (tab: BottomTab) => {
+    setSelectedBottom(tab);
+    onChangeBottomTab?.(tab);
+  };
+
+  return (
+    <View style={[styles.groupTabsContainer, { backgroundColor: background }]}>
+      <View style={styles.groupTabsTopRow}>
+        {TOP_TABS.map((tab) => {
+          const selected = selectedTop === tab;
+          return (
+            <Pressable
+              key={tab}
+              onPress={() => handleTopTab(tab)}
+              style={[
+                styles.groupTabButton,
+                selected && { backgroundColor: `${tint}20` },
+              ]}
+            >
+              <Text
+                style={[styles.groupTabText, { color: selected ? tint : text }]}
+              >
+                {tab}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.groupTabsBottomRow}>
+        {BOTTOM_TABS.map((tab) => {
+          const selected = selectedBottom === tab;
+          return (
+            <Pressable
+              key={tab}
+              onPress={() => handleBottomTab(tab)}
+              style={[
+                styles.groupTabButton,
+                selected && { backgroundColor: `${tint}20` },
+              ]}
+            >
+              <Text
+                style={[styles.groupTabText, { color: selected ? tint : text }]}
+              >
+                {tab}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 function CommunityCard({
   item,
@@ -130,7 +219,7 @@ function CommunityCard({
             style={[styles.meta, { color: textSecondaryColor }]}
             numberOfLines={1}
           >
-            {isJoined ? "Joined • visible in your feed" : "Popular community"}
+            {isJoined ? "Joined • visible in your feed" : "Join community"}
           </Text>
         </View>
 
@@ -321,14 +410,6 @@ export default function CommunitiesScreen() {
     visibilityFilter !== "joined" &&
     popularGroups.length > 0;
 
-  const activeTopTab =
-    visibilityFilter === "joined"
-      ? "Joined"
-      : visibilityFilter === "popular"
-        ? "Popular"
-        : "All";
-  const activeBottomTab = sortMode === "recent" ? "Newest" : "Relevant";
-
   const visibleCountLabel = `${visibleGroups.length} visible of ${groups.length}`;
 
   return (
@@ -362,23 +443,31 @@ export default function CommunitiesScreen() {
 
         <View style={styles.filtersBlock}>
           <GroupTabs
-            topTab={activeTopTab}
-            bottomTab={activeBottomTab}
+            topTab={
+              visibilityFilter === "joined"
+                ? "Joined"
+                : visibilityFilter === "popular"
+                  ? "Popular"
+                  : "All"
+            }
+            bottomTab={sortMode === "recent" ? "Newest" : "Relevant"}
             onChangeTopTab={(tab) => {
               if (tab === "Joined") {
                 setVisibilityFilter("joined");
                 return;
               }
-
               if (tab === "Popular") {
                 setVisibilityFilter("popular");
                 return;
               }
-
               setVisibilityFilter("all");
             }}
             onChangeBottomTab={(tab) => {
-              setSortMode(tab === "Newest" ? "recent" : "relevance");
+              if (tab === "Newest") {
+                setSortMode("recent");
+                return;
+              }
+              setSortMode("relevance");
             }}
           />
         </View>
@@ -417,7 +506,11 @@ export default function CommunitiesScreen() {
                 </Text>
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.discoveryRail}
+              >
                 {popularGroups.map((group, index) => (
                   <Pressable
                     key={group.id}
@@ -432,24 +525,18 @@ export default function CommunitiesScreen() {
                       },
                     ]}
                   >
-                    <Image
-                      source={{ uri: group.image ?? undefined }}
-                      style={styles.discoveryAvatar}
-                    />
-                    <Text
-                      style={[styles.discoveryName, { color: textColor }]}
-                      numberOfLines={1}
-                    >
-                      {group.name}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.discoveryMeta,
-                        { color: textSecondaryColor },
-                      ]}
-                    >
-                      Open community
-                    </Text>
+                    <View style={styles.discoveryCardContent}>
+                      <Image
+                        source={{ uri: group.image ?? undefined }}
+                        style={styles.discoveryAvatar}
+                      />
+                      <Text
+                        style={[styles.discoveryName, { color: textColor }]}
+                        numberOfLines={1}
+                      >
+                        {group.name}
+                      </Text>
+                    </View>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -520,6 +607,28 @@ const styles = StyleSheet.create({
   filtersBlock: {
     marginTop: 14,
   },
+  groupTabsContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  groupTabsTopRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  groupTabsBottomRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  groupTabButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  groupTabText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
   listContent: {
     paddingHorizontal: 20,
     paddingTop: 12,
@@ -527,6 +636,9 @@ const styles = StyleSheet.create({
   },
   discoverySection: {
     marginBottom: 18,
+  },
+  discoveryRail: {
+    alignItems: "center",
   },
   discoveryHeader: {
     flexDirection: "row",
@@ -540,9 +652,19 @@ const styles = StyleSheet.create({
   },
   discoveryCard: {
     width: 150,
+    minHeight: 120,
     borderWidth: 1,
     borderRadius: 14,
     padding: 12,
+    justifyContent: "center",
+  },
+  discoveryCardContent: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    gap: 10,
   },
   discoveryAvatar: {
     width: 44,
@@ -551,13 +673,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#e5e7eb",
   },
   discoveryName: {
-    marginTop: 10,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
+    textAlign: "center",
+    width: "100%",
   },
   discoveryMeta: {
-    marginTop: 2,
-    fontSize: 12,
+    marginTop: 4,
+    fontSize: 11,
+    textAlign: "center",
   },
   card: {
     borderRadius: 16,
@@ -568,6 +692,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 14,
+    gap: 16,
   },
   avatar: {
     width: 48,
@@ -577,7 +702,7 @@ const styles = StyleSheet.create({
   },
   cardText: {
     flex: 1,
-    marginLeft: 14,
+    justifyContent: "center",
   },
   cardTitleRow: {
     flexDirection: "row",
@@ -586,12 +711,12 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
   },
   meta: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 12,
+    marginTop: 3,
   },
   newBadge: {
     flexDirection: "row",

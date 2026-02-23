@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -26,14 +26,6 @@ export default function GroupTabs({
   const [selectedTop, setSelectedTop] = useState(topTab);
   const [selectedBottom, setSelectedBottom] = useState(bottomTab);
 
-  useEffect(() => {
-    setSelectedTop(topTab);
-  }, [topTab]);
-
-  useEffect(() => {
-    setSelectedBottom(bottomTab);
-  }, [bottomTab]);
-
   const handleTopTab = (tab: string) => {
     setSelectedTop(tab);
     onChangeTopTab?.(tab);
@@ -45,7 +37,7 @@ export default function GroupTabs({
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: background }]}>
+    <View style={[styles.container, { backgroundColor: background }]}> 
       <View style={styles.topRow}>
         {TOP_TABS.map((tab) => {
           const selected = selectedTop === tab;
@@ -56,12 +48,16 @@ export default function GroupTabs({
               style={[
                 styles.tabButton,
                 selected && {
-                  backgroundColor: `${tint}20`,
-                  borderColor: `${tint}66`,
+                  backgroundColor: tint + "20",
                 },
               ]}
             >
-              <Text style={[styles.tabText, { color: selected ? tint : text }]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: selected ? tint : text },
+                ]}
+              >
                 {tab}
               </Text>
             </Pressable>
@@ -79,12 +75,16 @@ export default function GroupTabs({
               style={[
                 styles.tabButton,
                 selected && {
-                  backgroundColor: `${tint}20`,
-                  borderColor: `${tint}66`,
+                  backgroundColor: tint + "20",
                 },
               ]}
             >
-              <Text style={[styles.tabText, { color: selected ? tint : text }]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: selected ? tint : text },
+                ]}
+              >
                 {tab}
               </Text>
             </Pressable>
@@ -97,6 +97,7 @@ export default function GroupTabs({
 
 const styles = StyleSheet.create({
   container: {
+    paddingHorizontal: 16,
     paddingTop: 12,
   },
   topRow: {
@@ -112,8 +113,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "transparent",
   },
   tabText: {
     fontSize: 14,
