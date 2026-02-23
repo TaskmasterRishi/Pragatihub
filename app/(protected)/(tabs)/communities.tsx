@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from "react-native";
 
@@ -32,13 +33,15 @@ type CommunityCardProps = {
   item: Group;
   isJoined: boolean;
   isNew: boolean;
+  memberCount: number;
   cardColor: string;
   textColor: string;
   textSecondaryColor: string;
   borderColor: string;
+  avatarColor: string;
+  shadowColor: string;
   successColor: string;
   infoColor: string;
-  successTextColor: string;
   onPress: () => void;
 };
 
@@ -89,17 +92,38 @@ const getSearchScore = (group: Group, query: string, tokens: string[]) => {
   return score;
 };
 
+const toRgba = (hex: string, alpha: number) => {
+  const normalized = hex.replace("#", "");
+  if (!/^[A-Fa-f0-9]{6}$/.test(normalized)) return hex;
+
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
 function GroupTabs({
   topTab = "All",
   bottomTab = "Relevant",
   onChangeTopTab,
   onChangeBottomTab,
 }: GroupTabsProps) {
-  const background = useThemeColor({}, "background");
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const border = useThemeColor({}, "border");
+  const input = useThemeColor({}, "input");
   const text = useThemeColor({}, "text");
   const tint = useThemeColor({}, "tint");
   const [selectedTop, setSelectedTop] = useState<TopTab>(topTab);
   const [selectedBottom, setSelectedBottom] = useState<BottomTab>(bottomTab);
+
+  const containerColor = toRgba(input, isDark ? 0.5 : 0.78);
+  const containerBorderColor = toRgba(border, isDark ? 0.62 : 0.45);
+  const tabBaseColor = toRgba(text, isDark ? 0.09 : 0.04);
+  const tabBorderColor = toRgba(border, isDark ? 0.46 : 0.28);
+  const tabSelectedColor = toRgba(tint, isDark ? 0.28 : 0.16);
+  const tabSelectedBorderColor = toRgba(tint, isDark ? 0.58 : 0.34);
 
   useEffect(() => {
     setSelectedTop(topTab);
@@ -120,7 +144,15 @@ function GroupTabs({
   };
 
   return (
-    <View style={[styles.groupTabsContainer, { backgroundColor: background }]}>
+    <View
+      style={[
+        styles.groupTabsContainer,
+        {
+          backgroundColor: containerColor,
+          borderColor: containerBorderColor,
+        },
+      ]}
+    >
       <View style={styles.groupTabsTopRow}>
         {TOP_TABS.map((tab) => {
           const selected = selectedTop === tab;
@@ -130,7 +162,11 @@ function GroupTabs({
               onPress={() => handleTopTab(tab)}
               style={[
                 styles.groupTabButton,
-                selected && { backgroundColor: `${tint}20` },
+                { backgroundColor: tabBaseColor, borderColor: tabBorderColor },
+                selected && {
+                  backgroundColor: tabSelectedColor,
+                  borderColor: tabSelectedBorderColor,
+                },
               ]}
             >
               <Text
@@ -152,7 +188,11 @@ function GroupTabs({
               onPress={() => handleBottomTab(tab)}
               style={[
                 styles.groupTabButton,
-                selected && { backgroundColor: `${tint}20` },
+                { backgroundColor: tabBaseColor, borderColor: tabBorderColor },
+                selected && {
+                  backgroundColor: tabSelectedColor,
+                  borderColor: tabSelectedBorderColor,
+                },
               ]}
             >
               <Text
@@ -172,16 +212,23 @@ function CommunityCard({
   item,
   isJoined,
   isNew,
+  memberCount,
   cardColor,
   textColor,
   textSecondaryColor,
   borderColor,
+  avatarColor,
+  shadowColor,
   successColor,
   infoColor,
-  successTextColor,
   onPress,
 }: CommunityCardProps) {
-  const badgeColor = isJoined ? successColor : infoColor;
+  const accentColor = isJoined ? successColor : infoColor;
+  const statusBadgeColor = toRgba(accentColor, 0.16);
+  const statusBadgeBorderColor = toRgba(accentColor, 0.45);
+  const newBadgeBorder = toRgba(infoColor, 0.48);
+  const newBadgeBg = toRgba(infoColor, 0.16);
+  const memberLabel = `${memberCount.toLocaleString()} member${memberCount === 1 ? "" : "s"}`;
 
   return (
     <Pressable
@@ -191,40 +238,62 @@ function CommunityCard({
         {
           backgroundColor: cardColor,
           borderColor,
-          opacity: pressed ? 0.92 : 1,
+          shadowColor,
+          transform: [{ scale: pressed ? 0.99 : 1 }],
+          opacity: pressed ? 0.94 : 1,
         },
       ]}
     >
       <View style={styles.cardInner}>
-        <Image
-          source={{ uri: item.image ?? undefined }}
-          style={styles.avatar}
-        />
+        <View
+          style={[
+            styles.avatarWrap,
+            { backgroundColor: avatarColor, borderColor },
+          ]}
+        >
+          <Image
+            source={{ uri: item.image ?? undefined }}
+            style={styles.avatar}
+          />
+        </View>
 
         <View style={styles.cardText}>
           <View style={styles.cardTitleRow}>
             <Text style={[styles.name, { color: textColor }]} numberOfLines={1}>
               {item.name}
             </Text>
-            {isNew && (
-              <View style={[styles.newBadge, { borderColor: infoColor }]}>
+            {isNew ? (
+              <View
+                style={[
+                  styles.newBadge,
+                  { backgroundColor: newBadgeBg, borderColor: newBadgeBorder },
+                ]}
+              >
                 <Sparkles size={11} color={infoColor} />
                 <Text style={[styles.newBadgeText, { color: infoColor }]}>
                   New
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
           <Text
             style={[styles.meta, { color: textSecondaryColor }]}
             numberOfLines={1}
           >
-            {isJoined ? "Joined • visible in your feed" : "Join community"}
+            {memberLabel}
           </Text>
         </View>
 
-        <View style={[styles.statusBadge, { backgroundColor: badgeColor }]}>
-          <Text style={[styles.statusBadgeText, { color: successTextColor }]}>
+        <View
+          style={[
+            styles.statusBadge,
+            {
+              backgroundColor: statusBadgeColor,
+              borderColor: statusBadgeBorderColor,
+            },
+          ]}
+        >
+          <Text style={[styles.statusBadgeText, { color: accentColor }]}>
             {isJoined ? "Joined" : "Join"}
           </Text>
         </View>
@@ -236,10 +305,15 @@ function CommunityCard({
 export default function CommunitiesScreen() {
   const router = useRouter();
   const { user } = useUser();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
 
   const [searchQuery, setSearchQuery] = useState("");
   const [groups, setGroups] = useState<Group[]>([]);
   const [joinedGroupIds, setJoinedGroupIds] = useState<string[]>([]);
+  const [memberCountByGroup, setMemberCountByGroup] = useState<
+    Record<string, number>
+  >({});
   const [visibilityFilter, setVisibilityFilter] =
     useState<VisibilityFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("relevance");
@@ -254,9 +328,16 @@ export default function CommunitiesScreen() {
   const borderColor = useThemeColor({}, "border");
   const inputBg = useThemeColor({}, "input");
   const placeholderColor = useThemeColor({}, "placeholder");
-  const primaryForegroundColor = useThemeColor({}, "primaryForeground");
   const successColor = useThemeColor({}, "success");
   const infoColor = useThemeColor({}, "info");
+  const shadowColor = isDark ? "#000000" : "#0f172a";
+
+  const surfaceColor = toRgba(cardColor, isDark ? 0.62 : 0.88);
+  const raisedSurfaceColor = toRgba(cardColor, isDark ? 0.72 : 0.93);
+  const searchSurfaceColor = toRgba(inputBg, isDark ? 0.58 : 0.8);
+  const softBorderColor = toRgba(borderColor, isDark ? 0.6 : 0.44);
+  const subtleBorderColor = toRgba(borderColor, isDark ? 0.4 : 0.3);
+  const avatarTintColor = toRgba(inputBg, isDark ? 0.76 : 0.88);
 
   const joinedSet = useMemo(() => new Set(joinedGroupIds), [joinedGroupIds]);
 
@@ -270,15 +351,17 @@ export default function CommunitiesScreen() {
 
       setLoadError(null);
 
-      const [groupsResult, userGroupsResult] = await Promise.all([
-        fetchGroups(),
-        user?.id
-          ? supabase
-              .from("user_groups")
-              .select("group_id")
-              .eq("user_id", user.id)
-          : Promise.resolve({ data: [], error: null }),
-      ]);
+      const [groupsResult, userGroupsResult, membershipsResult] =
+        await Promise.all([
+          fetchGroups(),
+          user?.id
+            ? supabase
+                .from("user_groups")
+                .select("group_id")
+                .eq("user_id", user.id)
+            : Promise.resolve({ data: [], error: null }),
+          supabase.from("user_groups").select("group_id"),
+        ]);
 
       if (groupsResult.error) {
         setGroups([]);
@@ -302,6 +385,21 @@ export default function CommunitiesScreen() {
           (entry) => entry.group_id,
         );
         setJoinedGroupIds(ids);
+      }
+
+      if (membershipsResult.error) {
+        setMemberCountByGroup({});
+      } else {
+        const memberCounts = (membershipsResult.data ?? []).reduce<
+          Record<string, number>
+        >((accumulator, entry) => {
+          if (!entry.group_id) return accumulator;
+
+          accumulator[entry.group_id] = (accumulator[entry.group_id] ?? 0) + 1;
+          return accumulator;
+        }, {});
+
+        setMemberCountByGroup(memberCounts);
       }
 
       if (mode === "initial") {
@@ -415,30 +513,40 @@ export default function CommunitiesScreen() {
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: textColor }]}>Communities</Text>
-        <Text style={[styles.subtitle, { color: textSecondaryColor }]}>
-          {visibleCountLabel}
-        </Text>
-
         <View
           style={[
-            styles.searchWrapper,
-            { backgroundColor: inputBg, borderColor },
+            styles.headerCard,
+            { backgroundColor: surfaceColor, borderColor: softBorderColor },
           ]}
         >
-          <Search
-            size={20}
-            color={placeholderColor}
-            style={styles.searchIcon}
-          />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search by name or community id"
-            placeholderTextColor={placeholderColor}
-            style={[styles.searchInput, { color: textColor }]}
-            returnKeyType="search"
-          />
+          <Text style={[styles.title, { color: textColor }]}>Communities</Text>
+          <Text style={[styles.subtitle, { color: textSecondaryColor }]}>
+            {visibleCountLabel}
+          </Text>
+
+          <View
+            style={[
+              styles.searchWrapper,
+              {
+                backgroundColor: searchSurfaceColor,
+                borderColor: subtleBorderColor,
+              },
+            ]}
+          >
+            <Search
+              size={20}
+              color={placeholderColor}
+              style={styles.searchIcon}
+            />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search by name or community id"
+              placeholderTextColor={placeholderColor}
+              style={[styles.searchInput, { color: textColor }]}
+              returnKeyType="search"
+            />
+          </View>
         </View>
 
         <View style={styles.filtersBlock}>
@@ -481,13 +589,15 @@ export default function CommunitiesScreen() {
             item={item}
             isJoined={joinedSet.has(item.id)}
             isNew={isRecentlyCreated(item)}
-            cardColor={cardColor}
+            memberCount={memberCountByGroup[item.id] ?? 0}
+            cardColor={raisedSurfaceColor}
             textColor={textColor}
             textSecondaryColor={textSecondaryColor}
-            borderColor={borderColor}
+            borderColor={softBorderColor}
+            avatarColor={avatarTintColor}
+            shadowColor={shadowColor}
             successColor={successColor}
             infoColor={infoColor}
-            successTextColor={primaryForegroundColor}
             onPress={() => router.push(`/community/${item.id}`)}
           />
         )}
@@ -498,7 +608,12 @@ export default function CommunitiesScreen() {
         onRefresh={handleRefresh}
         ListHeaderComponent={
           showPopularRail ? (
-            <View style={styles.discoverySection}>
+            <View
+              style={[
+                styles.discoverySection,
+                { backgroundColor: surfaceColor, borderColor: softBorderColor },
+              ]}
+            >
               <View style={styles.discoveryHeader}>
                 <Compass size={17} color={textSecondaryColor} />
                 <Text style={[styles.discoveryTitle, { color: textColor }]}>
@@ -511,58 +626,81 @@ export default function CommunitiesScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.discoveryRail}
               >
-                {popularGroups.map((group, index) => (
-                  <Pressable
-                    key={group.id}
-                    onPress={() => router.push(`/community/${group.id}`)}
-                    style={({ pressed }) => [
-                      styles.discoveryCard,
-                      {
-                        backgroundColor: cardColor,
-                        borderColor,
-                        marginLeft: index === 0 ? 0 : 10,
-                        opacity: pressed ? 0.92 : 1,
-                      },
-                    ]}
-                  >
-                    <View style={styles.discoveryCardContent}>
-                      <Image
-                        source={{ uri: group.image ?? undefined }}
-                        style={styles.discoveryAvatar}
-                      />
-                      <Text
-                        style={[styles.discoveryName, { color: textColor }]}
-                        numberOfLines={1}
-                      >
-                        {group.name}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
+                {popularGroups.map((group, index) => {
+                  const memberCount = memberCountByGroup[group.id] ?? 0;
+
+                  return (
+                    <Pressable
+                      key={group.id}
+                      onPress={() => router.push(`/community/${group.id}`)}
+                      style={({ pressed }) => [
+                        styles.discoveryCard,
+                        {
+                          backgroundColor: raisedSurfaceColor,
+                          borderColor: softBorderColor,
+                          shadowColor,
+                          marginLeft: index === 0 ? 0 : 10,
+                          transform: [{ scale: pressed ? 0.98 : 1 }],
+                          opacity: pressed ? 0.94 : 1,
+                        },
+                      ]}
+                    >
+                      <View style={styles.discoveryCardContent}>
+                        <Image
+                          source={{ uri: group.image ?? undefined }}
+                          style={styles.discoveryAvatar}
+                        />
+                        <Text
+                          style={[styles.discoveryName, { color: textColor }]}
+                          numberOfLines={1}
+                        >
+                          {group.name}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.discoveryMeta,
+                            { color: textSecondaryColor },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {memberCount.toLocaleString()}{" "}
+                          {memberCount === 1 ? "member" : "members"}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             </View>
           ) : null
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            {loadError ? (
-              <Users size={48} color={textSecondaryColor} />
-            ) : normalizedQuery ? (
-              <Search size={48} color={textSecondaryColor} />
-            ) : (
-              <Compass size={48} color={textSecondaryColor} />
-            )}
-            <Text style={[styles.emptyText, { color: textSecondaryColor }]}>
-              {isLoading
-                ? "Loading communities..."
-                : loadError
-                  ? loadError
-                  : normalizedQuery
-                    ? "No communities match this search"
-                    : visibilityFilter === "joined"
-                      ? "You have not joined any communities yet"
-                      : "No communities yet"}
-            </Text>
+            <View
+              style={[
+                styles.emptyCard,
+                { backgroundColor: surfaceColor, borderColor: softBorderColor },
+              ]}
+            >
+              {loadError ? (
+                <Users size={48} color={textSecondaryColor} />
+              ) : normalizedQuery ? (
+                <Search size={48} color={textSecondaryColor} />
+              ) : (
+                <Compass size={48} color={textSecondaryColor} />
+              )}
+              <Text style={[styles.emptyText, { color: textSecondaryColor }]}>
+                {isLoading
+                  ? "Loading communities..."
+                  : loadError
+                    ? loadError
+                    : normalizedQuery
+                      ? "No communities match this search"
+                      : visibilityFilter === "joined"
+                        ? "You have not joined any communities yet"
+                        : "No communities yet"}
+              </Text>
+            </View>
           </View>
         }
       />
@@ -577,23 +715,30 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 8,
+    paddingBottom: 10,
+  },
+  headerCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
+    fontSize: 30,
+    fontWeight: "800",
+    letterSpacing: 0.3,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 4,
   },
   searchWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 14,
+    marginTop: 16,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 13,
+    borderRadius: 16,
     borderWidth: 1,
   },
   searchIcon: {
@@ -605,58 +750,71 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   filtersBlock: {
-    marginTop: 14,
+    marginTop: 12,
   },
   groupTabsContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   groupTabsTopRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
   },
   groupTabsBottomRow: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 16,
+    gap: 8,
+    marginTop: 8,
   },
   groupTabButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
     borderRadius: 12,
+    borderWidth: 1,
   },
   groupTabText: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 10,
     paddingBottom: 120,
   },
   discoverySection: {
-    marginBottom: 18,
+    marginBottom: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 14,
   },
   discoveryRail: {
     alignItems: "center",
+    paddingRight: 6,
   },
   discoveryHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 12,
     gap: 6,
   },
   discoveryTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
   },
   discoveryCard: {
     width: 150,
     minHeight: 120,
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 12,
     justifyContent: "center",
+    shadowOpacity: 0.15,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
   },
   discoveryCardContent: {
     flex: 1,
@@ -684,20 +842,32 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   card: {
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
   },
   cardInner: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
-    gap: 16,
+    padding: 16,
+    gap: 14,
+  },
+  avatarWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: "#e5e7eb",
   },
   cardText: {
@@ -711,12 +881,12 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "700",
   },
   meta: {
     fontSize: 12,
-    marginTop: 3,
+    marginTop: 4,
   },
   newBadge: {
     flexDirection: "row",
@@ -724,8 +894,8 @@ const styles = StyleSheet.create({
     gap: 3,
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   newBadgeText: {
     fontSize: 10,
@@ -733,8 +903,9 @@ const styles = StyleSheet.create({
   },
   statusBadge: {
     borderRadius: 999,
+    borderWidth: 1,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
   },
   statusBadgeText: {
     fontSize: 11,
@@ -743,8 +914,17 @@ const styles = StyleSheet.create({
   empty: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 48,
+    paddingVertical: 44,
     paddingHorizontal: 12,
+  },
+  emptyCard: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 32,
+    paddingHorizontal: 18,
   },
   emptyText: {
     marginTop: 12,
