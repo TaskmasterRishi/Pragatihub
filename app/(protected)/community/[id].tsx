@@ -3,7 +3,9 @@ import PostListItem from "@/components/PostListItem";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
+import { joinUserGroup, leaveUserGroup } from "@/lib/actions/user-groups";
 import { supabase } from "@/lib/Supabase";
+import { useUser } from "@clerk/clerk-expo";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -38,6 +40,7 @@ export default function CommunityPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user: clerkUser } = useUser();
 
   const communityId = Array.isArray(id) ? id[0] : id;
 
@@ -66,8 +69,7 @@ export default function CommunityPage() {
     const load = async () => {
       setLoading(true);
 
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
+      const userId = clerkUser?.id;
 
       const [{ data }, membersRes] = await Promise.all([
         fetchGroupById(communityId),
@@ -112,7 +114,9 @@ export default function CommunityPage() {
       return;
     }
 
-    setPosts((prev) => (replace ? data : [...prev, ...data]));
+    const postsData = data as unknown as Post[];
+
+    setPosts((prev) => (replace ? postsData : [...prev, ...postsData]));
     setHasMore(data.length === PAGE_SIZE);
     setPage(p);
     setPostsLoading(false);
@@ -140,24 +144,31 @@ export default function CommunityPage() {
   }, [posts, sort]);
 
   const toggleJoin = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
+    const userId = clerkUser?.id;
     if (!userId || !communityId) return;
 
     if (isJoined) {
-      await supabase
-        .from("user_groups")
-        .delete()
-        .eq("user_id", userId)
-        .eq("group_id", communityId);
-      setIsJoined(false);
-      setMembers((prev) => Math.max(0, prev - 1));
+      const { error } = await leaveUserGroup({
+        userId,
+        groupId: communityId,
+      });
+      if (!error) {
+        setIsJoined(false);
+        setMembers((prev) => Math.max(0, prev - 1));
+      } else {
+        console.log("Error leaving group", error);
+      }
     } else {
-      await supabase
-        .from("user_groups")
-        .insert({ user_id: userId, group_id: communityId });
-      setIsJoined(true);
-      setMembers((prev) => prev + 1);
+      const { error } = await joinUserGroup({
+        userId,
+        groupId: communityId,
+      });
+      if (!error) {
+        setIsJoined(true);
+        setMembers((prev) => prev + 1);
+      } else {
+        console.log("Error joining group", error);
+      }
     }
   };
 

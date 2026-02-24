@@ -4,7 +4,11 @@ import { Pressable, Text } from "react-native";
 
 import AppLoader from "@/components/AppLoader";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { isUserInGroup, joinUserGroup } from "@/lib/actions/user-groups";
+import {
+  isUserInGroup,
+  joinUserGroup,
+  leaveUserGroup,
+} from "@/lib/actions/user-groups";
 
 type JoinCommunityButtonProps = {
   communityId: string;
@@ -44,27 +48,35 @@ export default function JoinCommunityButton({
   return (
     <Pressable
       onPress={async () => {
-        if (isJoined || isJoining) return;
+        if (isJoining || !user?.id) return;
         setIsJoining(true);
         try {
-          if (!user?.id) {
-            console.log("Join group blocked: no user id");
-            return;
+          if (isJoined) {
+            const { error } = await leaveUserGroup({
+              userId: user.id,
+              groupId: communityId,
+            });
+            if (error) {
+              console.log("Leave group error:", error);
+              return;
+            }
+            setIsJoined(false);
+          } else {
+            const { error } = await joinUserGroup({
+              userId: user.id,
+              groupId: communityId,
+            });
+            if (error) {
+              console.log("Join group error:", error);
+              return;
+            }
+            setIsJoined(true);
           }
-          const { error } = await joinUserGroup({
-            userId: user.id,
-            groupId: communityId,
-          });
-          if (error) {
-            console.log("Join group error:", error);
-            return;
-          }
-          setIsJoined(true);
         } finally {
           setIsJoining(false);
         }
       }}
-      disabled={!isLoaded || isJoined || isJoining}
+      disabled={!isLoaded || isJoining}
       style={{
         backgroundColor: isJoined ? joinedBackground : primary,
         borderColor: isJoined ? joinedBorder : "transparent",

@@ -28,3 +28,13 @@ export async function joinUserGroup(input: JoinUserGroupInput) {
 
   return { data, error };
 }
+
+export async function leaveUserGroup(input: JoinUserGroupInput) {
+  const { data, error } = await supabase
+    .from("user_groups")
+    .delete()
+    .eq("user_id", input.userId)
+    .eq("group_id", input.groupId);
+
+  return { data, error };
+}
