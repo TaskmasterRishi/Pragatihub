@@ -5,581 +5,506 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
 import { supabase } from "@/lib/Supabase";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronLeft, Clock3, Flame, Trophy, Users } from "lucide-react-native";
+import {
+  ChevronLeft,
+  Clock3,
+  Flame,
+  MoreHorizontal,
+  Search,
+  Share,
+  Trophy,
+} from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Dimensions,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
   View,
-  useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const PAGE_SIZE = 5;
+const { width } = Dimensions.get("window");
 
+const PAGE_SIZE = 8;
 type SortMode = "hot" | "new" | "top";
 
-const toRgba = (hex: string, alpha: number) => {
-  const normalized = hex.replace("#", "");
-  if (!/^[A-Fa-f0-9]{6}$/.test(normalized)) return hex;
-
-  const r = parseInt(normalized.slice(0, 2), 16);
-  const g = parseInt(normalized.slice(2, 4), 16);
-  const b = parseInt(normalized.slice(4, 6), 16);
-
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
-const postScore = (post: Post) => (post.upvotes ?? 0) - (post.downvotes ?? 0);
+const score = (p: Post) => (p.upvotes ?? 0) - (p.downvotes ?? 0);
 
 export default function CommunityPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
 
   const communityId = Array.isArray(id) ? id[0] : id;
+
   const [community, setCommunity] = useState<Group | null>(null);
-  const [communityMembers, setCommunityMembers] = useState(0);
+  const [members, setMembers] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [posts, setPosts] = useState<Post[]>([]);
+  const [sort, setSort] = useState<SortMode>("hot");
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [postsLoading, setPostsLoading] = useState(false);
-  const [postsRefreshing, setPostsRefreshing] = useState(false);
-  const [postsPage, setPostsPage] = useState(1);
-  const [postsHasMore, setPostsHasMore] = useState(true);
-  const [sortMode, setSortMode] = useState<SortMode>("hot");
+  const [isJoined, setIsJoined] = useState(false);
 
-  const backgroundColor = useThemeColor({}, "background");
-  const cardColor = useThemeColor({}, "card");
-  const textColor = useThemeColor({}, "text");
-  const textSecondaryColor = useThemeColor({}, "textSecondary");
-  const borderColor = useThemeColor({}, "border");
-  const inputColor = useThemeColor({}, "input");
-  const primaryColor = useThemeColor({}, "primary");
-  const primaryForeground = useThemeColor({}, "primaryForeground");
-
-  const topBarBg = toRgba(cardColor, isDark ? 0.88 : 0.96);
-  const softBorder = toRgba(borderColor, isDark ? 0.56 : 0.32);
-  const chipBg = toRgba(inputColor, isDark ? 0.52 : 0.8);
-  const selectedChipBg = toRgba(primaryColor, isDark ? 0.2 : 0.12);
-  const selectedChipBorder = toRgba(primaryColor, isDark ? 0.52 : 0.36);
-
-  useEffect(() => {
-    if (!communityId) {
-      setCommunity(null);
-      setCommunityMembers(0);
-      setLoading(false);
-      setLoadError("Community not found");
-      return;
-    }
-
-    let isMounted = true;
-
-    const loadCommunity = async () => {
-      setLoading(true);
-      setLoadError(null);
-
-      const [{ data, error }, membersResult] = await Promise.all([
-        fetchGroupById(communityId),
-        supabase
-          .from("user_groups")
-          .select("group_id", { count: "exact", head: true })
-          .eq("group_id", communityId),
-      ]);
-
-      if (!isMounted) return;
-
-      if (error) {
-        setCommunity(null);
-        setLoadError(error.message ?? "Failed to load community");
-      } else {
-        setCommunity(data ?? null);
-      }
-
-      if (!membersResult.error) {
-        setCommunityMembers(membersResult.count ?? 0);
-      } else {
-        setCommunityMembers(0);
-      }
-
-      setLoading(false);
-    };
-
-    void loadCommunity();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [communityId]);
+  const bg = useThemeColor({}, "background");
+  const text = useThemeColor({}, "text");
+  const secondary = useThemeColor({}, "textSecondary");
+  const border = useThemeColor({}, "border");
+  const card = useThemeColor({}, "card");
+  const primary = useThemeColor({}, "primary");
+  const tint = useThemeColor({}, "tint");
 
   useEffect(() => {
     if (!communityId) return;
-    setPosts([]);
-    setPostsPage(1);
-    setPostsHasMore(true);
-    void fetchCommunityPosts(communityId, 1, true);
+
+    const load = async () => {
+      setLoading(true);
+
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+
+      const [{ data }, membersRes] = await Promise.all([
+        fetchGroupById(communityId),
+        supabase
+          .from("user_groups")
+          .select("group_id, user_id", { count: "exact" }) // count exact requires no head sometimes to return row data too
+          .eq("group_id", communityId),
+      ]);
+
+      setCommunity(data ?? null);
+      if (membersRes.count !== null) setMembers(membersRes.count);
+
+      if (userId && membersRes.data) {
+        const joined = membersRes.data.some((m) => m.user_id === userId);
+        setIsJoined(joined);
+      }
+
+      setLoading(false);
+    };
+
+    void load();
   }, [communityId]);
 
-  const fetchCommunityPosts = async (
-    groupId: string,
-    page: number,
-    replace = false,
-  ) => {
+  const fetchPosts = async (p = 1, replace = false) => {
+    if (!communityId) return;
     setPostsLoading(true);
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("posts")
       .select(
-        `
-        *,
+        `*,
         post_media:post_media(*),
         group:groups(*),
-        user:users!posts_user_id_fkey(*)
-      `,
+        user:users!posts_user_id_fkey(*)`,
       )
-      .eq("group_id", groupId)
+      .eq("group_id", communityId)
       .order("created_at", { ascending: false })
-      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+      .range((p - 1) * PAGE_SIZE, p * PAGE_SIZE - 1);
 
-    if (error || !data) {
-      if (replace) setPosts([]);
+    if (!data) {
       setPostsLoading(false);
       return;
     }
 
-    const postsWithCounts = await Promise.all(
-      data.map(async (post) => {
-        const { count: upvotesCount } = await supabase
-          .from("post_upvotes")
-          .select("*", { count: "exact", head: true })
-          .eq("post_id", post.id);
-
-        const { count: downvotesCount } = await supabase
-          .from("post_downvotes")
-          .select("*", { count: "exact", head: true })
-          .eq("post_id", post.id);
-
-        const { count: commentsCount } = await supabase
-          .from("comments")
-          .select("*", { count: "exact", head: true })
-          .eq("post_id", post.id);
-
-        return {
-          ...post,
-          upvotes: upvotesCount || 0,
-          downvotes: downvotesCount || 0,
-          nr_of_comments: commentsCount || 0,
-        };
-      }),
-    );
-
-    setPosts((prev) =>
-      replace ? postsWithCounts : [...prev, ...postsWithCounts],
-    );
-    setPostsHasMore(data.length === PAGE_SIZE);
-    setPostsPage(page);
+    setPosts((prev) => (replace ? data : [...prev, ...data]));
+    setHasMore(data.length === PAGE_SIZE);
+    setPage(p);
     setPostsLoading(false);
   };
 
-  const visiblePosts = useMemo(() => {
-    const sorted = [...posts];
+  useEffect(() => {
+    fetchPosts(1, true);
+  }, [communityId]);
 
-    if (sortMode === "new") {
-      sorted.sort(
+  const sortedPosts = useMemo(() => {
+    const arr = [...posts];
+
+    if (sort === "new") {
+      arr.sort(
         (a, b) =>
-          new Date(b.created_at ?? 0).getTime() -
-          new Date(a.created_at ?? 0).getTime(),
+          new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime(),
       );
-      return sorted;
+    } else if (sort === "top") {
+      arr.sort((a, b) => score(b) - score(a));
+    } else {
+      arr.sort((a, b) => score(b) - score(a));
     }
 
-    if (sortMode === "top") {
-      sorted.sort((a, b) => postScore(b) - postScore(a));
-      return sorted;
+    return arr;
+  }, [posts, sort]);
+
+  const toggleJoin = async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData?.user?.id;
+    if (!userId || !communityId) return;
+
+    if (isJoined) {
+      await supabase
+        .from("user_groups")
+        .delete()
+        .eq("user_id", userId)
+        .eq("group_id", communityId);
+      setIsJoined(false);
+      setMembers((prev) => Math.max(0, prev - 1));
+    } else {
+      await supabase
+        .from("user_groups")
+        .insert({ user_id: userId, group_id: communityId });
+      setIsJoined(true);
+      setMembers((prev) => prev + 1);
     }
-
-    sorted.sort((a, b) => {
-      const scoreDiff = postScore(b) - postScore(a);
-      if (scoreDiff !== 0) return scoreDiff;
-
-      return (b.nr_of_comments ?? 0) - (a.nr_of_comments ?? 0);
-    });
-
-    return sorted;
-  }, [posts, sortMode]);
+  };
 
   if (loading) {
     return (
-      <View style={[styles.stateScreen, { backgroundColor }]}>
-        <AppLoader size="large" color={textColor} fullScreen />
+      <View style={[styles.center, { backgroundColor: bg }]}>
+        <AppLoader fullScreen />
       </View>
     );
   }
 
   if (!community) {
     return (
-      <View style={[styles.stateScreen, { backgroundColor }]}>
-        <Text style={[styles.stateText, { color: textColor }]}>
-          {loadError ?? "Community not found"}
-        </Text>
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.backCta,
-            { backgroundColor: primaryColor, opacity: pressed ? 0.92 : 1 },
-          ]}
-        >
-          <Text style={[styles.backCtaText, { color: primaryForeground }]}>
-            Go back
-          </Text>
-        </Pressable>
+      <View style={[styles.center, { backgroundColor: bg }]}>
+        <Text style={{ color: text }}>Community not found</Text>
       </View>
     );
   }
 
-  const handle = community.id ? `r/${community.id}` : "r/community";
+  const handle = `r/${community.name.replace(/\s+/g, "")}`;
 
   return (
-    <View style={[styles.container, { backgroundColor }]}>
-      <View
-        style={[
-          styles.topBar,
-          {
-            paddingTop: insets.top + 6,
-            backgroundColor: topBarBg,
-            borderBottomColor: softBorder,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.navButton,
-            { opacity: pressed ? 0.75 : 1 },
-          ]}
-        >
-          <ChevronLeft size={22} color={textColor} />
-        </Pressable>
-
-        <View style={styles.topBarTextWrap}>
-          <Text
-            style={[styles.topBarTitle, { color: textColor }]}
-            numberOfLines={1}
-          >
-            {handle}
-          </Text>
-          <Text style={[styles.topBarSubtitle, { color: textSecondaryColor }]}>
-            {communityMembers.toLocaleString()} members
-          </Text>
+    <View style={[styles.container, { backgroundColor: bg }]}>
+      {/* Floating Transparent Top Bar over banner */}
+      <View style={[styles.headerFloating, { paddingTop: insets.top + 6 }]}>
+        <View style={styles.headerLeft}>
+          <Pressable onPress={() => router.back()} style={styles.iconBtn}>
+            <ChevronLeft size={28} color="#fff" />
+          </Pressable>
+        </View>
+        <View style={styles.headerRight}>
+          <Pressable style={styles.iconBtn}>
+            <Search size={22} color="#fff" />
+          </Pressable>
+          <Pressable style={styles.iconBtn}>
+            <Share size={22} color="#fff" />
+          </Pressable>
+          <Pressable style={styles.iconBtn}>
+            <MoreHorizontal size={22} color="#fff" />
+          </Pressable>
         </View>
       </View>
 
       <FlatList
-        data={visiblePosts}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <PostListItem post={item} hideJoinButton={true} />
-        )}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-        contentContainerStyle={{
-          paddingHorizontal: 14,
-          paddingTop: 12,
-          paddingBottom: 24 + insets.bottom,
-        }}
+        data={sortedPosts}
+        keyExtractor={(i) => i.id}
+        renderItem={({ item }) => <PostListItem post={item} hideJoinButton />}
         showsVerticalScrollIndicator={false}
-        refreshing={postsRefreshing}
-        onRefresh={async () => {
-          if (!communityId) return;
-          setPostsRefreshing(true);
-          await fetchCommunityPosts(communityId, 1, true);
-          setPostsRefreshing(false);
-        }}
         onEndReached={() => {
-          if (!communityId || postsLoading || !postsHasMore) return;
-          void fetchCommunityPosts(communityId, postsPage + 1);
+          if (!postsLoading && hasMore) fetchPosts(page + 1);
         }}
         onEndReachedThreshold={0.5}
+        ItemSeparatorComponent={() => (
+          <View
+            style={{
+              height: 8,
+              backgroundColor:
+                bg === "#000000" || bg === "#121212" ? "#000" : "#e5e5e5",
+            }}
+          /> // Reddit spacing between cards
+        )}
         ListHeaderComponent={
-          <View style={styles.listHeaderWrap}>
-            <View
-              style={[
-                styles.heroCard,
-                { backgroundColor: cardColor, borderColor: softBorder },
-              ]}
-            >
-              <Image
-                source={{ uri: community.image ?? undefined }}
-                style={styles.communityAvatar}
-              />
+          <View style={{ backgroundColor: card, marginBottom: 8 }}>
+            {/* BANNER */}
+            <View style={styles.bannerContainer}>
+              {community.banner_image ? (
+                <Image
+                  source={{ uri: community.banner_image }}
+                  style={styles.bannerImage}
+                  contentFit="cover"
+                />
+              ) : (
+                <LinearGradient
+                  colors={[tint, "#4a90e2"]}
+                  style={styles.bannerImage}
+                />
+              )}
+            </View>
 
-              <View style={styles.heroTextWrap}>
-                <Text
-                  style={[styles.communityName, { color: textColor }]}
-                  numberOfLines={1}
-                >
-                  {community.name}
-                </Text>
-                <Text
+            {/* COMMUNITY INFO */}
+            <View style={styles.infoContainer}>
+              <View style={styles.avatarRow}>
+                <Image
+                  source={{ uri: community.image ?? undefined }}
+                  style={[styles.avatar, { borderColor: card, borderWidth: 4 }]}
+                />
+                <Pressable
+                  onPress={toggleJoin}
                   style={[
-                    styles.communityHandle,
-                    { color: textSecondaryColor },
+                    styles.joinButton,
+                    {
+                      backgroundColor: isJoined ? "transparent" : tint,
+                      borderColor: isJoined ? border : tint,
+                      borderWidth: 1,
+                    },
                   ]}
-                  numberOfLines={1}
                 >
-                  {handle}
-                </Text>
-                <View style={styles.memberRow}>
-                  <Users size={13} color={textSecondaryColor} />
                   <Text
-                    style={[styles.memberText, { color: textSecondaryColor }]}
+                    style={[
+                      styles.joinButtonText,
+                      { color: isJoined ? text : "#fff" },
+                    ]}
                   >
-                    {communityMembers.toLocaleString()} members
+                    {isJoined ? "Joined" : "Join"}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <Text style={[styles.communityName, { color: text }]}>
+                {community.name}
+              </Text>
+              <Text style={[styles.communityHandle, { color: secondary }]}>
+                {handle}
+              </Text>
+
+              {community.description && (
+                <Text style={[styles.description, { color: text }]}>
+                  {community.description}
+                </Text>
+              )}
+
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, { color: text }]}>
+                    {members.toLocaleString()}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: secondary }]}>
+                    Members
+                  </Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, { color: text }]}>
+                    <View style={styles.onlineDot} />{" "}
+                    {Math.max(1, Math.floor(members * 0.1)).toLocaleString()}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: secondary }]}>
+                    Online
                   </Text>
                 </View>
               </View>
             </View>
 
-            <View style={styles.sortRow}>
-              <Pressable
-                onPress={() => setSortMode("hot")}
-                style={({ pressed }) => [
-                  styles.sortChip,
-                  {
-                    backgroundColor:
-                      sortMode === "hot" ? selectedChipBg : chipBg,
-                    borderColor:
-                      sortMode === "hot" ? selectedChipBorder : softBorder,
-                    opacity: pressed ? 0.92 : 1,
-                  },
-                ]}
-              >
-                <Flame
-                  size={13}
-                  color={sortMode === "hot" ? primaryColor : textSecondaryColor}
-                />
-                <Text
-                  style={[
-                    styles.sortText,
-                    {
-                      color:
-                        sortMode === "hot" ? primaryColor : textSecondaryColor,
-                    },
-                  ]}
-                >
-                  Hot
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setSortMode("new")}
-                style={({ pressed }) => [
-                  styles.sortChip,
-                  {
-                    backgroundColor:
-                      sortMode === "new" ? selectedChipBg : chipBg,
-                    borderColor:
-                      sortMode === "new" ? selectedChipBorder : softBorder,
-                    opacity: pressed ? 0.92 : 1,
-                  },
-                ]}
-              >
-                <Clock3
-                  size={13}
-                  color={sortMode === "new" ? primaryColor : textSecondaryColor}
-                />
-                <Text
-                  style={[
-                    styles.sortText,
-                    {
-                      color:
-                        sortMode === "new" ? primaryColor : textSecondaryColor,
-                    },
-                  ]}
-                >
-                  New
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setSortMode("top")}
-                style={({ pressed }) => [
-                  styles.sortChip,
-                  {
-                    backgroundColor:
-                      sortMode === "top" ? selectedChipBg : chipBg,
-                    borderColor:
-                      sortMode === "top" ? selectedChipBorder : softBorder,
-                    opacity: pressed ? 0.92 : 1,
-                  },
-                ]}
-              >
-                <Trophy
-                  size={13}
-                  color={sortMode === "top" ? primaryColor : textSecondaryColor}
-                />
-                <Text
-                  style={[
-                    styles.sortText,
-                    {
-                      color:
-                        sortMode === "top" ? primaryColor : textSecondaryColor,
-                    },
-                  ]}
-                >
-                  Top
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        }
-        ListEmptyComponent={
-          postsLoading ? (
-            <AppLoader
-              size="small"
-              color={textSecondaryColor}
-              style={{ paddingVertical: 20 }}
-            />
-          ) : (
+            {/* SORT BAR */}
             <View
               style={[
-                styles.emptyCard,
-                { backgroundColor: cardColor, borderColor: softBorder },
+                styles.sortBar,
+                {
+                  borderBottomWidth: 1,
+                  borderTopWidth: 1,
+                  borderColor: border,
+                  backgroundColor:
+                    bg === "#000000" || bg === "#121212" ? "#000" : "#f8f9fa",
+                },
               ]}
             >
-              <Text style={[styles.emptyText, { color: textSecondaryColor }]}>
-                No posts in this community yet.
-              </Text>
+              <SortTab
+                label="Hot"
+                Icon={Flame}
+                active={sort === "hot"}
+                onPress={() => setSort("hot")}
+                primary={text}
+                secondary={secondary}
+              />
+              <SortTab
+                label="New"
+                Icon={Clock3}
+                active={sort === "new"}
+                onPress={() => setSort("new")}
+                primary={text}
+                secondary={secondary}
+              />
+              <SortTab
+                label="Top"
+                Icon={Trophy}
+                active={sort === "top"}
+                onPress={() => setSort("top")}
+                primary={text}
+                secondary={secondary}
+              />
             </View>
-          )
+          </View>
         }
       />
     </View>
   );
 }
 
+function SortTab({ label, Icon, active, onPress, primary, secondary }: any) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.sortTab, active && { backgroundColor: "#8882" }]}
+    >
+      <Icon size={16} color={active ? primary : secondary} />
+      <Text
+        style={{
+          color: active ? primary : secondary,
+          fontWeight: "600",
+          fontSize: 13,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1 },
+
+  center: {
     flex: 1,
-  },
-  topBar: {
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  navButton: {
-    width: 34,
-    height: 34,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 17,
   },
-  topBarTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  topBarTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  topBarSubtitle: {
-    fontSize: 11,
-    marginTop: 1,
-  },
-  listHeaderWrap: {
-    paddingBottom: 10,
-    gap: 10,
-  },
-  heroCard: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 12,
+
+  headerFloating: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
-  communityAvatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+
+  headerLeft: {
+    flexDirection: "row",
+  },
+
+  headerRight: {
+    flexDirection: "row",
+    gap: 12,
+  },
+
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  bannerContainer: {
+    width: "100%",
+    height: 160,
+  },
+  bannerImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  infoContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+
+  avatarRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginTop: -38,
+    marginBottom: 12,
+  },
+
+  avatar: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: "#e5e7eb",
   },
-  heroTextWrap: {
-    flex: 1,
-    minWidth: 0,
+
+  joinButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 24,
+    marginBottom: 4,
   },
+
+  joinButtonText: {
+    fontWeight: "700",
+    fontSize: 14,
+  },
+
   communityName: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "800",
+    marginBottom: 2,
   },
+
   communityHandle: {
-    fontSize: 12,
-    marginTop: 1,
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: 12,
   },
-  memberRow: {
-    marginTop: 5,
+
+  description: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+
+  statsRow: {
+    flexDirection: "row",
+    gap: 24,
+  },
+
+  statItem: {
+    flexDirection: "column",
+  },
+
+  statValue: {
+    fontSize: 14,
+    fontWeight: "700",
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
   },
-  memberText: {
+
+  statLabel: {
     fontSize: 12,
-    fontWeight: "500",
+    marginTop: 2,
   },
-  sortRow: {
+
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#44d13d",
+    marginRight: 4,
+  },
+
+  sortBar: {
     flexDirection: "row",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     gap: 8,
   },
-  sortChip: {
+
+  sortTab: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-  },
-  sortText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  emptyCard: {
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 20,
-    paddingHorizontal: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyText: {
-    fontSize: 14,
-    textAlign: "center",
-  },
-  stateScreen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-  },
-  stateText: {
-    fontSize: 16,
-    textAlign: "center",
-  },
-  backCta: {
-    marginTop: 16,
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  backCtaText: {
-    fontSize: 14,
-    fontWeight: "700",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
 });
