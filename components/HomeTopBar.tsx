@@ -1,7 +1,16 @@
+import { BlurView } from "expo-blur";
 import { Search } from "lucide-react-native";
 import React from "react";
-import { Image, StyleSheet, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  Image,
+  InteractionManager,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useColorScheme,
+} from "react-native";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
 
@@ -14,13 +23,46 @@ export default function HomeTopBar({
   searchQuery,
   onChangeSearchQuery,
 }: HomeTopBarProps) {
-  const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const [androidBlurReady, setAndroidBlurReady] = React.useState(
+    Platform.OS !== "android",
+  );
+
+  React.useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const interactionTask = InteractionManager.runAfterInteractions(() => {
+      timeoutId = setTimeout(() => {
+        setAndroidBlurReady(true);
+      }, 320);
+    });
+
+    return () => {
+      interactionTask.cancel();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
 
   const text = useThemeColor({}, "text");
   const border = useThemeColor({}, "border");
   const input = useThemeColor({}, "input");
   const placeholder = useThemeColor({}, "placeholder");
-  const tabBarBackground = useThemeColor({}, "tabBarBackground");
+  const tabBarBackgroundColor = useThemeColor(
+    {
+      light: "rgba(255, 255, 255, 0.68)",
+      dark: "rgba(39, 39, 42, 0.7)",
+    },
+    "tabBarBackground",
+  );
+  const tabBarNativeOverlayColor = useThemeColor(
+    {
+      light: "rgba(255, 255, 255, 0.12)",
+      dark: "rgba(39, 39, 42, 0.18)",
+    },
+    "tabBarBackground",
+  );
   const tabBarBorder = useThemeColor({}, "tabBarBorder");
 
   return (
@@ -30,10 +72,37 @@ export default function HomeTopBar({
         {
           paddingTop: 20,
           borderColor: tabBarBorder,
-          backgroundColor: tabBarBackground,
+          backgroundColor:
+            Platform.OS === "web" ? tabBarBackgroundColor : "transparent",
+          ...(Platform.OS === "web"
+            ? ({
+                backdropFilter: "saturate(140%) blur(18px)",
+                WebkitBackdropFilter: "saturate(140%) blur(18px)",
+              } as any)
+            : {}),
         },
       ]}
     >
+      {Platform.OS !== "web" ? (
+        <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+          {androidBlurReady ? (
+            <BlurView
+              tint={isDark ? "systemMaterialDark" : "systemMaterialLight"}
+              intensity={70}
+              experimentalBlurMethod={
+                Platform.OS === "android" ? "dimezisBlurView" : undefined
+              }
+              style={StyleSheet.absoluteFillObject}
+            />
+          ) : null}
+          <View
+            style={[
+              StyleSheet.absoluteFillObject,
+              { backgroundColor: tabBarNativeOverlayColor },
+            ]}
+          />
+        </View>
+      ) : null}
       <Inner
         text={text}
         border={border}
@@ -102,14 +171,14 @@ const styles = StyleSheet.create({
     zIndex: 10,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
     borderWidth: 1,
     overflow: "hidden",
   },
   content: {
     gap: 10,
-    paddingBottom: 12,
+    paddingBottom: 16,
     paddingHorizontal: 12,
   },
   brandRow: {
@@ -130,7 +199,7 @@ const styles = StyleSheet.create({
   searchWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
+    borderWidth: 0,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 10,
