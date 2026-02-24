@@ -248,7 +248,13 @@ function CommunityCard({
 
         <View style={styles.cardText}>
           <View style={styles.cardTitleRow}>
-            <Text style={[styles.name, { color: textColor }]} numberOfLines={1}>
+            <Text
+              style={[styles.name, { color: textColor }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              adjustsFontSizeToFit
+              minimumFontScale={0.86}
+            >
               {item.name}
             </Text>
             {isNew ? (
@@ -671,7 +677,7 @@ export default function CommunitiesScreen() {
         ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
         contentContainerStyle={[
           styles.listContent,
-          { paddingTop: insets.top + 100, paddingBottom: 104 + insets.bottom },
+          { paddingTop: 148, paddingBottom: 104 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
         refreshing={refreshing}
@@ -697,9 +703,7 @@ export default function CommunitiesScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.discoveryRail}
                 >
-                  {popularGroups.map((group, index) => {
-                    const memberCount = memberCountByGroup[group.id] ?? 0;
-
+                  {popularGroups.map((group) => {
                     return (
                       <Pressable
                         key={group.id}
@@ -709,7 +713,6 @@ export default function CommunitiesScreen() {
                           {
                             backgroundColor: raisedSurfaceColor,
                             borderColor: softBorderColor,
-                            marginLeft: index === 0 ? 0 : 8,
                             transform: [{ scale: pressed ? 0.98 : 1 }],
                             opacity: pressed ? 0.96 : 1,
                           },
@@ -723,17 +726,11 @@ export default function CommunitiesScreen() {
                           <Text
                             style={[styles.discoveryName, { color: textColor }]}
                             numberOfLines={1}
+                            ellipsizeMode="tail"
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.82}
                           >
                             {group.name}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.discoveryMeta,
-                              { color: textSecondaryColor },
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {memberCount.toLocaleString()} members
                           </Text>
                         </View>
                       </Pressable>
@@ -945,11 +942,13 @@ const styles = StyleSheet.create({
   discoveryRail: {
     alignItems: "center",
     paddingRight: 4,
+    gap: 12,
   },
   discoveryCard: {
     width: 168,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     borderRadius: 12,
     borderWidth: 1,
     paddingHorizontal: 10,
@@ -961,18 +960,17 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     backgroundColor: "#e5e7eb",
+    alignSelf: "center",
   },
   discoveryTextWrap: {
     flex: 1,
     minWidth: 0,
+    justifyContent: "center",
+    alignSelf: "center",
   },
   discoveryName: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  discoveryMeta: {
-    marginTop: 1,
-    fontSize: 10,
+    fontSize: 11,
+    fontWeight: "600",
   },
   card: {
     borderRadius: 14,

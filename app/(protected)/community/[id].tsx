@@ -6,17 +6,45 @@ import { fetchGroupById, type Group } from "@/lib/actions/groups";
 import { supabase } from "@/lib/Supabase";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronLeft, Users } from "lucide-react-native";
-import { useEffect, useState } from "react";
-import { FlatList, Text, TouchableOpacity, View } from "react-native";
+import { ChevronLeft, Clock3, Flame, Trophy, Users } from "lucide-react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useColorScheme,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PAGE_SIZE = 5;
+
+type SortMode = "hot" | "new" | "top";
+
+const toRgba = (hex: string, alpha: number) => {
+  const normalized = hex.replace("#", "");
+  if (!/^[A-Fa-f0-9]{6}$/.test(normalized)) return hex;
+
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const postScore = (post: Post) => (post.upvotes ?? 0) - (post.downvotes ?? 0);
 
 export default function CommunityPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+
   const communityId = Array.isArray(id) ? id[0] : id;
   const [community, setCommunity] = useState<Group | null>(null);
+  const [communityMembers, setCommunityMembers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -24,18 +52,27 @@ export default function CommunityPage() {
   const [postsRefreshing, setPostsRefreshing] = useState(false);
   const [postsPage, setPostsPage] = useState(1);
   const [postsHasMore, setPostsHasMore] = useState(true);
+  const [sortMode, setSortMode] = useState<SortMode>("hot");
 
   const backgroundColor = useThemeColor({}, "background");
   const cardColor = useThemeColor({}, "card");
   const textColor = useThemeColor({}, "text");
   const textSecondaryColor = useThemeColor({}, "textSecondary");
+  const borderColor = useThemeColor({}, "border");
+  const inputColor = useThemeColor({}, "input");
   const primaryColor = useThemeColor({}, "primary");
   const primaryForeground = useThemeColor({}, "primaryForeground");
-  const borderColor = useThemeColor({}, "border");
+
+  const topBarBg = toRgba(cardColor, isDark ? 0.88 : 0.96);
+  const softBorder = toRgba(borderColor, isDark ? 0.56 : 0.32);
+  const chipBg = toRgba(inputColor, isDark ? 0.52 : 0.8);
+  const selectedChipBg = toRgba(primaryColor, isDark ? 0.2 : 0.12);
+  const selectedChipBorder = toRgba(primaryColor, isDark ? 0.52 : 0.36);
 
   useEffect(() => {
     if (!communityId) {
       setCommunity(null);
+      setCommunityMembers(0);
       setLoading(false);
       setLoadError("Community not found");
       return;
@@ -47,7 +84,13 @@ export default function CommunityPage() {
       setLoading(true);
       setLoadError(null);
 
-      const { data, error } = await fetchGroupById(communityId);
+      const [{ data, error }, membersResult] = await Promise.all([
+        fetchGroupById(communityId),
+        supabase
+          .from("user_groups")
+          .select("group_id", { count: "exact", head: true })
+          .eq("group_id", communityId),
+      ]);
 
       if (!isMounted) return;
 
@@ -58,10 +101,16 @@ export default function CommunityPage() {
         setCommunity(data ?? null);
       }
 
+      if (!membersResult.error) {
+        setCommunityMembers(membersResult.count ?? 0);
+      } else {
+        setCommunityMembers(0);
+      }
+
       setLoading(false);
     };
 
-    loadCommunity();
+    void loadCommunity();
 
     return () => {
       isMounted = false;
@@ -73,7 +122,7 @@ export default function CommunityPage() {
     setPosts([]);
     setPostsPage(1);
     setPostsHasMore(true);
-    fetchCommunityPosts(communityId, 1, true);
+    void fetchCommunityPosts(communityId, 1, true);
   }, [communityId]);
 
   const fetchCommunityPosts = async (
@@ -98,12 +147,7 @@ export default function CommunityPage() {
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
     if (error || !data) {
-      if (error) {
-        console.log("Community posts fetch error:", error);
-      }
-      if (replace) {
-        setPosts([]);
-      }
+      if (replace) setPosts([]);
       setPostsLoading(false);
       return;
     }
@@ -142,15 +186,36 @@ export default function CommunityPage() {
     setPostsLoading(false);
   };
 
+  const visiblePosts = useMemo(() => {
+    const sorted = [...posts];
+
+    if (sortMode === "new") {
+      sorted.sort(
+        (a, b) =>
+          new Date(b.created_at ?? 0).getTime() -
+          new Date(a.created_at ?? 0).getTime(),
+      );
+      return sorted;
+    }
+
+    if (sortMode === "top") {
+      sorted.sort((a, b) => postScore(b) - postScore(a));
+      return sorted;
+    }
+
+    sorted.sort((a, b) => {
+      const scoreDiff = postScore(b) - postScore(a);
+      if (scoreDiff !== 0) return scoreDiff;
+
+      return (b.nr_of_comments ?? 0) - (a.nr_of_comments ?? 0);
+    });
+
+    return sorted;
+  }, [posts, sortMode]);
+
   if (loading) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor,
-          padding: 20,
-        }}
-      >
+      <View style={[styles.stateScreen, { backgroundColor }]}>
         <AppLoader size="large" color={textColor} fullScreen />
       </View>
     );
@@ -158,70 +223,74 @@ export default function CommunityPage() {
 
   if (!community) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor,
-          justifyContent: "center",
-          alignItems: "center",
-          padding: 20,
-        }}
-      >
-        <Text style={{ color: textColor, fontSize: 16 }}>
+      <View style={[styles.stateScreen, { backgroundColor }]}>
+        <Text style={[styles.stateText, { color: textColor }]}>
           {loadError ?? "Community not found"}
         </Text>
-        <TouchableOpacity
+        <Pressable
           onPress={() => router.back()}
-          style={{
-            marginTop: 16,
-            paddingVertical: 10,
-            paddingHorizontal: 20,
-            backgroundColor: primaryColor,
-            borderRadius: 12,
-          }}
+          style={({ pressed }) => [
+            styles.backCta,
+            { backgroundColor: primaryColor, opacity: pressed ? 0.92 : 1 },
+          ]}
         >
-          <Text style={{ color: primaryForeground, fontWeight: "600" }}>
+          <Text style={[styles.backCtaText, { color: primaryForeground }]}>
             Go back
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     );
   }
 
+  const handle = community.id ? `r/${community.id}` : "r/community";
+
   return (
-    <View style={{ flex: 1, backgroundColor }}>
-      {/* Header */}
+    <View style={[styles.container, { backgroundColor }]}>
       <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderBottomWidth: 1,
-          borderBottomColor: borderColor,
-        }}
+        style={[
+          styles.topBar,
+          {
+            paddingTop: insets.top + 6,
+            backgroundColor: topBarBg,
+            borderBottomColor: softBorder,
+          },
+        ]}
       >
-        <TouchableOpacity
+        <Pressable
           onPress={() => router.back()}
-          style={{ padding: 8, marginRight: 8 }}
+          style={({ pressed }) => [
+            styles.navButton,
+            { opacity: pressed ? 0.75 : 1 },
+          ]}
         >
-          <ChevronLeft size={24} color={textColor} />
-        </TouchableOpacity>
-        <Text
-          style={{ color: textColor, fontSize: 18, fontWeight: "600" }}
-          numberOfLines={1}
-        >
-          {community.name}
-        </Text>
+          <ChevronLeft size={22} color={textColor} />
+        </Pressable>
+
+        <View style={styles.topBarTextWrap}>
+          <Text
+            style={[styles.topBarTitle, { color: textColor }]}
+            numberOfLines={1}
+          >
+            {handle}
+          </Text>
+          <Text style={[styles.topBarSubtitle, { color: textSecondaryColor }]}>
+            {communityMembers.toLocaleString()} members
+          </Text>
+        </View>
       </View>
 
       <FlatList
-        data={posts}
+        data={visiblePosts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <PostListItem post={item} hideJoinButton={true} />
         )}
-        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        contentContainerStyle={{
+          paddingHorizontal: 14,
+          paddingTop: 12,
+          paddingBottom: 24 + insets.bottom,
+        }}
         showsVerticalScrollIndicator={false}
         refreshing={postsRefreshing}
         onRefresh={async () => {
@@ -232,67 +301,139 @@ export default function CommunityPage() {
         }}
         onEndReached={() => {
           if (!communityId || postsLoading || !postsHasMore) return;
-          fetchCommunityPosts(communityId, postsPage + 1);
+          void fetchCommunityPosts(communityId, postsPage + 1);
         }}
         onEndReachedThreshold={0.5}
         ListHeaderComponent={
-          <View>
-            {/* Community hero */}
+          <View style={styles.listHeaderWrap}>
             <View
-              style={{
-                backgroundColor: cardColor,
-                borderRadius: 20,
-                padding: 24,
-                alignItems: "center",
-                borderWidth: 1,
-                borderColor,
-              }}
+              style={[
+                styles.heroCard,
+                { backgroundColor: cardColor, borderColor: softBorder },
+              ]}
             >
               <Image
                 source={{ uri: community.image ?? undefined }}
-                style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: 40,
-                  backgroundColor: "#e5e7eb",
-                }}
+                style={styles.communityAvatar}
               />
-              <Text
-                style={{
-                  color: textColor,
-                  fontSize: 22,
-                  fontWeight: "700",
-                  marginTop: 14,
-                }}
-              >
-                {community.name}
-              </Text>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginTop: 6,
-                }}
-              >
-                <Users size={18} color={textSecondaryColor} />
+
+              <View style={styles.heroTextWrap}>
                 <Text
-                  style={{
-                    color: textSecondaryColor,
-                    fontSize: 14,
-                    marginLeft: 6,
-                  }}
+                  style={[styles.communityName, { color: textColor }]}
+                  numberOfLines={1}
                 >
-                  Community
+                  {community.name}
                 </Text>
+                <Text
+                  style={[
+                    styles.communityHandle,
+                    { color: textSecondaryColor },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {handle}
+                </Text>
+                <View style={styles.memberRow}>
+                  <Users size={13} color={textSecondaryColor} />
+                  <Text
+                    style={[styles.memberText, { color: textSecondaryColor }]}
+                  >
+                    {communityMembers.toLocaleString()} members
+                  </Text>
+                </View>
               </View>
             </View>
 
-            <View style={{ marginTop: 24, marginBottom: 12 }}>
-              <Text
-                style={{ color: textColor, fontSize: 18, fontWeight: "700" }}
+            <View style={styles.sortRow}>
+              <Pressable
+                onPress={() => setSortMode("hot")}
+                style={({ pressed }) => [
+                  styles.sortChip,
+                  {
+                    backgroundColor:
+                      sortMode === "hot" ? selectedChipBg : chipBg,
+                    borderColor:
+                      sortMode === "hot" ? selectedChipBorder : softBorder,
+                    opacity: pressed ? 0.92 : 1,
+                  },
+                ]}
               >
-                Posts
-              </Text>
+                <Flame
+                  size={13}
+                  color={sortMode === "hot" ? primaryColor : textSecondaryColor}
+                />
+                <Text
+                  style={[
+                    styles.sortText,
+                    {
+                      color:
+                        sortMode === "hot" ? primaryColor : textSecondaryColor,
+                    },
+                  ]}
+                >
+                  Hot
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setSortMode("new")}
+                style={({ pressed }) => [
+                  styles.sortChip,
+                  {
+                    backgroundColor:
+                      sortMode === "new" ? selectedChipBg : chipBg,
+                    borderColor:
+                      sortMode === "new" ? selectedChipBorder : softBorder,
+                    opacity: pressed ? 0.92 : 1,
+                  },
+                ]}
+              >
+                <Clock3
+                  size={13}
+                  color={sortMode === "new" ? primaryColor : textSecondaryColor}
+                />
+                <Text
+                  style={[
+                    styles.sortText,
+                    {
+                      color:
+                        sortMode === "new" ? primaryColor : textSecondaryColor,
+                    },
+                  ]}
+                >
+                  New
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setSortMode("top")}
+                style={({ pressed }) => [
+                  styles.sortChip,
+                  {
+                    backgroundColor:
+                      sortMode === "top" ? selectedChipBg : chipBg,
+                    borderColor:
+                      sortMode === "top" ? selectedChipBorder : softBorder,
+                    opacity: pressed ? 0.92 : 1,
+                  },
+                ]}
+              >
+                <Trophy
+                  size={13}
+                  color={sortMode === "top" ? primaryColor : textSecondaryColor}
+                />
+                <Text
+                  style={[
+                    styles.sortText,
+                    {
+                      color:
+                        sortMode === "top" ? primaryColor : textSecondaryColor,
+                    },
+                  ]}
+                >
+                  Top
+                </Text>
+              </Pressable>
             </View>
           </View>
         }
@@ -301,15 +442,144 @@ export default function CommunityPage() {
             <AppLoader
               size="small"
               color={textSecondaryColor}
-              style={{ paddingVertical: 24 }}
+              style={{ paddingVertical: 20 }}
             />
           ) : (
-            <Text style={{ color: textSecondaryColor, fontSize: 14 }}>
-              No posts in this community yet.
-            </Text>
+            <View
+              style={[
+                styles.emptyCard,
+                { backgroundColor: cardColor, borderColor: softBorder },
+              ]}
+            >
+              <Text style={[styles.emptyText, { color: textSecondaryColor }]}>
+                No posts in this community yet.
+              </Text>
+            </View>
           )
         }
       />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  topBar: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  navButton: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 17,
+  },
+  topBarTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  topBarTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  topBarSubtitle: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  listHeaderWrap: {
+    paddingBottom: 10,
+    gap: 10,
+  },
+  heroCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
+  communityAvatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#e5e7eb",
+  },
+  heroTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  communityName: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  communityHandle: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  memberRow: {
+    marginTop: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  memberText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  sortRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  sortChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  sortText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  emptyCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 20,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: "center",
+  },
+  stateScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  stateText: {
+    fontSize: 16,
+    textAlign: "center",
+  },
+  backCta: {
+    marginTop: 16,
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  backCtaText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+});
