@@ -1,21 +1,68 @@
+import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
 import React from "react";
-import { View, useColorScheme } from "react-native";
+import {
+  InteractionManager,
+  Platform,
+  StyleSheet,
+  View,
+  useColorScheme,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { Bell, Home, Plus, User, Users } from "lucide-react-native";
 
+const TAB_BAR_RADIUS = 28;
+
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const [androidBlurReady, setAndroidBlurReady] = React.useState(
+    Platform.OS !== "android",
+  );
+
+  React.useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const interactionTask = InteractionManager.runAfterInteractions(() => {
+      timeoutId = setTimeout(() => {
+        setAndroidBlurReady(true);
+      }, 320);
+    });
+
+    return () => {
+      interactionTask.cancel();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
 
   const tabBarActiveTint = useThemeColor({}, "tabIconSelected");
   const tabBarInactiveTint = useThemeColor({}, "tabIconDefault");
-  const tabBarBackgroundColor = useThemeColor({}, "tabBarBackground");
-  const tabBarBorder = useThemeColor({}, "tabBarBorder");
+  const tabBarBackgroundColor = useThemeColor(
+    {
+      light: "rgba(255, 255, 255, 0.68)",
+      dark: "rgba(39, 39, 42, 0.7)",
+    },
+    "tabBarBackground",
+  );
+  const tabBarNativeOverlayColor = useThemeColor(
+    {
+      light: "rgba(255, 255, 255, 0.12)",
+      dark: "rgba(39, 39, 42, 0.18)",
+    },
+    "tabBarBackground",
+  );
+  const tabBarBorder = useThemeColor(
+    {
+      light: "rgba(148, 163, 184, 0.35)",
+      dark: "rgba(228, 228, 231, 0.2)",
+    },
+    "tabBarBorder",
+  );
 
   const renderIcon = (
     Icon: React.ComponentType<{ size?: number; color?: string }>,
@@ -50,6 +97,35 @@ export default function TabLayout() {
 
         tabBarActiveTintColor: tabBarActiveTint,
         tabBarInactiveTintColor: tabBarInactiveTint,
+        tabBarBackground:
+          Platform.OS === "web"
+            ? undefined
+            : () => (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    StyleSheet.absoluteFillObject,
+                    { borderRadius: TAB_BAR_RADIUS, overflow: "hidden" },
+                  ]}
+                >
+                  {androidBlurReady ? (
+                    <BlurView
+                      tint={isDark ? "systemMaterialDark" : "systemMaterialLight"}
+                      intensity={70}
+                      experimentalBlurMethod={
+                        Platform.OS === "android" ? "dimezisBlurView" : undefined
+                      }
+                      style={StyleSheet.absoluteFillObject}
+                    />
+                  ) : null}
+                  <View
+                    style={[
+                      StyleSheet.absoluteFillObject,
+                      { backgroundColor: tabBarNativeOverlayColor },
+                    ]}
+                  />
+                </View>
+              ),
 
         tabBarStyle: {
           position: "absolute",
@@ -60,11 +136,18 @@ export default function TabLayout() {
           paddingTop: 6,
           paddingBottom: 8,
 
-          backgroundColor: tabBarBackgroundColor,
-          borderRadius: 28,
+          backgroundColor:
+            Platform.OS === "web" ? tabBarBackgroundColor : "transparent",
+          borderRadius: TAB_BAR_RADIUS,
           borderWidth: 1.5,
           borderColor: tabBarBorder,
           overflow: "hidden",
+          ...(Platform.OS === "web"
+            ? ({
+                backdropFilter: "saturate(140%) blur(18px)",
+                WebkitBackdropFilter: "saturate(140%) blur(18px)",
+              } as any)
+            : {}),
 
           shadowColor: "#000",
           shadowOpacity: isDark ? 0.35 : 0.18,
