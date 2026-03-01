@@ -1,4 +1,5 @@
 import { useUser } from "@clerk/clerk-expo";
+import { useFocusEffect } from "expo-router";
 import { ArrowBigDown, ArrowBigUp } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Pressable, Text } from "react-native";
@@ -114,52 +115,74 @@ export default function VoteButtons({
     setDownvotes(initialDownvotes || 0);
   }, [initialDownvotes]);
 
-  useEffect(() => {
-    if (!user?.id || !itemId) {
+  const loadVoteState = useCallback(async () => {
+    if (!itemId) return;
+
+    const { up, down } = VOTE_CONFIG[type];
+    const idField = up.idField;
+
+    // Fetch current counts and (if logged in) user's vote state in parallel
+    const [upCountRes, downCountRes, upUserRes, downUserRes] = await Promise.all([
+      supabase
+        .from(up.table)
+        .select("*", { count: "exact", head: true })
+        .eq(idField, itemId),
+      supabase
+        .from(down.table)
+        .select("*", { count: "exact", head: true })
+        .eq(idField, itemId),
+      user?.id
+        ? supabase
+            .from(up.table)
+            .select("user_id")
+            .eq(idField, itemId)
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      user?.id
+        ? supabase
+            .from(down.table)
+            .select("user_id")
+            .eq(idField, itemId)
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+
+    // Always update counts from server so they stay in sync across screens
+    setUpvotes(upCountRes.count ?? 0);
+    setDownvotes(downCountRes.count ?? 0);
+
+    if (!user?.id) {
       setVoteState("none");
       return;
     }
 
-    let cancelled = false;
-    const { up, down } = VOTE_CONFIG[type];
+    if (upUserRes.error || downUserRes.error) {
+      console.log("Vote state error:", upUserRes.error || downUserRes.error);
+      return;
+    }
 
-    const loadVoteState = async () => {
-      const [upRes, downRes] = await Promise.all([
-        supabase
-          .from(up.table)
-          .select("user_id")
-          .eq(up.idField, itemId)
-          .eq("user_id", user.id)
-          .maybeSingle(),
-        supabase
-          .from(down.table)
-          .select("user_id")
-          .eq(down.idField, itemId)
-          .eq("user_id", user.id)
-          .maybeSingle(),
-      ]);
-
-      if (cancelled) return;
-      if (upRes.error || downRes.error) {
-        console.log("Vote state error:", upRes.error || downRes.error);
-        return;
-      }
-
-      if (upRes.data) {
-        setVoteState("up");
-      } else if (downRes.data) {
-        setVoteState("down");
-      } else {
-        setVoteState("none");
-      }
-    };
-
-    loadVoteState();
-
-    return () => {
-      cancelled = true;
-    };
+    if (upUserRes.data) {
+      setVoteState("up");
+    } else if (downUserRes.data) {
+      setVoteState("down");
+    } else {
+      setVoteState("none");
+    }
   }, [itemId, type, user?.id]);
+
+  useEffect(() => {
+    loadVoteState();
+  }, [loadVoteState]);
+
+  // Refetch vote state when screen gains focus so highlight stays in sync
+  // (e.g. user liked on community screen, then navigates to home)
+  useFocusEffect(
+    useCallback(() => {
+      loadVoteState();
+    }, [loadVoteState])
+  );
 
   const removeUpvote = async () => {
     if (!user?.id) return false;
