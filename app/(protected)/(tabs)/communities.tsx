@@ -344,8 +344,8 @@ export default function CommunitiesScreen() {
   const softBorderColor = toRgba(borderColor, isDark ? 0.54 : 0.3);
   const subtleBorderColor = toRgba(borderColor, isDark ? 0.42 : 0.22);
   const avatarTintColor = toRgba(inputBg, isDark ? 0.72 : 0.9);
-  const heroIconBg = toRgba(tintColor, isDark ? 0.2 : 0.1);
-  const heroIconBorder = toRgba(tintColor, isDark ? 0.42 : 0.22);
+  const heroIconBg = toRgba(borderColor, isDark ? 0.25 : 0.12);
+  const heroIconBorder = toRgba(borderColor, isDark ? 0.4 : 0.2);
   const countPillBg = toRgba(tintColor, isDark ? 0.18 : 0.09);
   const filterShellColor = toRgba(inputBg, isDark ? 0.56 : 0.86);
   const segmentBase = toRgba(textColor, isDark ? 0.08 : 0.035);

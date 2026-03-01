@@ -62,6 +62,7 @@ export default function CommunityPage() {
   const border = useThemeColor({}, "border");
   const card = useThemeColor({}, "card");
   const primary = useThemeColor({}, "primary");
+  const secondaryColor = useThemeColor({}, "secondary");
   const tint = useThemeColor({}, "tint");
   const backgroundSecondary = useThemeColor({}, "backgroundSecondary");
   const success = useThemeColor({}, "success");
@@ -165,8 +166,20 @@ export default function CommunityPage() {
 
   if (!community) {
     return (
-      <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={{ color: text }}>Community not found</Text>
+      <View style={[styles.container, styles.center, { backgroundColor: bg }]}>
+        <Text style={[styles.notFoundTitle, { color: text }]}>
+          Community not found
+        </Text>
+        <Text style={[styles.notFoundSubtext, { color: secondary }]}>
+          This community may have been removed or the link is invalid.
+        </Text>
+        <Pressable
+          onPress={() => router.back()}
+          style={[styles.backButton, { backgroundColor: primary }]}
+        >
+          <ChevronLeft size={20} color="#fff" />
+          <Text style={styles.backButtonLabel}>Go back</Text>
+        </Pressable>
       </View>
     );
   }
@@ -190,19 +203,24 @@ export default function CommunityPage() {
         )}
         showsVerticalScrollIndicator={false}
         onEndReached={() => {
-          if (!postsLoading && hasMore) fetchPosts(page + 1);
+          if (
+            !postsLoading &&
+            hasMore &&
+            sortedPosts.length > 0
+          )
+            fetchPosts(page + 1);
         }}
-        onEndReachedThreshold={0.5}
+        onEndReachedThreshold={0.3}
         ListEmptyComponent={
           postsLoading && posts.length === 0 ? (
-            <View style={[styles.emptyContainer, { backgroundColor: bg }]}>
+            <View style={[styles.emptyContainer, styles.emptyContainerGrow, { backgroundColor: bg }]}>
               <ActivityIndicator size="large" color={tint} />
               <Text style={[styles.emptyText, { color: secondary }]}>
                 Loading posts…
               </Text>
             </View>
           ) : !postsLoading && posts.length === 0 ? (
-            <View style={[styles.emptyContainer, { backgroundColor: bg }]}>
+            <View style={[styles.emptyContainer, styles.emptyContainerGrow, { backgroundColor: bg }]}>
               <Text style={[styles.emptyTitle, { color: text }]}>
                 No posts yet
               </Text>
@@ -230,10 +248,11 @@ export default function CommunityPage() {
                     source={{ uri: community.banner_image }}
                     style={styles.bannerImage}
                     contentFit="cover"
+                    contentPosition="top"
                   />
                 ) : (
                   <LinearGradient
-                    colors={[tint, "#4a90e2"]}
+                    colors={[primary, secondaryColor]}
                     style={styles.bannerImage}
                   />
                 )}
@@ -262,74 +281,104 @@ export default function CommunityPage() {
               </View>
             </View>
 
-            {/* COMMUNITY INFO */}
-            <View style={styles.infoContainer}>
-              <View style={styles.avatarRow}>
-                <Image
-                  source={{ uri: community.image ?? undefined }}
-                  style={[styles.avatar, { borderColor: card, borderWidth: 4 }]}
-                />
-              </View>
+            {/* COMMUNITY INFO CARD - clearly recognizable pop-up card */}
+            <View
+              style={[
+                styles.infoCard,
+                {
+                  backgroundColor: card,
+                  borderColor: border,
+                  shadowColor: "#000",
+                  shadowOpacity: 0.12,
+                  shadowRadius: 16,
+                  elevation: 8,
+                },
+              ]}
+            >
+              <View style={styles.infoCardInner}>
+                <View style={styles.avatarRow}>
+                  <View style={[styles.avatarRing, { borderColor: primary }]}>
+                    <Image
+                      source={{ uri: community.image ?? undefined }}
+                      style={[styles.avatar, { borderColor: card }]}
+                    />
+                  </View>
+                </View>
 
-              <View style={styles.nameRow}>
-                <Text
-                  style={[styles.communityName, { color: text }]}
-                  numberOfLines={1}
-                >
-                  {community.name}
-                </Text>
-                {communityId ? (
-                  <View style={styles.joinButtonWrap}>
-                    <JoinCommunityButton communityId={communityId} />
+                <View style={styles.infoCardContent}>
+                <View style={styles.nameRow}>
+                  <View style={styles.nameBlock}>
+                    <Text
+                      style={[styles.communityName, { color: text }]}
+                      numberOfLines={1}
+                    >
+                      {community.name}
+                    </Text>
+                    <Text
+                      style={[styles.communityHandle, { color: secondary }]}
+                      numberOfLines={1}
+                    >
+                      {handle}
+                    </Text>
+                  </View>
+                  {communityId ? (
+                    <View style={styles.joinButtonWrap}>
+                      <JoinCommunityButton communityId={communityId} />
+                    </View>
+                  ) : null}
+                </View>
+
+                {community.description ? (
+                  <View
+                    style={[
+                      styles.descriptionBlock,
+                      {
+                        backgroundColor: backgroundSecondary,
+                        borderLeftColor: primary,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.description, { color: text }]}
+                      numberOfLines={4}
+                    >
+                      {community.description}
+                    </Text>
                   </View>
                 ) : null}
-              </View>
-              <Text style={[styles.communityHandle, { color: secondary }]}>
-                {handle}
-              </Text>
 
-              {community.description && (
-                <Text style={[styles.description, { color: text }]}>
-                  {community.description}
-                </Text>
-              )}
-
-              {/* Members & Online - compact, left-aligned, rounded card */}
-              <View
-                style={[
-                  styles.statsRow,
-                  { backgroundColor: backgroundSecondary, borderColor: border },
-                ]}
-              >
-                <View style={styles.statPill}>
-                  <Users size={14} color={primary} />
-                  <Text style={[styles.statValue, { color: text }]}>
-                    {members.toLocaleString()}
-                  </Text>
-                  <Text style={[styles.statLabel, { color: secondary }]}>
-                    Members
-                  </Text>
-                </View>
-                <View
-                  style={[styles.statDivider, { backgroundColor: border }]}
-                />
-                <View style={styles.statPill}>
+                <View style={styles.statsRow}>
+                  <View style={styles.statPill}>
+                    <Users size={14} color={primary} />
+                    <Text style={[styles.statValue, { color: text }]}>
+                      {members.toLocaleString()}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: secondary }]}>
+                      Members
+                    </Text>
+                  </View>
                   <View
-                    style={[styles.onlineDot, { backgroundColor: success }]}
+                    style={[styles.statDivider, { backgroundColor: border }]}
                   />
-                  <Text style={[styles.statValue, { color: text }]}>
-                    {Math.max(1, Math.floor(members * 0.1)).toLocaleString()}
-                  </Text>
-                  <Text style={[styles.statLabel, { color: secondary }]}>
-                    Online
-                  </Text>
+                  <View style={styles.statPill}>
+                    <View
+                      style={[styles.onlineDot, { backgroundColor: success }]}
+                    />
+                    <Text style={[styles.statValue, { color: text }]}>
+                      {Math.max(1, Math.floor(members * 0.1)).toLocaleString()}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: secondary }]}>
+                      Online
+                    </Text>
+                  </View>
+                </View>
                 </View>
               </View>
             </View>
 
-            {/* Sort tabs - same style as profile tabs */}
+            {/* Sort tabs - no card bg, just tabs row */}
             <View
-              style={[styles.sortTabsContainer, { backgroundColor: card }]}
+              style={styles.sortTabsContainer}
               onLayout={(e) => setSortTabWidth(e.nativeEvent.layout.width)}
             >
               {sortTabWidth > 0 && (
@@ -491,6 +540,37 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  notFoundTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+
+  notFoundSubtext: {
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 24,
+    paddingHorizontal: 32,
+    lineHeight: 20,
+  },
+
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+
+  backButtonLabel: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
   toolbar: {
     paddingHorizontal: 12,
   },
@@ -553,65 +633,101 @@ const styles = StyleSheet.create({
     height: "100%",
   },
 
-  infoContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+  infoCard: {
+    marginHorizontal: 14,
+    marginTop: -28,
+    marginBottom: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: "visible",
+    shadowOffset: { width: 0, height: 6 },
+  },
+
+  infoCardInner: {
+    paddingHorizontal: 20,
+    paddingTop: 32,
+    paddingBottom: 18,
+  },
+
+  infoCardContent: {
+    overflow: "hidden",
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
 
   avatarRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "flex-end",
-    marginTop: -38,
-    marginBottom: 12,
+    marginTop: -56,
+    marginBottom: 14,
+  },
+
+  avatarRing: {
+    padding: 3,
+    borderRadius: 999,
+    borderWidth: 2.5,
+    alignSelf: "flex-start",
   },
 
   avatar: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
     backgroundColor: "#e5e7eb",
   },
 
   nameRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 2,
+    marginBottom: 10,
+  },
+
+  nameBlock: {
+    flex: 1,
+    minWidth: 0,
   },
 
   joinButtonWrap: {
-    paddingTop: 5,
+    paddingTop: 2,
     flexShrink: 0,
   },
 
   communityName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
-    flex: 1,
+    letterSpacing: 0.3,
   },
 
   communityHandle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
-    marginBottom: 12,
+    marginTop: 2,
+    opacity: 0.85,
+  },
+
+  descriptionBlock: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+    borderRadius: 12,
+    borderLeftWidth: 4,
   },
 
   description: {
-    fontSize: 14,
+    fontSize: 13,
     lineHeight: 20,
-    marginBottom: 16,
   },
 
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 0,
     marginTop: 4,
     gap: 10,
   },
@@ -652,6 +768,10 @@ const styles = StyleSheet.create({
     minHeight: 200,
   },
 
+  emptyContainerGrow: {
+    flexGrow: 1,
+  },
+
   emptyTitle: {
     fontSize: 18,
     fontWeight: "700",
@@ -672,12 +792,12 @@ const styles = StyleSheet.create({
 
   sortTabsContainer: {
     flexDirection: "row",
-    borderRadius: 16,
     padding: 4,
     minHeight: 52,
     marginTop: 12,
+    marginHorizontal: 14,
+    marginBottom: 4,
     position: "relative",
-    overflow: "hidden",
   },
 
   sortTabIndicator: {
