@@ -1,11 +1,10 @@
 import AppLoader from "@/components/AppLoader";
+import JoinCommunityButton from "@/components/JoinCommunityButton";
 import PostListItem from "@/components/PostListItem";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
-import { joinUserGroup, leaveUserGroup } from "@/lib/actions/user-groups";
 import { supabase } from "@/lib/Supabase";
-import { useUser } from "@clerk/clerk-expo";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -20,6 +19,7 @@ import {
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Pressable,
@@ -40,7 +40,6 @@ export default function CommunityPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user: clerkUser } = useUser();
 
   const communityId = Array.isArray(id) ? id[0] : id;
 
@@ -53,7 +52,6 @@ export default function CommunityPage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [postsLoading, setPostsLoading] = useState(false);
-  const [isJoined, setIsJoined] = useState(false);
 
   const bg = useThemeColor({}, "background");
   const text = useThemeColor({}, "text");
@@ -62,14 +60,14 @@ export default function CommunityPage() {
   const card = useThemeColor({}, "card");
   const primary = useThemeColor({}, "primary");
   const tint = useThemeColor({}, "tint");
+  const backgroundSecondary = useThemeColor({}, "backgroundSecondary");
+  const success = useThemeColor({}, "success");
 
   useEffect(() => {
     if (!communityId) return;
 
     const load = async () => {
       setLoading(true);
-
-      const userId = clerkUser?.id;
 
       const [{ data }, membersRes] = await Promise.all([
         fetchGroupById(communityId),
@@ -81,12 +79,6 @@ export default function CommunityPage() {
 
       setCommunity(data ?? null);
       if (membersRes.count !== null) setMembers(membersRes.count);
-
-      if (userId && membersRes.data) {
-        const joined = membersRes.data.some((m) => m.user_id === userId);
-        setIsJoined(joined);
-      }
-
       setLoading(false);
     };
 
@@ -143,35 +135,6 @@ export default function CommunityPage() {
     return arr;
   }, [posts, sort]);
 
-  const toggleJoin = async () => {
-    const userId = clerkUser?.id;
-    if (!userId || !communityId) return;
-
-    if (isJoined) {
-      const { error } = await leaveUserGroup({
-        userId,
-        groupId: communityId,
-      });
-      if (!error) {
-        setIsJoined(false);
-        setMembers((prev) => Math.max(0, prev - 1));
-      } else {
-        console.log("Error leaving group", error);
-      }
-    } else {
-      const { error } = await joinUserGroup({
-        userId,
-        groupId: communityId,
-      });
-      if (!error) {
-        setIsJoined(true);
-        setMembers((prev) => prev + 1);
-      } else {
-        console.log("Error joining group", error);
-      }
-    }
-  };
-
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
@@ -192,27 +155,13 @@ export default function CommunityPage() {
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
-      {/* Floating Transparent Top Bar over banner */}
-      <View style={[styles.headerFloating, { paddingTop: insets.top + 6 }]}>
-        <View style={styles.headerLeft}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn}>
-            <ChevronLeft size={28} color="#fff" />
-          </Pressable>
-        </View>
-        <View style={styles.headerRight}>
-          <Pressable style={styles.iconBtn}>
-            <Search size={22} color="#fff" />
-          </Pressable>
-          <Pressable style={styles.iconBtn}>
-            <Share size={22} color="#fff" />
-          </Pressable>
-          <Pressable style={styles.iconBtn}>
-            <MoreHorizontal size={22} color="#fff" />
-          </Pressable>
-        </View>
-      </View>
-
       <FlatList
+        style={styles.list}
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + 24,
+          paddingHorizontal: 12,
+          flexGrow: 1,
+        }}
         data={sortedPosts}
         keyExtractor={(i) => i.id}
         renderItem={({ item }) => <PostListItem post={item} hideJoinButton />}
@@ -221,31 +170,73 @@ export default function CommunityPage() {
           if (!postsLoading && hasMore) fetchPosts(page + 1);
         }}
         onEndReachedThreshold={0.5}
-        ItemSeparatorComponent={() => (
-          <View
-            style={{
-              height: 8,
-              backgroundColor:
-                bg === "#000000" || bg === "#121212" ? "#000" : "#e5e5e5",
-            }}
-          /> // Reddit spacing between cards
-        )}
+        ListEmptyComponent={
+          postsLoading && posts.length === 0 ? (
+            <View style={[styles.emptyContainer, { backgroundColor: bg }]}>
+              <ActivityIndicator size="large" color={tint} />
+              <Text style={[styles.emptyText, { color: secondary }]}>
+                Loading posts…
+              </Text>
+            </View>
+          ) : !postsLoading && posts.length === 0 ? (
+            <View style={[styles.emptyContainer, { backgroundColor: bg }]}>
+              <Text style={[styles.emptyTitle, { color: text }]}>
+                No posts yet
+              </Text>
+              <Text style={[styles.emptyText, { color: secondary }]}>
+                Be the first to share something in this community.
+              </Text>
+            </View>
+          ) : null
+        }
+        ItemSeparatorComponent={() => null}
+        ListFooterComponent={
+          postsLoading && posts.length > 0 ? (
+            <View style={[styles.footerLoader, { backgroundColor: bg }]}>
+              <ActivityIndicator size="small" color={tint} />
+            </View>
+          ) : null
+        }
         ListHeaderComponent={
-          <View style={{ backgroundColor: card, marginBottom: 8 }}>
-            {/* BANNER */}
-            <View style={styles.bannerContainer}>
-              {community.banner_image ? (
-                <Image
-                  source={{ uri: community.banner_image }}
-                  style={styles.bannerImage}
-                  contentFit="cover"
-                />
-              ) : (
-                <LinearGradient
-                  colors={[tint, "#4a90e2"]}
-                  style={styles.bannerImage}
-                />
-              )}
+          <View style={[styles.headerCard, { backgroundColor: card }]}>
+            {/* Banner with transparent bar overlaid on top - both scroll with content */}
+            <View style={styles.bannerWrap}>
+              <View style={styles.bannerContainer}>
+                {community.banner_image ? (
+                  <Image
+                    source={{ uri: community.banner_image }}
+                    style={styles.bannerImage}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <LinearGradient
+                    colors={[tint, "#4a90e2"]}
+                    style={styles.bannerImage}
+                  />
+                )}
+              </View>
+              <View style={styles.toolbarOverlay} pointerEvents="box-none">
+                <View style={styles.toolbarRow}>
+                  <Pressable
+                    onPress={() => router.back()}
+                    style={styles.iconBtn}
+                    hitSlop={8}
+                  >
+                    <ChevronLeft size={26} color="#fff" />
+                  </Pressable>
+                  <View style={styles.toolbarRight}>
+                    <Pressable style={styles.iconBtn} hitSlop={8}>
+                      <Search size={22} color="#fff" />
+                    </Pressable>
+                    <Pressable style={styles.iconBtn} hitSlop={8}>
+                      <Share size={22} color="#fff" />
+                    </Pressable>
+                    <Pressable style={styles.iconBtn} hitSlop={8}>
+                      <MoreHorizontal size={22} color="#fff" />
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
             </View>
 
             {/* COMMUNITY INFO */}
@@ -255,31 +246,21 @@ export default function CommunityPage() {
                   source={{ uri: community.image ?? undefined }}
                   style={[styles.avatar, { borderColor: card, borderWidth: 4 }]}
                 />
-                <Pressable
-                  onPress={toggleJoin}
-                  style={[
-                    styles.joinButton,
-                    {
-                      backgroundColor: isJoined ? "transparent" : tint,
-                      borderColor: isJoined ? border : tint,
-                      borderWidth: 1,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.joinButtonText,
-                      { color: isJoined ? text : "#fff" },
-                    ]}
-                  >
-                    {isJoined ? "Joined" : "Join"}
-                  </Text>
-                </Pressable>
               </View>
 
-              <Text style={[styles.communityName, { color: text }]}>
-                {community.name}
-              </Text>
+              <View style={styles.nameRow}>
+                <Text
+                  style={[styles.communityName, { color: text }]}
+                  numberOfLines={1}
+                >
+                  {community.name}
+                </Text>
+                {communityId ? (
+                  <View style={styles.joinButtonWrap}>
+                    <JoinCommunityButton communityId={communityId} />
+                  </View>
+                ) : null}
+              </View>
               <Text style={[styles.communityHandle, { color: secondary }]}>
                 {handle}
               </Text>
@@ -300,10 +281,14 @@ export default function CommunityPage() {
                   </Text>
                 </View>
                 <View style={styles.statItem}>
-                  <Text style={[styles.statValue, { color: text }]}>
-                    <View style={styles.onlineDot} />{" "}
-                    {Math.max(1, Math.floor(members * 0.1)).toLocaleString()}
-                  </Text>
+                  <View style={styles.statValueRow}>
+                    <View
+                      style={[styles.onlineDot, { backgroundColor: success }]}
+                    />
+                    <Text style={[styles.statValue, { color: text }]}>
+                      {Math.max(1, Math.floor(members * 0.1)).toLocaleString()}
+                    </Text>
+                  </View>
                   <Text style={[styles.statLabel, { color: secondary }]}>
                     Online
                   </Text>
@@ -319,8 +304,7 @@ export default function CommunityPage() {
                   borderBottomWidth: 1,
                   borderTopWidth: 1,
                   borderColor: border,
-                  backgroundColor:
-                    bg === "#000000" || bg === "#121212" ? "#000" : "#f8f9fa",
+                  backgroundColor: backgroundSecondary,
                 },
               ]}
             >
@@ -356,19 +340,35 @@ export default function CommunityPage() {
   );
 }
 
-function SortTab({ label, Icon, active, onPress, primary, secondary }: any) {
+type SortTabProps = {
+  label: string;
+  Icon: React.ComponentType<{ size: number; color: string }>;
+  active: boolean;
+  onPress: () => void;
+  primary: string;
+  secondary: string;
+};
+
+function SortTab({
+  label,
+  Icon,
+  active,
+  onPress,
+  primary,
+  secondary,
+}: SortTabProps) {
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.sortTab, active && { backgroundColor: "#8882" }]}
+      style={({ pressed }) => [
+        styles.sortTab,
+        active && styles.sortTabActive,
+        pressed && styles.sortTabPressed,
+      ]}
     >
       <Icon size={16} color={active ? primary : secondary} />
       <Text
-        style={{
-          color: active ? primary : secondary,
-          fontWeight: "600",
-          fontSize: 13,
-        }}
+        style={[styles.sortTabLabel, { color: active ? primary : secondary }]}
       >
         {label}
       </Text>
@@ -385,34 +385,52 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  headerFloating: {
+  toolbar: {
+    paddingHorizontal: 12,
+  },
+
+  bannerWrap: {
+    position: "relative",
+  },
+
+  toolbarOverlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 10,
+    backgroundColor: "transparent",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
+  toolbarRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 8,
   },
 
-  headerLeft: {
+  toolbarRight: {
     flexDirection: "row",
-  },
-
-  headerRight: {
-    flexDirection: "row",
-    gap: 12,
+    alignItems: "center",
+    gap: 4,
   },
 
   iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.35)",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  list: {
+    flex: 1,
+  },
+
+  headerCard: {
+    marginBottom: 10,
+    overflow: "hidden",
   },
 
   bannerContainer: {
@@ -444,22 +462,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#e5e7eb",
   },
 
-  joinButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 24,
-    marginBottom: 4,
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 2,
   },
 
-  joinButtonText: {
-    fontWeight: "700",
-    fontSize: 14,
+  joinButtonWrap: {
+    paddingTop: 5,
+    flexShrink: 0,
   },
 
   communityName: {
     fontSize: 22,
     fontWeight: "800",
-    marginBottom: 2,
+    flex: 1,
   },
 
   communityHandle: {
@@ -483,11 +502,15 @@ const styles = StyleSheet.create({
     flexDirection: "column",
   },
 
+  statValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
   statValue: {
     fontSize: 14,
     fontWeight: "700",
-    flexDirection: "row",
-    alignItems: "center",
   },
 
   statLabel: {
@@ -499,8 +522,32 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#44d13d",
-    marginRight: 4,
+  },
+
+  emptyContainer: {
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 200,
+  },
+
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+
+  emptyText: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+
+  footerLoader: {
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   sortBar: {
@@ -514,8 +561,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+
+  sortTabActive: {
+    backgroundColor: "rgba(128, 128, 128, 0.15)",
+  },
+
+  sortTabPressed: {
+    opacity: 0.8,
+  },
+
+  sortTabLabel: {
+    fontWeight: "600",
+    fontSize: 13,
   },
 });
