@@ -16,15 +16,18 @@ import {
   Search,
   Share,
   Trophy,
+  Users,
 } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -62,6 +65,23 @@ export default function CommunityPage() {
   const tint = useThemeColor({}, "tint");
   const backgroundSecondary = useThemeColor({}, "backgroundSecondary");
   const success = useThemeColor({}, "success");
+  const primaryForeground = useThemeColor({}, "primaryForeground");
+
+  const [sortTabWidth, setSortTabWidth] = useState(0);
+  const sortTabIndex = useRef(new Animated.Value(0)).current;
+  const hotTabScale = useRef(new Animated.Value(1)).current;
+  const newTabScale = useRef(new Animated.Value(1)).current;
+  const topTabScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const index = sort === "hot" ? 0 : sort === "new" ? 1 : 2;
+    Animated.spring(sortTabIndex, {
+      toValue: index,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 10,
+    }).start();
+  }, [sort, sortTabIndex]);
 
   useEffect(() => {
     if (!communityId) return;
@@ -159,12 +179,15 @@ export default function CommunityPage() {
         style={styles.list}
         contentContainerStyle={{
           paddingBottom: insets.bottom + 24,
-          paddingHorizontal: 12,
           flexGrow: 1,
         }}
         data={sortedPosts}
         keyExtractor={(i) => i.id}
-        renderItem={({ item }) => <PostListItem post={item} hideJoinButton />}
+        renderItem={({ item }) => (
+          <View style={styles.postListItemWrap}>
+            <PostListItem post={item} hideJoinButton />
+          </View>
+        )}
         showsVerticalScrollIndicator={false}
         onEndReached={() => {
           if (!postsLoading && hasMore) fetchPosts(page + 1);
@@ -271,8 +294,15 @@ export default function CommunityPage() {
                 </Text>
               )}
 
-              <View style={styles.statsRow}>
-                <View style={styles.statItem}>
+              {/* Members & Online - compact, left-aligned, rounded card */}
+              <View
+                style={[
+                  styles.statsRow,
+                  { backgroundColor: backgroundSecondary, borderColor: border },
+                ]}
+              >
+                <View style={styles.statPill}>
+                  <Users size={14} color={primary} />
                   <Text style={[styles.statValue, { color: text }]}>
                     {members.toLocaleString()}
                   </Text>
@@ -280,15 +310,16 @@ export default function CommunityPage() {
                     Members
                   </Text>
                 </View>
-                <View style={styles.statItem}>
-                  <View style={styles.statValueRow}>
-                    <View
-                      style={[styles.onlineDot, { backgroundColor: success }]}
-                    />
-                    <Text style={[styles.statValue, { color: text }]}>
-                      {Math.max(1, Math.floor(members * 0.1)).toLocaleString()}
-                    </Text>
-                  </View>
+                <View
+                  style={[styles.statDivider, { backgroundColor: border }]}
+                />
+                <View style={styles.statPill}>
+                  <View
+                    style={[styles.onlineDot, { backgroundColor: success }]}
+                  />
+                  <Text style={[styles.statValue, { color: text }]}>
+                    {Math.max(1, Math.floor(members * 0.1)).toLocaleString()}
+                  </Text>
                   <Text style={[styles.statLabel, { color: secondary }]}>
                     Online
                   </Text>
@@ -296,83 +327,158 @@ export default function CommunityPage() {
               </View>
             </View>
 
-            {/* SORT BAR */}
+            {/* Sort tabs - same style as profile tabs */}
             <View
-              style={[
-                styles.sortBar,
-                {
-                  borderBottomWidth: 1,
-                  borderTopWidth: 1,
-                  borderColor: border,
-                  backgroundColor: backgroundSecondary,
-                },
-              ]}
+              style={[styles.sortTabsContainer, { backgroundColor: card }]}
+              onLayout={(e) => setSortTabWidth(e.nativeEvent.layout.width)}
             >
-              <SortTab
-                label="Hot"
-                Icon={Flame}
-                active={sort === "hot"}
-                onPress={() => setSort("hot")}
-                primary={text}
-                secondary={secondary}
-              />
-              <SortTab
-                label="New"
-                Icon={Clock3}
-                active={sort === "new"}
-                onPress={() => setSort("new")}
-                primary={text}
-                secondary={secondary}
-              />
-              <SortTab
-                label="Top"
-                Icon={Trophy}
-                active={sort === "top"}
-                onPress={() => setSort("top")}
-                primary={text}
-                secondary={secondary}
-              />
+              {sortTabWidth > 0 && (
+                <Animated.View
+                  style={[
+                    styles.sortTabIndicator,
+                    {
+                      width: (sortTabWidth - 8) / 3,
+                      backgroundColor: primary,
+                    },
+                    {
+                      transform: [
+                        {
+                          translateX: sortTabIndex.interpolate({
+                            inputRange: [0, 1, 2],
+                            outputRange: [
+                              0,
+                              (sortTabWidth - 8) / 3,
+                              ((sortTabWidth - 8) / 3) * 2,
+                            ],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              )}
+              <Animated.View
+                style={[
+                  styles.sortTabWrap,
+                  { transform: [{ scale: hotTabScale }] },
+                ]}
+              >
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={() => {
+                    Animated.sequence([
+                      Animated.timing(hotTabScale, {
+                        toValue: 0.95,
+                        duration: 100,
+                        useNativeDriver: true,
+                      }),
+                      Animated.timing(hotTabScale, {
+                        toValue: 1,
+                        duration: 100,
+                        useNativeDriver: true,
+                      }),
+                    ]).start();
+                    setSort("hot");
+                  }}
+                  style={styles.sortTabButton}
+                >
+                  <Flame
+                    size={18}
+                    color={sort === "hot" ? primaryForeground : secondary}
+                  />
+                  <Text
+                    style={[
+                      styles.sortTabLabel,
+                      { color: sort === "hot" ? primaryForeground : secondary },
+                    ]}
+                  >
+                    Hot
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+              <Animated.View
+                style={[
+                  styles.sortTabWrap,
+                  { transform: [{ scale: newTabScale }] },
+                ]}
+              >
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={() => {
+                    Animated.sequence([
+                      Animated.timing(newTabScale, {
+                        toValue: 0.95,
+                        duration: 100,
+                        useNativeDriver: true,
+                      }),
+                      Animated.timing(newTabScale, {
+                        toValue: 1,
+                        duration: 100,
+                        useNativeDriver: true,
+                      }),
+                    ]).start();
+                    setSort("new");
+                  }}
+                  style={styles.sortTabButton}
+                >
+                  <Clock3
+                    size={18}
+                    color={sort === "new" ? primaryForeground : secondary}
+                  />
+                  <Text
+                    style={[
+                      styles.sortTabLabel,
+                      { color: sort === "new" ? primaryForeground : secondary },
+                    ]}
+                  >
+                    New
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+              <Animated.View
+                style={[
+                  styles.sortTabWrap,
+                  { transform: [{ scale: topTabScale }] },
+                ]}
+              >
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={() => {
+                    Animated.sequence([
+                      Animated.timing(topTabScale, {
+                        toValue: 0.95,
+                        duration: 100,
+                        useNativeDriver: true,
+                      }),
+                      Animated.timing(topTabScale, {
+                        toValue: 1,
+                        duration: 100,
+                        useNativeDriver: true,
+                      }),
+                    ]).start();
+                    setSort("top");
+                  }}
+                  style={styles.sortTabButton}
+                >
+                  <Trophy
+                    size={18}
+                    color={sort === "top" ? primaryForeground : secondary}
+                  />
+                  <Text
+                    style={[
+                      styles.sortTabLabel,
+                      { color: sort === "top" ? primaryForeground : secondary },
+                    ]}
+                  >
+                    Top
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
             </View>
           </View>
         }
       />
     </View>
-  );
-}
-
-type SortTabProps = {
-  label: string;
-  Icon: React.ComponentType<{ size: number; color: string }>;
-  active: boolean;
-  onPress: () => void;
-  primary: string;
-  secondary: string;
-};
-
-function SortTab({
-  label,
-  Icon,
-  active,
-  onPress,
-  primary,
-  secondary,
-}: SortTabProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.sortTab,
-        active && styles.sortTabActive,
-        pressed && styles.sortTabPressed,
-      ]}
-    >
-      <Icon size={16} color={active ? primary : secondary} />
-      <Text
-        style={[styles.sortTabLabel, { color: active ? primary : secondary }]}
-      >
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -426,6 +532,11 @@ const styles = StyleSheet.create({
 
   list: {
     flex: 1,
+  },
+
+  postListItemWrap: {
+    paddingHorizontal: 14,
+    marginTop: 4,
   },
 
   headerCard: {
@@ -495,27 +606,36 @@ const styles = StyleSheet.create({
 
   statsRow: {
     flexDirection: "row",
-    gap: 24,
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 4,
+    gap: 10,
   },
 
-  statItem: {
-    flexDirection: "column",
-  },
-
-  statValueRow: {
+  statPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
 
+  statDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+  },
+
   statValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
   },
 
   statLabel: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 11,
+    marginTop: 0,
+    fontWeight: "500",
   },
 
   onlineDot: {
@@ -550,32 +670,40 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  sortBar: {
+  sortTabsContainer: {
     flexDirection: "row",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    borderRadius: 16,
+    padding: 4,
+    minHeight: 52,
+    marginTop: 12,
+    position: "relative",
+    overflow: "hidden",
   },
 
-  sortTab: {
+  sortTabIndicator: {
+    position: "absolute",
+    left: 4,
+    top: 4,
+    bottom: 4,
+    borderRadius: 12,
+  },
+
+  sortTabWrap: {
+    flex: 1,
+    zIndex: 1,
+  },
+
+  sortTabButton: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-
-  sortTabActive: {
-    backgroundColor: "rgba(128, 128, 128, 0.15)",
-  },
-
-  sortTabPressed: {
-    opacity: 0.8,
+    justifyContent: "center",
+    paddingVertical: 12,
+    gap: 8,
   },
 
   sortTabLabel: {
     fontWeight: "600",
-    fontSize: 13,
+    fontSize: 14,
   },
 });
