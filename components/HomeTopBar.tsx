@@ -63,7 +63,6 @@ export default function HomeTopBar({
     },
     "tabBarBackground",
   );
-  const tabBarBorder = useThemeColor({}, "tabBarBorder");
 
   return (
     <View
@@ -71,7 +70,6 @@ export default function HomeTopBar({
         styles.container,
         {
           paddingTop: 20,
-          borderColor: tabBarBorder,
           backgroundColor:
             Platform.OS === "web" ? tabBarBackgroundColor : "transparent",
           ...(Platform.OS === "web"
@@ -173,7 +171,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 0,
     borderBottomLeftRadius: 36,
     borderBottomRightRadius: 36,
-    borderWidth: 1,
     overflow: "hidden",
   },
   content: {
