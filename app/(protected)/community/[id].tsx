@@ -10,19 +10,15 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ChevronLeft,
-  Clock3,
-  Flame,
   MoreHorizontal,
   Search,
   Share,
-  Trophy,
   Users,
 } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
-  Dimensions,
   FlatList,
   Pressable,
   StyleSheet,
@@ -32,12 +28,16 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const { width } = Dimensions.get("window");
-
 const PAGE_SIZE = 8;
-type SortMode = "hot" | "new" | "top";
 
-const score = (p: Post) => (p.upvotes ?? 0) - (p.downvotes ?? 0);
+type CommunityTab = "posts" | "members";
+
+type MemberUser = {
+  id: string;
+  name: string;
+  image: string | null;
+  joined_at: string | null;
+};
 
 export default function CommunityPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -51,10 +51,17 @@ export default function CommunityPage() {
   const [loading, setLoading] = useState(true);
 
   const [posts, setPosts] = useState<Post[]>([]);
-  const [sort, setSort] = useState<SortMode>("hot");
+  const [activeTab, setActiveTab] = useState<CommunityTab>("posts");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [memberUsers, setMemberUsers] = useState<MemberUser[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+
+  const [tabContainerWidth, setTabContainerWidth] = useState(0);
+  const tabIndex = useRef(new Animated.Value(0)).current;
+  const postsTabScale = useRef(new Animated.Value(1)).current;
+  const membersTabScale = useRef(new Animated.Value(1)).current;
 
   const bg = useThemeColor({}, "background");
   const text = useThemeColor({}, "text");
@@ -68,21 +75,16 @@ export default function CommunityPage() {
   const success = useThemeColor({}, "success");
   const primaryForeground = useThemeColor({}, "primaryForeground");
 
-  const [sortTabWidth, setSortTabWidth] = useState(0);
-  const sortTabIndex = useRef(new Animated.Value(0)).current;
-  const hotTabScale = useRef(new Animated.Value(1)).current;
-  const newTabScale = useRef(new Animated.Value(1)).current;
-  const topTabScale = useRef(new Animated.Value(1)).current;
-
+  // Slide indicator when active tab changes
   useEffect(() => {
-    const index = sort === "hot" ? 0 : sort === "new" ? 1 : 2;
-    Animated.spring(sortTabIndex, {
+    const index = activeTab === "posts" ? 0 : 1;
+    Animated.spring(tabIndex, {
       toValue: index,
       useNativeDriver: true,
       tension: 65,
       friction: 10,
     }).start();
-  }, [sort, sortTabIndex]);
+  }, [activeTab, tabIndex]);
 
   useEffect(() => {
     if (!communityId) return;
@@ -135,26 +137,63 @@ export default function CommunityPage() {
     setPostsLoading(false);
   };
 
-  useEffect(() => {
-    fetchPosts(1, true);
-  }, [communityId]);
+  const fetchMembers = async () => {
+    if (!communityId) return;
+    setMembersLoading(true);
 
-  const sortedPosts = useMemo(() => {
-    const arr = [...posts];
+    const { data, error } = await supabase
+      .from("user_groups")
+      .select(
+        `
+        joined_at,
+        user:users(id, name, image)
+      `,
+      )
+      .eq("group_id", communityId)
+      .order("joined_at", { ascending: false });
 
-    if (sort === "new") {
-      arr.sort(
-        (a, b) =>
-          new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime(),
-      );
-    } else if (sort === "top") {
-      arr.sort((a, b) => score(b) - score(a));
-    } else {
-      arr.sort((a, b) => score(b) - score(a));
+    if (!error && data) {
+      const mapped = (data as any[])
+        .map((row) =>
+          row.user
+            ? {
+                id: row.user.id as string,
+                name: row.user.name as string,
+                image: (row.user.image as string) ?? null,
+                joined_at: (row.joined_at as string) ?? null,
+              }
+            : null,
+        )
+        .filter(Boolean) as MemberUser[];
+      setMemberUsers(mapped);
     }
 
-    return arr;
-  }, [posts, sort]);
+    setMembersLoading(false);
+  };
+
+  useEffect(() => {
+    fetchPosts(1, true);
+    fetchMembers();
+  }, [communityId]);
+
+  const handleTabPress = (tab: CommunityTab) => {
+    const scaleAnim = tab === "posts" ? postsTabScale : membersTabScale;
+
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    setActiveTab(tab);
+  };
 
   if (loading) {
     return (
@@ -194,45 +233,118 @@ export default function CommunityPage() {
           paddingBottom: insets.bottom + 24,
           flexGrow: 1,
         }}
-        data={sortedPosts}
+        data={activeTab === "posts" ? posts : (memberUsers as any)}
         keyExtractor={(i) => i.id}
-        renderItem={({ item }) => (
-          <View style={styles.postListItemWrap}>
-            <PostListItem post={item} hideJoinButton />
-          </View>
-        )}
+        renderItem={({ item }) =>
+          activeTab === "posts" ? (
+            <View style={styles.postListItemWrap}>
+              <PostListItem post={item as Post} hideJoinButton />
+            </View>
+          ) : (
+            <View style={styles.memberItemWrap}>
+              <Image
+                source={{
+                  uri:
+                    (item as unknown as MemberUser).image ??
+                    "https://via.placeholder.com/80",
+                }}
+                style={styles.memberAvatar}
+              />
+              <View style={styles.memberInfo}>
+                <Text
+                  style={[styles.memberName, { color: text }]}
+                  numberOfLines={1}
+                >
+                  {(item as unknown as MemberUser).name}
+                </Text>
+                {(item as unknown as MemberUser).joined_at && (
+                  <Text
+                    style={[styles.memberMeta, { color: secondary }]}
+                    numberOfLines={1}
+                  >
+                    Joined{" "}
+                    {(item as unknown as MemberUser).joined_at?.slice(0, 10)}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )
+        }
         showsVerticalScrollIndicator={false}
         onEndReached={() => {
           if (
+            activeTab === "posts" &&
             !postsLoading &&
             hasMore &&
-            sortedPosts.length > 0
+            posts.length > 0
           )
             fetchPosts(page + 1);
         }}
         onEndReachedThreshold={0.3}
         ListEmptyComponent={
-          postsLoading && posts.length === 0 ? (
-            <View style={[styles.emptyContainer, styles.emptyContainerGrow, { backgroundColor: bg }]}>
+          activeTab === "posts" ? (
+            postsLoading && posts.length === 0 ? (
+              <View
+                style={[
+                  styles.emptyContainer,
+                  styles.emptyContainerGrow,
+                  { backgroundColor: bg },
+                ]}
+              >
+                <ActivityIndicator size="large" color={tint} />
+                <Text style={[styles.emptyText, { color: secondary }]}>
+                  Loading posts…
+                </Text>
+              </View>
+            ) : !postsLoading && posts.length === 0 ? (
+              <View
+                style={[
+                  styles.emptyContainer,
+                  styles.emptyContainerGrow,
+                  { backgroundColor: bg },
+                ]}
+              >
+                <Text style={[styles.emptyTitle, { color: text }]}>
+                  No posts yet
+                </Text>
+                <Text style={[styles.emptyText, { color: secondary }]}>
+                  Be the first to share something in this community.
+                </Text>
+              </View>
+            ) : null
+          ) : membersLoading ? (
+            <View
+              style={[
+                styles.emptyContainer,
+                styles.emptyContainerGrow,
+                { backgroundColor: bg },
+              ]}
+            >
               <ActivityIndicator size="large" color={tint} />
               <Text style={[styles.emptyText, { color: secondary }]}>
-                Loading posts…
+                Loading members…
               </Text>
             </View>
-          ) : !postsLoading && posts.length === 0 ? (
-            <View style={[styles.emptyContainer, styles.emptyContainerGrow, { backgroundColor: bg }]}>
+          ) : memberUsers.length === 0 ? (
+            <View
+              style={[
+                styles.emptyContainer,
+                styles.emptyContainerGrow,
+                { backgroundColor: bg },
+              ]}
+            >
               <Text style={[styles.emptyTitle, { color: text }]}>
-                No posts yet
+                No members yet
               </Text>
               <Text style={[styles.emptyText, { color: secondary }]}>
-                Be the first to share something in this community.
+                When people join this community, they will appear here.
               </Text>
             </View>
           ) : null
         }
         ItemSeparatorComponent={() => null}
         ListFooterComponent={
-          postsLoading && posts.length > 0 ? (
+          activeTab === "posts" && postsLoading && posts.length > 0 ? (
             <View style={[styles.footerLoader, { backgroundColor: bg }]}>
               <ActivityIndicator size="small" color={tint} />
             </View>
@@ -306,220 +418,161 @@ export default function CommunityPage() {
                 </View>
 
                 <View style={styles.infoCardContent}>
-                <View style={styles.nameRow}>
-                  <View style={styles.nameBlock}>
-                    <Text
-                      style={[styles.communityName, { color: text }]}
-                      numberOfLines={1}
-                    >
-                      {community.name}
-                    </Text>
-                    <Text
-                      style={[styles.communityHandle, { color: secondary }]}
-                      numberOfLines={1}
-                    >
-                      {handle}
-                    </Text>
+                  <View style={styles.nameRow}>
+                    <View style={styles.nameBlock}>
+                      <Text
+                        style={[styles.communityName, { color: text }]}
+                        numberOfLines={1}
+                      >
+                        {community.name}
+                      </Text>
+                      <Text
+                        style={[styles.communityHandle, { color: secondary }]}
+                        numberOfLines={1}
+                      >
+                        {handle}
+                      </Text>
+                    </View>
+                    {communityId ? (
+                      <View style={styles.joinButtonWrap}>
+                        <JoinCommunityButton communityId={communityId} />
+                      </View>
+                    ) : null}
                   </View>
-                  {communityId ? (
-                    <View style={styles.joinButtonWrap}>
-                      <JoinCommunityButton communityId={communityId} />
+
+                  {community.description ? (
+                    <View
+                      style={[
+                        styles.descriptionBlock,
+                        {
+                          backgroundColor: backgroundSecondary,
+                          borderLeftColor: primary,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.description, { color: text }]}
+                        numberOfLines={4}
+                      >
+                        {community.description}
+                      </Text>
                     </View>
                   ) : null}
-                </View>
 
-                {community.description ? (
-                  <View
-                    style={[
-                      styles.descriptionBlock,
-                      {
-                        backgroundColor: backgroundSecondary,
-                        borderLeftColor: primary,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[styles.description, { color: text }]}
-                      numberOfLines={4}
-                    >
-                      {community.description}
-                    </Text>
-                  </View>
-                ) : null}
-
-                <View style={styles.statsRow}>
-                  <View style={styles.statPill}>
-                    <Users size={14} color={primary} />
-                    <Text style={[styles.statValue, { color: text }]}>
-                      {members.toLocaleString()}
-                    </Text>
-                    <Text style={[styles.statLabel, { color: secondary }]}>
-                      Members
-                    </Text>
-                  </View>
-                  <View
-                    style={[styles.statDivider, { backgroundColor: border }]}
-                  />
-                  <View style={styles.statPill}>
+                  <View style={styles.statsRow}>
+                    <View style={styles.statPill}>
+                      <Users size={14} color={primary} />
+                      <Text style={[styles.statValue, { color: text }]}>
+                        {members.toLocaleString()}
+                      </Text>
+                      <Text style={[styles.statLabel, { color: secondary }]}>
+                        Members
+                      </Text>
+                    </View>
                     <View
-                      style={[styles.onlineDot, { backgroundColor: success }]}
+                      style={[styles.statDivider, { backgroundColor: border }]}
                     />
-                    <Text style={[styles.statValue, { color: text }]}>
-                      {Math.max(1, Math.floor(members * 0.1)).toLocaleString()}
-                    </Text>
-                    <Text style={[styles.statLabel, { color: secondary }]}>
-                      Online
-                    </Text>
+                    <View style={styles.statPill}>
+                      <View
+                        style={[styles.onlineDot, { backgroundColor: success }]}
+                      />
+                      <Text style={[styles.statValue, { color: text }]}>
+                        {Math.max(
+                          1,
+                          Math.floor(members * 0.1),
+                        ).toLocaleString()}
+                      </Text>
+                      <Text style={[styles.statLabel, { color: secondary }]}>
+                        Online
+                      </Text>
+                    </View>
                   </View>
-                </View>
                 </View>
               </View>
             </View>
 
-            {/* Sort tabs - no card bg, just tabs row */}
+            {/* Tabs - Posts / Members (animated like profile screen) */}
             <View
               style={styles.sortTabsContainer}
-              onLayout={(e) => setSortTabWidth(e.nativeEvent.layout.width)}
+              onLayout={(event) => {
+                const { width } = event.nativeEvent.layout;
+                setTabContainerWidth(width);
+              }}
             >
-              {sortTabWidth > 0 && (
+              {tabContainerWidth > 0 && (
                 <Animated.View
-                  style={[
-                    styles.sortTabIndicator,
-                    {
-                      width: (sortTabWidth - 8) / 3,
-                      backgroundColor: primary,
-                    },
-                    {
-                      transform: [
-                        {
-                          translateX: sortTabIndex.interpolate({
-                            inputRange: [0, 1, 2],
-                            outputRange: [
-                              0,
-                              (sortTabWidth - 8) / 3,
-                              ((sortTabWidth - 8) / 3) * 2,
-                            ],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
+                  style={{
+                    position: "absolute",
+                    left: 4,
+                    top: 4,
+                    bottom: 4,
+                    width: (tabContainerWidth - 8) / 2,
+                    backgroundColor: primary,
+                    borderRadius: 12,
+                    transform: [
+                      {
+                        translateX: tabIndex.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, (tabContainerWidth - 8) / 2],
+                        }),
+                      },
+                    ],
+                  }}
                 />
               )}
+
               <Animated.View
-                style={[
-                  styles.sortTabWrap,
-                  { transform: [{ scale: hotTabScale }] },
-                ]}
+                style={{
+                  flex: 1,
+                  transform: [{ scale: postsTabScale }],
+                  zIndex: 1,
+                }}
               >
                 <TouchableOpacity
-                  activeOpacity={1}
-                  onPress={() => {
-                    Animated.sequence([
-                      Animated.timing(hotTabScale, {
-                        toValue: 0.95,
-                        duration: 100,
-                        useNativeDriver: true,
-                      }),
-                      Animated.timing(hotTabScale, {
-                        toValue: 1,
-                        duration: 100,
-                        useNativeDriver: true,
-                      }),
-                    ]).start();
-                    setSort("hot");
-                  }}
-                  style={styles.sortTabButton}
+                  activeOpacity={0.9}
+                  onPress={() => handleTabPress("posts")}
+                  style={styles.tabButton}
                 >
-                  <Flame
-                    size={18}
-                    color={sort === "hot" ? primaryForeground : secondary}
-                  />
                   <Text
                     style={[
-                      styles.sortTabLabel,
-                      { color: sort === "hot" ? primaryForeground : secondary },
+                      styles.tabLabel,
+                      {
+                        color:
+                          activeTab === "posts"
+                            ? primaryForeground
+                            : secondary,
+                      },
                     ]}
                   >
-                    Hot
+                    Posts
                   </Text>
                 </TouchableOpacity>
               </Animated.View>
+
               <Animated.View
-                style={[
-                  styles.sortTabWrap,
-                  { transform: [{ scale: newTabScale }] },
-                ]}
+                style={{
+                  flex: 1,
+                  transform: [{ scale: membersTabScale }],
+                  zIndex: 1,
+                }}
               >
                 <TouchableOpacity
-                  activeOpacity={1}
-                  onPress={() => {
-                    Animated.sequence([
-                      Animated.timing(newTabScale, {
-                        toValue: 0.95,
-                        duration: 100,
-                        useNativeDriver: true,
-                      }),
-                      Animated.timing(newTabScale, {
-                        toValue: 1,
-                        duration: 100,
-                        useNativeDriver: true,
-                      }),
-                    ]).start();
-                    setSort("new");
-                  }}
-                  style={styles.sortTabButton}
+                  activeOpacity={0.9}
+                  onPress={() => handleTabPress("members")}
+                  style={styles.tabButton}
                 >
-                  <Clock3
-                    size={18}
-                    color={sort === "new" ? primaryForeground : secondary}
-                  />
                   <Text
                     style={[
-                      styles.sortTabLabel,
-                      { color: sort === "new" ? primaryForeground : secondary },
+                      styles.tabLabel,
+                      {
+                        color:
+                          activeTab === "members"
+                            ? primaryForeground
+                            : secondary,
+                      },
                     ]}
                   >
-                    New
-                  </Text>
-                </TouchableOpacity>
-              </Animated.View>
-              <Animated.View
-                style={[
-                  styles.sortTabWrap,
-                  { transform: [{ scale: topTabScale }] },
-                ]}
-              >
-                <TouchableOpacity
-                  activeOpacity={1}
-                  onPress={() => {
-                    Animated.sequence([
-                      Animated.timing(topTabScale, {
-                        toValue: 0.95,
-                        duration: 100,
-                        useNativeDriver: true,
-                      }),
-                      Animated.timing(topTabScale, {
-                        toValue: 1,
-                        duration: 100,
-                        useNativeDriver: true,
-                      }),
-                    ]).start();
-                    setSort("top");
-                  }}
-                  style={styles.sortTabButton}
-                >
-                  <Trophy
-                    size={18}
-                    color={sort === "top" ? primaryForeground : secondary}
-                  />
-                  <Text
-                    style={[
-                      styles.sortTabLabel,
-                      { color: sort === "top" ? primaryForeground : secondary },
-                    ]}
-                  >
-                    Top
+                    Members
                   </Text>
                 </TouchableOpacity>
               </Animated.View>
@@ -793,37 +846,54 @@ const styles = StyleSheet.create({
   sortTabsContainer: {
     flexDirection: "row",
     padding: 4,
-    minHeight: 52,
+    minHeight: 44,
     marginTop: 12,
     marginHorizontal: 14,
     marginBottom: 4,
-    position: "relative",
+    borderRadius: 999,
+    backgroundColor: "#00000008",
   },
 
-  sortTabIndicator: {
-    position: "absolute",
-    left: 4,
-    top: 4,
-    bottom: 4,
-    borderRadius: 12,
-  },
-
-  sortTabWrap: {
+  tabButton: {
     flex: 1,
-    zIndex: 1,
-  },
-
-  sortTabButton: {
-    flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 999,
   },
 
-  sortTabLabel: {
+  tabLabel: {
     fontWeight: "600",
     fontSize: 14,
+  },
+
+  memberItemWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#e5e7eb",
+  },
+
+  memberInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  memberName: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  memberMeta: {
+    fontSize: 12,
+    marginTop: 2,
   },
 });

@@ -705,6 +705,7 @@ function PostListItem({
   onDeletePost?: (post: Post) => void;
   onSharePost?: (post: Post) => void;
 }) {
+  const { user } = useUser();
   const text = useThemeColor({}, "text");
   const muted = useThemeColor({}, "textMuted");
   const card = useThemeColor({}, "card");
@@ -750,6 +751,27 @@ function PostListItem({
 
   const openOwnerMenu = () => {
     setOwnerSheetVisible(true);
+  };
+
+  const supportAuthorAsModerator = async () => {
+    if (!user?.id || isSubmittingModeratorSupport) return;
+    setIsSubmittingModeratorSupport(true);
+    try {
+      await supabase
+        .from("group_moderator_votes")
+        .upsert(
+          {
+            group_id: post.group.id,
+            candidate_user_id: post.user.id,
+            voter_user_id: user.id,
+          },
+          { onConflict: "group_id,candidate_user_id,voter_user_id" },
+        );
+    } catch (e) {
+      console.log("Support moderator error:", e);
+    } finally {
+      setIsSubmittingModeratorSupport(false);
+    }
   };
 
   return (
@@ -1091,6 +1113,7 @@ function PostListItem({
             </Pressable>
           </View>
         </Modal>
+
       </>
     </FadeInView>
   );
