@@ -15,7 +15,7 @@ import {
   Share,
   Users,
 } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -62,6 +62,10 @@ export default function CommunityPage() {
   const tabIndex = useRef(new Animated.Value(0)).current;
   const postsTabScale = useRef(new Animated.Value(1)).current;
   const membersTabScale = useRef(new Animated.Value(1)).current;
+  const postsRequestIdRef = useRef(0);
+  const membersRequestIdRef = useRef(0);
+  const loadingPageRef = useRef<number | null>(null);
+  const membersLoadedRef = useRef(false);
 
   const bg = useThemeColor({}, "background");
   const text = useThemeColor({}, "text");
@@ -74,6 +78,7 @@ export default function CommunityPage() {
   const backgroundSecondary = useThemeColor({}, "backgroundSecondary");
   const success = useThemeColor({}, "success");
   const primaryForeground = useThemeColor({}, "primaryForeground");
+  const input = useThemeColor({}, "input");
 
   // Slide indicator when active tab changes
   useEffect(() => {
@@ -88,6 +93,7 @@ export default function CommunityPage() {
 
   useEffect(() => {
     if (!communityId) return;
+    let cancelled = false;
 
     const load = async () => {
       setLoading(true);
@@ -100,83 +106,140 @@ export default function CommunityPage() {
           .eq("group_id", communityId),
       ]);
 
+      if (cancelled) return;
       setCommunity(data ?? null);
       if (membersRes.count !== null) setMembers(membersRes.count);
       setLoading(false);
     };
 
     void load();
+    return () => {
+      cancelled = true;
+    };
   }, [communityId]);
 
-  const fetchPosts = async (p = 1, replace = false) => {
-    if (!communityId) return;
-    setPostsLoading(true);
+  const fetchPosts = useCallback(
+    async (p = 1, replace = false) => {
+      if (!communityId) return;
+      if (loadingPageRef.current === p) return;
 
-    const { data } = await supabase
-      .from("posts")
-      .select(
-        `*,
+      loadingPageRef.current = p;
+      const requestId = ++postsRequestIdRef.current;
+      setPostsLoading(true);
+
+      try {
+        const { data } = await supabase
+          .from("posts")
+          .select(
+            `*,
         post_media:post_media(*),
         group:groups(*),
         user:users!posts_user_id_fkey(*)`,
-      )
-      .eq("group_id", communityId)
-      .order("created_at", { ascending: false })
-      .range((p - 1) * PAGE_SIZE, p * PAGE_SIZE - 1);
+          )
+          .eq("group_id", communityId)
+          .order("created_at", { ascending: false })
+          .range((p - 1) * PAGE_SIZE, p * PAGE_SIZE - 1);
 
-    if (!data) {
-      setPostsLoading(false);
-      return;
-    }
+        if (requestId !== postsRequestIdRef.current) return;
+        if (!data) {
+          if (replace) setPosts([]);
+          setHasMore(false);
+          setPage(p);
+          return;
+        }
 
-    const postsData = data as unknown as Post[];
+        const postsData = data as unknown as Post[];
 
-    setPosts((prev) => (replace ? postsData : [...prev, ...postsData]));
-    setHasMore(data.length === PAGE_SIZE);
-    setPage(p);
-    setPostsLoading(false);
-  };
+        setPosts((prev) => {
+          if (replace) return postsData;
+          if (postsData.length === 0) return prev;
 
-  const fetchMembers = async () => {
-    if (!communityId) return;
+          const seen = new Set(prev.map((post) => post.id));
+          const next = [...prev];
+          for (const post of postsData) {
+            if (!seen.has(post.id)) {
+              seen.add(post.id);
+              next.push(post);
+            }
+          }
+          return next;
+        });
+        setHasMore(postsData.length === PAGE_SIZE);
+        setPage(p);
+      } finally {
+        if (requestId === postsRequestIdRef.current) {
+          setPostsLoading(false);
+          loadingPageRef.current = null;
+        }
+      }
+    },
+    [communityId],
+  );
+
+  const fetchMembers = useCallback(async () => {
+    if (!communityId || membersLoadedRef.current) return;
+    const requestId = ++membersRequestIdRef.current;
     setMembersLoading(true);
 
-    const { data, error } = await supabase
-      .from("user_groups")
-      .select(
-        `
+    try {
+      const { data, error } = await supabase
+        .from("user_groups")
+        .select(
+          `
         joined_at,
         user:users(id, name, image)
       `,
-      )
-      .eq("group_id", communityId)
-      .order("joined_at", { ascending: false });
-
-    if (!error && data) {
-      const mapped = (data as any[])
-        .map((row) =>
-          row.user
-            ? {
-                id: row.user.id as string,
-                name: row.user.name as string,
-                image: (row.user.image as string) ?? null,
-                joined_at: (row.joined_at as string) ?? null,
-              }
-            : null,
         )
-        .filter(Boolean) as MemberUser[];
-      setMemberUsers(mapped);
+        .eq("group_id", communityId)
+        .order("joined_at", { ascending: false });
+
+      if (requestId !== membersRequestIdRef.current) return;
+      if (!error && data) {
+        const mapped = (data as any[])
+          .map((row) =>
+            row.user
+              ? {
+                  id: row.user.id as string,
+                  name: row.user.name as string,
+                  image: (row.user.image as string) ?? null,
+                  joined_at: (row.joined_at as string) ?? null,
+                }
+              : null,
+          )
+          .filter(Boolean) as MemberUser[];
+        setMemberUsers(mapped);
+        membersLoadedRef.current = true;
+      }
+    } finally {
+      if (requestId === membersRequestIdRef.current) {
+        setMembersLoading(false);
+      }
     }
-
-    setMembersLoading(false);
-  };
-
-  useEffect(() => {
-    fetchPosts(1, true);
-    fetchMembers();
   }, [communityId]);
 
-  const handleTabPress = (tab: CommunityTab) => {
+  useEffect(() => {
+    if (!communityId) return;
+    postsRequestIdRef.current += 1;
+    membersRequestIdRef.current += 1;
+    loadingPageRef.current = null;
+    membersLoadedRef.current = false;
+    setPosts([]);
+    setPage(1);
+    setHasMore(true);
+    setMemberUsers([]);
+    setPostsLoading(false);
+    setMembersLoading(false);
+    void fetchPosts(1, true);
+  }, [communityId, fetchPosts]);
+
+  useEffect(() => {
+    if (activeTab === "members") {
+      void fetchMembers();
+    }
+  }, [activeTab, fetchMembers]);
+
+  const handleTabPress = useCallback((tab: CommunityTab) => {
+    if (tab === activeTab) return;
     const scaleAnim = tab === "posts" ? postsTabScale : membersTabScale;
 
     Animated.sequence([
@@ -193,7 +256,18 @@ export default function CommunityPage() {
     ]).start();
 
     setActiveTab(tab);
-  };
+  }, [activeTab, membersTabScale, postsTabScale]);
+
+  const formatJoinedDate = useCallback((value: string | null) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return `Joined ${value.slice(0, 10)}`;
+    return `Joined ${date.toLocaleDateString(undefined, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })}`;
+  }, []);
 
   if (loading) {
     return (
@@ -229,6 +303,11 @@ export default function CommunityPage() {
     <View style={[styles.container, { backgroundColor: bg }]}>
       <FlatList
         style={styles.list}
+        removeClippedSubviews
+        windowSize={7}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        updateCellsBatchingPeriod={32}
         contentContainerStyle={{
           paddingBottom: insets.bottom + 24,
           flexGrow: 1,
@@ -241,15 +320,37 @@ export default function CommunityPage() {
               <PostListItem post={item as Post} hideJoinButton />
             </View>
           ) : (
-            <View style={styles.memberItemWrap}>
-              <Image
-                source={{
-                  uri:
-                    (item as unknown as MemberUser).image ??
-                    "https://via.placeholder.com/80",
-                }}
-                style={styles.memberAvatar}
-              />
+            <View
+              style={[
+                styles.memberItemWrap,
+                { backgroundColor: card, borderColor: border },
+              ]}
+            >
+              <View style={[styles.memberAvatarRing, { borderColor: border }]}>
+                {(item as unknown as MemberUser).image ? (
+                  <Image
+                    source={{ uri: (item as unknown as MemberUser).image ?? undefined }}
+                    style={styles.memberAvatar}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.memberAvatar,
+                      styles.memberAvatarFallback,
+                      { backgroundColor: input },
+                    ]}
+                  >
+                    <Text style={[styles.memberAvatarInitials, { color: text }]}>
+                      {((item as unknown as MemberUser).name || "U")
+                        .split(" ")
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((part) => part[0]?.toUpperCase())
+                        .join("")}
+                    </Text>
+                  </View>
+                )}
+              </View>
               <View style={styles.memberInfo}>
                 <Text
                   style={[styles.memberName, { color: text }]}
@@ -262,10 +363,19 @@ export default function CommunityPage() {
                     style={[styles.memberMeta, { color: secondary }]}
                     numberOfLines={1}
                   >
-                    Joined{" "}
-                    {(item as unknown as MemberUser).joined_at?.slice(0, 10)}
+                    {formatJoinedDate((item as unknown as MemberUser).joined_at)}
                   </Text>
                 )}
+              </View>
+              <View
+                style={[
+                  styles.memberPill,
+                  { backgroundColor: backgroundSecondary },
+                ]}
+              >
+                <Text style={[styles.memberPillLabel, { color: secondary }]}>
+                  Member
+                </Text>
               </View>
             </View>
           )
@@ -275,10 +385,11 @@ export default function CommunityPage() {
           if (
             activeTab === "posts" &&
             !postsLoading &&
+            loadingPageRef.current === null &&
             hasMore &&
             posts.length > 0
           )
-            fetchPosts(page + 1);
+            void fetchPosts(page + 1);
         }}
         onEndReachedThreshold={0.3}
         ListEmptyComponent={
@@ -496,7 +607,7 @@ export default function CommunityPage() {
               style={styles.sortTabsContainer}
               onLayout={(event) => {
                 const { width } = event.nativeEvent.layout;
-                setTabContainerWidth(width);
+                setTabContainerWidth((prev) => (prev === width ? prev : width));
               }}
             >
               {tabContainerWidth > 0 && (
@@ -868,18 +979,39 @@ const styles = StyleSheet.create({
   },
 
   memberItemWrap: {
-    paddingHorizontal: 16,
+    marginHorizontal: 14,
+    marginTop: 10,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+
+  memberAvatarRing: {
+    padding: 1.5,
+    borderRadius: 999,
+    borderWidth: 1,
   },
 
   memberAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "#e5e7eb",
+  },
+
+  memberAvatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  memberAvatarInitials: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
 
   memberInfo: {
@@ -888,12 +1020,23 @@ const styles = StyleSheet.create({
   },
 
   memberName: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
   },
 
   memberMeta: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 12.5,
+    marginTop: 3,
+  },
+
+  memberPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  memberPillLabel: {
+    fontSize: 11,
+    fontWeight: "600",
   },
 });
