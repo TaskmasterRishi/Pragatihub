@@ -4,8 +4,8 @@ import PostListItem from "@/components/PostListItem";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
-import type { Tables } from "@/types/database.types";
 import { supabase } from "@/lib/Supabase";
+import type { Tables } from "@/types/database.types";
 import { useUser } from "@clerk/clerk-expo";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,8 +23,8 @@ import {
   Animated,
   FlatList,
   Modal,
-  Pressable,
   Share as NativeShare,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -263,25 +263,28 @@ export default function CommunityPage() {
     }
   }, [activeTab, fetchMembers]);
 
-  const handleTabPress = useCallback((tab: CommunityTab) => {
-    if (tab === activeTab) return;
-    const scaleAnim = tab === "posts" ? postsTabScale : membersTabScale;
+  const handleTabPress = useCallback(
+    (tab: CommunityTab) => {
+      if (tab === activeTab) return;
+      const scaleAnim = tab === "posts" ? postsTabScale : membersTabScale;
 
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 0.95,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+      ]).start();
 
-    setActiveTab(tab);
-  }, [activeTab, membersTabScale, postsTabScale]);
+      setActiveTab(tab);
+    },
+    [activeTab, membersTabScale, postsTabScale],
+  );
 
   const formatJoinedDate = useCallback((value: string | null) => {
     if (!value) return null;
@@ -393,67 +396,71 @@ export default function CommunityPage() {
                     { backgroundColor: card, borderColor: border },
                   ]}
                 >
-              <View style={[styles.memberAvatarRing, { borderColor: border }]}>
-                {member.image ? (
-                  <Image
-                    source={{ uri: member.image ?? undefined }}
-                    style={styles.memberAvatar}
-                  />
-                ) : (
+                  <View
+                    style={[styles.memberAvatarRing, { borderColor: border }]}
+                  >
+                    {member.image ? (
+                      <Image
+                        source={{ uri: member.image ?? undefined }}
+                        style={styles.memberAvatar}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.memberAvatar,
+                          styles.memberAvatarFallback,
+                          { backgroundColor: input },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.memberAvatarInitials, { color: text }]}
+                        >
+                          {(member.name || "U")
+                            .split(" ")
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map((part) => part[0]?.toUpperCase())
+                            .join("")}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.memberInfo}>
+                    <Text
+                      style={[styles.memberName, { color: text }]}
+                      numberOfLines={1}
+                    >
+                      {member.name}
+                    </Text>
+                    {member.joined_at && (
+                      <Text
+                        style={[styles.memberMeta, { color: secondary }]}
+                        numberOfLines={1}
+                      >
+                        {formatJoinedDate(member.joined_at)}
+                      </Text>
+                    )}
+                  </View>
                   <View
                     style={[
-                      styles.memberAvatar,
-                      styles.memberAvatarFallback,
-                      { backgroundColor: input },
+                      styles.memberPill,
+                      {
+                        backgroundColor: showModeratorBadge
+                          ? `${primary}22`
+                          : backgroundSecondary,
+                      },
                     ]}
                   >
-                    <Text style={[styles.memberAvatarInitials, { color: text }]}>
-                      {(member.name || "U")
-                        .split(" ")
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((part) => part[0]?.toUpperCase())
-                        .join("")}
+                    <Text
+                      style={[
+                        styles.memberPillLabel,
+                        { color: showModeratorBadge ? primary : secondary },
+                      ]}
+                    >
+                      {showModeratorBadge ? "Moderator" : "Member"}
                     </Text>
                   </View>
-                )}
-              </View>
-              <View style={styles.memberInfo}>
-                <Text
-                  style={[styles.memberName, { color: text }]}
-                  numberOfLines={1}
-                >
-                  {member.name}
-                </Text>
-                {member.joined_at && (
-                  <Text
-                    style={[styles.memberMeta, { color: secondary }]}
-                    numberOfLines={1}
-                  >
-                    {formatJoinedDate(member.joined_at)}
-                  </Text>
-                )}
-              </View>
-              <View
-                style={[
-                  styles.memberPill,
-                  {
-                    backgroundColor: showModeratorBadge
-                      ? `${primary}22`
-                      : backgroundSecondary,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.memberPillLabel,
-                    { color: showModeratorBadge ? primary : secondary },
-                  ]}
-                >
-                  {showModeratorBadge ? "Moderator" : "Member"}
-                </Text>
-              </View>
-            </View>
+                </View>
               );
             })()
           )
@@ -746,9 +753,7 @@ export default function CommunityPage() {
                       styles.tabLabel,
                       {
                         color:
-                          activeTab === "posts"
-                            ? primaryForeground
-                            : secondary,
+                          activeTab === "posts" ? primaryForeground : secondary,
                       },
                     ]}
                   >
@@ -800,7 +805,10 @@ export default function CommunityPage() {
           onPress={() => setMenuVisible(false)}
         >
           <Pressable
-            style={[styles.sheetCard, { backgroundColor: card, borderColor: border }]}
+            style={[
+              styles.sheetCard,
+              { backgroundColor: card, borderColor: border },
+            ]}
             onPress={(event) => event.stopPropagation()}
           >
             <Text style={[styles.sheetTitle, { color: text }]}>
@@ -811,7 +819,10 @@ export default function CommunityPage() {
                 Edit page
               </Text>
             </Pressable>
-            <Pressable style={styles.sheetAction} onPress={handleShareCommunity}>
+            <Pressable
+              style={styles.sheetAction}
+              onPress={handleShareCommunity}
+            >
               <Text style={[styles.sheetActionLabel, { color: text }]}>
                 Share community
               </Text>
@@ -937,15 +948,16 @@ const styles = StyleSheet.create({
   bannerContainer: {
     width: "100%",
     height: 150,
+    paddingBottom: 100,
   },
   bannerImage: {
     width: "100%",
-    height: "100%",
+    height: 230,
   },
 
   infoCard: {
     marginHorizontal: 14,
-    marginTop: -22,
+    marginTop: 50,
     marginBottom: 4,
     borderRadius: 16,
     borderWidth: 1,
@@ -1109,8 +1121,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
     marginTop: 12,
     marginHorizontal: 14,
-    marginBottom: 4,
-    borderRadius: 999,
+    marginBottom: 14,
+    borderRadius: 18,
     borderWidth: 1,
   },
 
@@ -1119,7 +1131,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 10,
-    borderRadius: 999,
   },
 
   tabLabel: {
