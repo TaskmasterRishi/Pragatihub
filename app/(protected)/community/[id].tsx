@@ -4,7 +4,9 @@ import PostListItem from "@/components/PostListItem";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
+import type { Tables } from "@/types/database.types";
 import { supabase } from "@/lib/Supabase";
+import { useUser } from "@clerk/clerk-expo";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -20,7 +22,9 @@ import {
   ActivityIndicator,
   Animated,
   FlatList,
+  Modal,
   Pressable,
+  Share as NativeShare,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -39,9 +43,12 @@ type MemberUser = {
   joined_at: string | null;
 };
 
+type GroupModeratorRow = Tables<"group_moderators">;
+
 export default function CommunityPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useUser();
   const insets = useSafeAreaInsets();
 
   const communityId = Array.isArray(id) ? id[0] : id;
@@ -56,7 +63,9 @@ export default function CommunityPage() {
   const [hasMore, setHasMore] = useState(true);
   const [postsLoading, setPostsLoading] = useState(false);
   const [memberUsers, setMemberUsers] = useState<MemberUser[]>([]);
+  const [moderatorIds, setModeratorIds] = useState<Set<string>>(new Set());
   const [membersLoading, setMembersLoading] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
 
   const [tabContainerWidth, setTabContainerWidth] = useState(0);
   const tabIndex = useRef(new Animated.Value(0)).current;
@@ -78,7 +87,6 @@ export default function CommunityPage() {
   const backgroundSecondary = useThemeColor({}, "backgroundSecondary");
   const success = useThemeColor({}, "success");
   const primaryForeground = useThemeColor({}, "primaryForeground");
-  const input = useThemeColor({}, "input");
 
   // Slide indicator when active tab changes
   useEffect(() => {
@@ -182,16 +190,23 @@ export default function CommunityPage() {
     setMembersLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from("user_groups")
-        .select(
-          `
-        joined_at,
-        user:users(id, name, image)
-      `,
-        )
-        .eq("group_id", communityId)
-        .order("joined_at", { ascending: false });
+      const [{ data, error }, moderatorsRes] = await Promise.all([
+        supabase
+          .from("user_groups")
+          .select(
+            `
+          joined_at,
+          user:users(id, name, image)
+        `,
+          )
+          .eq("group_id", communityId)
+          .order("joined_at", { ascending: false }),
+        supabase
+          .from("group_moderators")
+          .select("user_id, is_active")
+          .eq("group_id", communityId)
+          .eq("is_active", true),
+      ]);
 
       if (requestId !== membersRequestIdRef.current) return;
       if (!error && data) {
@@ -207,6 +222,15 @@ export default function CommunityPage() {
               : null,
           )
           .filter(Boolean) as MemberUser[];
+
+        const nextModeratorIds = new Set<string>();
+        if (!moderatorsRes.error && moderatorsRes.data) {
+          for (const row of moderatorsRes.data as GroupModeratorRow[]) {
+            nextModeratorIds.add(row.user_id);
+          }
+        }
+
+        setModeratorIds(nextModeratorIds);
         setMemberUsers(mapped);
         membersLoadedRef.current = true;
       }
@@ -227,6 +251,7 @@ export default function CommunityPage() {
     setPage(1);
     setHasMore(true);
     setMemberUsers([]);
+    setModeratorIds(new Set());
     setPostsLoading(false);
     setMembersLoading(false);
     void fetchPosts(1, true);
@@ -298,6 +323,40 @@ export default function CommunityPage() {
   }
 
   const handle = `r/${community.name.replace(/\s+/g, "")}`;
+  const isOwner = !!community.owner_id && community.owner_id === user?.id;
+  const canEdit = isOwner;
+
+  const handleOpenMoreActions = () => {
+    setMenuVisible(true);
+  };
+
+  const handleEditCommunity = () => {
+    if (!communityId) return;
+    setMenuVisible(false);
+    router.push(`/community/edit/${communityId}`);
+  };
+
+  const handleShareCommunity = async () => {
+    if (!communityId) return;
+    setMenuVisible(false);
+    try {
+      await NativeShare.share({
+        message: `Join ${community.name}\n\nhttps://pragatihub.app/community/${communityId}`,
+      });
+    } catch (error) {
+      console.log("Community share error:", error);
+    }
+  };
+
+  const handleOpenMembers = () => {
+    setMenuVisible(false);
+    setActiveTab("members");
+  };
+
+  const handleOpenPosts = () => {
+    setMenuVisible(false);
+    setActiveTab("posts");
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
@@ -320,16 +379,24 @@ export default function CommunityPage() {
               <PostListItem post={item as Post} hideJoinButton />
             </View>
           ) : (
-            <View
-              style={[
-                styles.memberItemWrap,
-                { backgroundColor: card, borderColor: border },
-              ]}
-            >
+            (() => {
+              const member = item as unknown as MemberUser;
+              const isOwnerMember =
+                !!community.owner_id && member.id === community.owner_id;
+              const showModeratorBadge =
+                isOwnerMember || moderatorIds.has(member.id);
+
+              return (
+                <View
+                  style={[
+                    styles.memberItemWrap,
+                    { backgroundColor: card, borderColor: border },
+                  ]}
+                >
               <View style={[styles.memberAvatarRing, { borderColor: border }]}>
-                {(item as unknown as MemberUser).image ? (
+                {member.image ? (
                   <Image
-                    source={{ uri: (item as unknown as MemberUser).image ?? undefined }}
+                    source={{ uri: member.image ?? undefined }}
                     style={styles.memberAvatar}
                   />
                 ) : (
@@ -341,7 +408,7 @@ export default function CommunityPage() {
                     ]}
                   >
                     <Text style={[styles.memberAvatarInitials, { color: text }]}>
-                      {((item as unknown as MemberUser).name || "U")
+                      {(member.name || "U")
                         .split(" ")
                         .filter(Boolean)
                         .slice(0, 2)
@@ -356,28 +423,39 @@ export default function CommunityPage() {
                   style={[styles.memberName, { color: text }]}
                   numberOfLines={1}
                 >
-                  {(item as unknown as MemberUser).name}
+                  {member.name}
                 </Text>
-                {(item as unknown as MemberUser).joined_at && (
+                {member.joined_at && (
                   <Text
                     style={[styles.memberMeta, { color: secondary }]}
                     numberOfLines={1}
                   >
-                    {formatJoinedDate((item as unknown as MemberUser).joined_at)}
+                    {formatJoinedDate(member.joined_at)}
                   </Text>
                 )}
               </View>
               <View
                 style={[
                   styles.memberPill,
-                  { backgroundColor: backgroundSecondary },
+                  {
+                    backgroundColor: showModeratorBadge
+                      ? `${primary}22`
+                      : backgroundSecondary,
+                  },
                 ]}
               >
-                <Text style={[styles.memberPillLabel, { color: secondary }]}>
-                  Member
+                <Text
+                  style={[
+                    styles.memberPillLabel,
+                    { color: showModeratorBadge ? primary : secondary },
+                  ]}
+                >
+                  {showModeratorBadge ? "Moderator" : "Member"}
                 </Text>
               </View>
             </View>
+              );
+            })()
           )
         }
         showsVerticalScrollIndicator={false}
@@ -496,9 +574,15 @@ export default function CommunityPage() {
                     <Pressable style={styles.iconBtn} hitSlop={8}>
                       <Share size={22} color="#fff" />
                     </Pressable>
-                    <Pressable style={styles.iconBtn} hitSlop={8}>
-                      <MoreHorizontal size={22} color="#fff" />
-                    </Pressable>
+                    {canEdit ? (
+                      <Pressable
+                        style={styles.iconBtn}
+                        hitSlop={8}
+                        onPress={handleOpenMoreActions}
+                      >
+                        <MoreHorizontal size={22} color="#fff" />
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
               </View>
@@ -512,9 +596,9 @@ export default function CommunityPage() {
                   backgroundColor: card,
                   borderColor: border,
                   shadowColor: "#000",
-                  shadowOpacity: 0.12,
-                  shadowRadius: 16,
-                  elevation: 8,
+                  shadowOpacity: 0.08,
+                  shadowRadius: 10,
+                  elevation: 4,
                 },
               ]}
             >
@@ -571,7 +655,12 @@ export default function CommunityPage() {
                   ) : null}
 
                   <View style={styles.statsRow}>
-                    <View style={styles.statPill}>
+                    <View
+                      style={[
+                        styles.statPill,
+                        { backgroundColor: backgroundSecondary },
+                      ]}
+                    >
                       <Users size={14} color={primary} />
                       <Text style={[styles.statValue, { color: text }]}>
                         {members.toLocaleString()}
@@ -583,7 +672,12 @@ export default function CommunityPage() {
                     <View
                       style={[styles.statDivider, { backgroundColor: border }]}
                     />
-                    <View style={styles.statPill}>
+                    <View
+                      style={[
+                        styles.statPill,
+                        { backgroundColor: backgroundSecondary },
+                      ]}
+                    >
                       <View
                         style={[styles.onlineDot, { backgroundColor: success }]}
                       />
@@ -604,7 +698,10 @@ export default function CommunityPage() {
 
             {/* Tabs - Posts / Members (animated like profile screen) */}
             <View
-              style={styles.sortTabsContainer}
+              style={[
+                styles.sortTabsContainer,
+                { backgroundColor: backgroundSecondary, borderColor: border },
+              ]}
               onLayout={(event) => {
                 const { width } = event.nativeEvent.layout;
                 setTabContainerWidth((prev) => (prev === width ? prev : width));
@@ -691,6 +788,55 @@ export default function CommunityPage() {
           </View>
         }
       />
+
+      <Modal
+        transparent
+        visible={menuVisible}
+        animationType="slide"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setMenuVisible(false)}
+        >
+          <Pressable
+            style={[styles.sheetCard, { backgroundColor: card, borderColor: border }]}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text style={[styles.sheetTitle, { color: text }]}>
+              Community actions
+            </Text>
+            <Pressable style={styles.sheetAction} onPress={handleEditCommunity}>
+              <Text style={[styles.sheetActionLabel, { color: text }]}>
+                Edit page
+              </Text>
+            </Pressable>
+            <Pressable style={styles.sheetAction} onPress={handleShareCommunity}>
+              <Text style={[styles.sheetActionLabel, { color: text }]}>
+                Share community
+              </Text>
+            </Pressable>
+            <Pressable style={styles.sheetAction} onPress={handleOpenMembers}>
+              <Text style={[styles.sheetActionLabel, { color: text }]}>
+                Open members tab
+              </Text>
+            </Pressable>
+            <Pressable style={styles.sheetAction} onPress={handleOpenPosts}>
+              <Text style={[styles.sheetActionLabel, { color: text }]}>
+                Open posts tab
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.sheetAction, styles.sheetCancel]}
+              onPress={() => setMenuVisible(false)}
+            >
+              <Text style={[styles.sheetCancelLabel, { color: secondary }]}>
+                Cancel
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -790,7 +936,7 @@ const styles = StyleSheet.create({
 
   bannerContainer: {
     width: "100%",
-    height: 160,
+    height: 150,
   },
   bannerImage: {
     width: "100%",
@@ -799,18 +945,18 @@ const styles = StyleSheet.create({
 
   infoCard: {
     marginHorizontal: 14,
-    marginTop: -28,
+    marginTop: -22,
     marginBottom: 4,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     overflow: "visible",
     shadowOffset: { width: 0, height: 6 },
   },
 
   infoCardInner: {
-    paddingHorizontal: 20,
-    paddingTop: 32,
-    paddingBottom: 18,
+    paddingHorizontal: 16,
+    paddingTop: 26,
+    paddingBottom: 14,
   },
 
   infoCardContent: {
@@ -823,22 +969,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-start",
     alignItems: "flex-end",
-    marginTop: -56,
-    marginBottom: 14,
+    marginTop: -42,
+    marginBottom: 10,
   },
 
   avatarRing: {
-    padding: 3,
+    padding: 2,
     borderRadius: 999,
-    borderWidth: 2.5,
+    borderWidth: 2,
     alignSelf: "flex-start",
   },
 
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 3,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 2,
     backgroundColor: "#e5e7eb",
   },
 
@@ -861,7 +1007,7 @@ const styles = StyleSheet.create({
   },
 
   communityName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "800",
     letterSpacing: 0.3,
   },
@@ -874,16 +1020,16 @@ const styles = StyleSheet.create({
   },
 
   descriptionBlock: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginBottom: 14,
-    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 10,
     borderLeftWidth: 4,
   },
 
   description: {
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 12.5,
+    lineHeight: 18,
   },
 
   statsRow: {
@@ -900,6 +1046,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
   },
 
   statDivider: {
@@ -962,7 +1111,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginBottom: 4,
     borderRadius: 999,
-    backgroundColor: "#00000008",
+    borderWidth: 1,
   },
 
   tabButton: {
@@ -1037,6 +1186,48 @@ const styles = StyleSheet.create({
 
   memberPillLabel: {
     fontSize: 11,
+    fontWeight: "600",
+  },
+
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+
+  sheetCard: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 20,
+  },
+
+  sheetTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 6,
+    paddingHorizontal: 6,
+  },
+
+  sheetAction: {
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+  },
+
+  sheetActionLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  sheetCancel: {
+    marginTop: 2,
+  },
+
+  sheetCancelLabel: {
+    fontSize: 15,
     fontWeight: "600",
   },
 });

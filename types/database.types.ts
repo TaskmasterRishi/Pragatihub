@@ -129,6 +129,49 @@ export type Database = {
           },
         ]
       }
+      group_moderator_votes: {
+        Row: {
+          candidate_user_id: string
+          created_at: string
+          group_id: string
+          voter_user_id: string
+        }
+        Insert: {
+          candidate_user_id: string
+          created_at?: string
+          group_id: string
+          voter_user_id: string
+        }
+        Update: {
+          candidate_user_id?: string
+          created_at?: string
+          group_id?: string
+          voter_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_moderator_votes_candidate_user_id_fkey"
+            columns: ["candidate_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_moderator_votes_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_moderator_votes_voter_user_id_fkey"
+            columns: ["voter_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_moderators: {
         Row: {
           created_at: string | null
@@ -162,49 +205,6 @@ export type Database = {
           {
             foreignKeyName: "group_moderators_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      group_moderator_votes: {
-        Row: {
-          created_at: string
-          group_id: string
-          candidate_user_id: string
-          voter_user_id: string
-        }
-        Insert: {
-          created_at?: string
-          group_id: string
-          candidate_user_id: string
-          voter_user_id: string
-        }
-        Update: {
-          created_at?: string
-          group_id?: string
-          candidate_user_id?: string
-          voter_user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "group_moderator_votes_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "group_moderator_votes_candidate_user_id_fkey"
-            columns: ["candidate_user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "group_moderator_votes_voter_user_id_fkey"
-            columns: ["voter_user_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -320,6 +320,42 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_moderation_votes: {
+        Row: {
+          created_at: string
+          post_id: string
+          user_id: string
+          vote: Database["public"]["Enums"]["moderation_vote_type"]
+        }
+        Insert: {
+          created_at?: string
+          post_id: string
+          user_id: string
+          vote: Database["public"]["Enums"]["moderation_vote_type"]
+        }
+        Update: {
+          created_at?: string
+          post_id?: string
+          user_id?: string
+          vote?: Database["public"]["Enums"]["moderation_vote_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_moderation_votes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_moderation_votes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -587,6 +623,7 @@ export type Database = {
       requesting_user_id_uuid: { Args: never; Returns: string }
     }
     Enums: {
+      moderation_vote_type: "keep" | "remove"
       post_type: "text" | "link" | "photo" | "video" | "poll"
     }
     CompositeTypes: {
@@ -715,6 +752,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      moderation_vote_type: ["keep", "remove"],
       post_type: ["text", "link", "photo", "video", "poll"],
     },
   },

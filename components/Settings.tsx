@@ -12,28 +12,28 @@ import {
     Wallet,
     X,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   Modal,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { createGroup } from "@/lib/actions/groups";
+import { syncUserToSupabase } from "@/lib/actions/users";
 
 interface SettingsProps {
   onClose: () => void;
 }
 
 export default function Settings({ onClose }: SettingsProps) {
-  const insets = useSafeAreaInsets();
   const { user } = useUser();
   const { signOut } = useAuth();
 
@@ -46,11 +46,16 @@ export default function Settings({ onClose }: SettingsProps) {
   const inputBg = useThemeColor({}, "input");
   const placeholderColor = useThemeColor({}, "placeholder");
 
-  // Mock switch states
-  const [isDarkMode, setIsDarkMode] = React.useState(false);
   const [showCreateCommunity, setShowCreateCommunity] = useState(false);
   const [communityName, setCommunityName] = useState("");
+  const [communityDescription, setCommunityDescription] = useState("");
   const [communityImage, setCommunityImage] = useState<string | null>(null);
+  const [communityBannerImage, setCommunityBannerImage] = useState<
+    string | null
+  >(null);
+  const [communityRules, setCommunityRules] = useState("");
+  const [communityTags, setCommunityTags] = useState("");
+  const [communityIsPrivate, setCommunityIsPrivate] = useState(false);
   const [isCreatingCommunity, setIsCreatingCommunity] = useState(false);
   const [createCommunityError, setCreateCommunityError] = useState<string | null>(
     null,
@@ -300,6 +305,27 @@ export default function Settings({ onClose }: SettingsProps) {
             />
 
             <Text style={{ color: textSecondaryColor, marginBottom: 6 }}>
+              Description (optional)
+            </Text>
+            <TextInput
+              value={communityDescription}
+              onChangeText={setCommunityDescription}
+              placeholder="What is this community about?"
+              placeholderTextColor={placeholderColor}
+              multiline
+              style={{
+                backgroundColor: inputBg,
+                color: textColor,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                minHeight: 76,
+                textAlignVertical: "top",
+                marginBottom: 12,
+              }}
+            />
+
+            <Text style={{ color: textSecondaryColor, marginBottom: 6 }}>
               Image (optional)
             </Text>
             <TouchableOpacity
@@ -332,6 +358,99 @@ export default function Settings({ onClose }: SettingsProps) {
               </View>
             )}
 
+            <Text style={{ color: textSecondaryColor, marginBottom: 6 }}>
+              Banner (optional)
+            </Text>
+            <TouchableOpacity
+              onPress={async () => {
+                const result = await ImagePicker.launchImageLibraryAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsEditing: true,
+                  quality: 0.7,
+                });
+
+                const firstAsset = result.assets?.[0];
+                if (!result.canceled && firstAsset?.uri) {
+                  setCommunityBannerImage(firstAsset.uri);
+                }
+              }}
+              className="items-center rounded-xl py-3"
+              style={{ backgroundColor: inputBg, marginBottom: 12 }}
+            >
+              <Text style={{ color: textColor, fontWeight: "600" }}>
+                {communityBannerImage ? "Change Banner" : "Pick Banner"}
+              </Text>
+            </TouchableOpacity>
+            {communityBannerImage && (
+              <View style={{ alignItems: "center", marginBottom: 12 }}>
+                <Image
+                  source={{ uri: communityBannerImage }}
+                  style={{ width: "100%", height: 96, borderRadius: 12 }}
+                  contentFit="cover"
+                />
+              </View>
+            )}
+
+            <Text style={{ color: textSecondaryColor, marginBottom: 6 }}>
+              Rules (optional)
+            </Text>
+            <TextInput
+              value={communityRules}
+              onChangeText={setCommunityRules}
+              placeholder="Write community rules"
+              placeholderTextColor={placeholderColor}
+              multiline
+              style={{
+                backgroundColor: inputBg,
+                color: textColor,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                minHeight: 70,
+                textAlignVertical: "top",
+                marginBottom: 12,
+              }}
+            />
+
+            <Text style={{ color: textSecondaryColor, marginBottom: 6 }}>
+              Tags (comma separated, optional)
+            </Text>
+            <TextInput
+              value={communityTags}
+              onChangeText={setCommunityTags}
+              placeholder="tech, startup, community"
+              placeholderTextColor={placeholderColor}
+              style={{
+                backgroundColor: inputBg,
+                color: textColor,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                marginBottom: 12,
+              }}
+            />
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 12,
+                backgroundColor: inputBg,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+              }}
+            >
+              <Text style={{ color: textColor, fontWeight: "600" }}>
+                Private community
+              </Text>
+              <Switch
+                value={communityIsPrivate}
+                onValueChange={setCommunityIsPrivate}
+              />
+            </View>
+
             {createCommunityError && (
               <Text style={{ color: "tomato", marginBottom: 12 }}>
                 {createCommunityError}
@@ -343,6 +462,13 @@ export default function Settings({ onClose }: SettingsProps) {
                 onPress={() => {
                   setShowCreateCommunity(false);
                   setCreateCommunityError(null);
+                  setCommunityName("");
+                  setCommunityDescription("");
+                  setCommunityImage(null);
+                  setCommunityBannerImage(null);
+                  setCommunityRules("");
+                  setCommunityTags("");
+                  setCommunityIsPrivate(false);
                 }}
                 className="flex-1 items-center rounded-xl py-3"
                 style={{ backgroundColor: backgroundColor }}
@@ -353,6 +479,16 @@ export default function Settings({ onClose }: SettingsProps) {
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={async () => {
+                  if (!user?.id) {
+                    setCreateCommunityError("You must be signed in.");
+                    return;
+                  }
+                  const email = user.primaryEmailAddress?.emailAddress;
+                  if (!email) {
+                    setCreateCommunityError("Missing user email.");
+                    return;
+                  }
+
                   if (!communityName.trim()) {
                     setCreateCommunityError("Name is required.");
                     return;
@@ -361,9 +497,41 @@ export default function Settings({ onClose }: SettingsProps) {
                   setIsCreatingCommunity(true);
                   setCreateCommunityError(null);
 
+                  const { error: userSyncError } = await syncUserToSupabase({
+                    id: user.id,
+                    email,
+                    name: user.fullName ?? user.username ?? "Anonymous",
+                    image: user.imageUrl ?? null,
+                  });
+                  if (userSyncError) {
+                    setCreateCommunityError(
+                      userSyncError.message ?? "Could not sync your user profile.",
+                    );
+                    setIsCreatingCommunity(false);
+                    return;
+                  }
+
+                  const parsedTags = communityTags
+                    .split(",")
+                    .map((tag) => tag.trim())
+                    .filter(Boolean);
+
                   const { error } = await createGroup({
                     name: communityName.trim(),
+                    description:
+                      communityDescription.trim().length > 0
+                        ? communityDescription.trim()
+                        : null,
                     image: communityImage,
+                    banner_image: communityBannerImage,
+                    rules:
+                      communityRules.trim().length > 0
+                        ? communityRules.trim()
+                        : null,
+                    tags: parsedTags.length > 0 ? parsedTags : null,
+                    is_private: communityIsPrivate,
+                    member_count: 1,
+                    owner_id: user.id,
                   });
 
                   if (error) {
@@ -376,7 +544,12 @@ export default function Settings({ onClose }: SettingsProps) {
 
                   setIsCreatingCommunity(false);
                   setCommunityName("");
+                  setCommunityDescription("");
                   setCommunityImage(null);
+                  setCommunityBannerImage(null);
+                  setCommunityRules("");
+                  setCommunityTags("");
+                  setCommunityIsPrivate(false);
                   setShowCreateCommunity(false);
                 }}
                 disabled={isCreatingCommunity}
