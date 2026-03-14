@@ -4,6 +4,7 @@ import { supabase } from "@/lib/Supabase";
 import { useUser } from "@clerk/clerk-expo";
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
   ArrowUpDown,
@@ -11,10 +12,12 @@ import {
   Compass,
   Search,
   Sparkles,
+  TrendingUp,
   Users,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   InteractionManager,
   Platform,
@@ -37,8 +40,6 @@ type FilterBarProps = {
   sortMode: SortMode;
   onChangeTab: (tab: CommunityTab) => void;
   onToggleSort: () => void;
-  shellColor: string;
-  shellBorder: string;
   segmentBase: string;
   segmentBorder: string;
   segmentSelectedBg: string;
@@ -56,10 +57,12 @@ type CommunityCardProps = {
   textColor: string;
   textSecondaryColor: string;
   borderColor: string;
-  avatarColor: string;
+  avatarBgColor: string;
   shadowColor: string;
   successColor: string;
   infoColor: string;
+  tintColor: string;
+  isDark: boolean;
   onPress: () => void;
 };
 
@@ -125,8 +128,6 @@ function FilterBar({
   sortMode,
   onChangeTab,
   onToggleSort,
-  shellColor,
-  shellBorder,
   segmentBase,
   segmentBorder,
   segmentSelectedBg,
@@ -137,12 +138,7 @@ function FilterBar({
   const sortLabel = sortMode === "popular" ? "Popular" : "Relevance";
 
   return (
-    <View
-      style={[
-        styles.filterRow,
-        { backgroundColor: shellColor, borderColor: shellBorder },
-      ]}
-    >
+    <View style={styles.filterRow}>
       <View style={styles.segmentRow}>
         {FILTER_TABS.map((tab) => {
           const selected = tab === selectedTab;
@@ -185,7 +181,7 @@ function FilterBar({
           pressed && styles.pressedScale,
         ]}
       >
-        <ArrowUpDown size={14} color={tintColor} />
+        <ArrowUpDown size={13} color={tintColor} />
         <Text style={[styles.sortText, { color: tintColor }]}>{sortLabel}</Text>
       </Pressable>
     </View>
@@ -201,20 +197,23 @@ function CommunityCard({
   textColor,
   textSecondaryColor,
   borderColor,
-  avatarColor,
+  avatarBgColor,
   shadowColor,
   successColor,
   infoColor,
+  tintColor,
+  isDark,
   onPress,
 }: CommunityCardProps) {
-  const accentColor = isJoined ? successColor : infoColor;
-  const statusBadgeColor = toRgba(accentColor, 0.12);
-  const statusBadgeBorderColor = toRgba(accentColor, 0.34);
+  const accentColor = isJoined ? successColor : tintColor;
+  const statusBg = toRgba(accentColor, isDark ? 0.18 : 0.1);
+  const statusBorder = toRgba(accentColor, isDark ? 0.45 : 0.32);
   const newBadgeBorder = toRgba(infoColor, 0.4);
   const newBadgeBg = toRgba(infoColor, 0.12);
   const memberLabel = `${memberCount.toLocaleString()} ${memberCount === 1 ? "member" : "members"}`;
-  const joinedRing = toRgba(successColor, 0.75);
-  const joinedGlow = toRgba(successColor, 0.16);
+  const joinedRing = toRgba(successColor, 0.8);
+  const joinedGlow = toRgba(successColor, isDark ? 0.22 : 0.12);
+  const accentLine = isJoined ? successColor : tintColor;
 
   return (
     <Pressable
@@ -225,17 +224,22 @@ function CommunityCard({
           backgroundColor: cardColor,
           borderColor,
           shadowColor,
-          transform: [{ scale: pressed ? 0.98 : 1 }],
-          opacity: pressed ? 0.96 : 1,
+          transform: [{ scale: pressed ? 0.985 : 1 }],
+          opacity: pressed ? 0.94 : 1,
         },
       ]}
     >
+      {/* Accent left stripe */}
+      <View
+        style={[styles.cardAccentStripe, { backgroundColor: accentLine }]}
+      />
       <View style={styles.cardInner}>
+        {/* Avatar */}
         <View
           style={[
             styles.avatarWrap,
             {
-              backgroundColor: isJoined ? joinedGlow : avatarColor,
+              backgroundColor: isJoined ? joinedGlow : avatarBgColor,
               borderColor: isJoined ? joinedRing : borderColor,
             },
           ]}
@@ -243,36 +247,46 @@ function CommunityCard({
           <Image
             source={{ uri: item.image ?? undefined }}
             style={styles.avatar}
+            contentFit="cover"
           />
         </View>
 
+        {/* Content */}
         <View style={styles.cardText}>
           <View style={styles.cardTitleRow}>
             <Text
               style={[styles.name, { color: textColor }]}
               numberOfLines={1}
               ellipsizeMode="tail"
-              adjustsFontSizeToFit
-              minimumFontScale={0.86}
             >
               {item.name}
             </Text>
-            {isNew ? (
-              <View
-                style={[
-                  styles.newBadge,
-                  { backgroundColor: newBadgeBg, borderColor: newBadgeBorder },
-                ]}
-              >
-                <Sparkles size={9} color={infoColor} />
-                <Text style={[styles.newBadgeText, { color: infoColor }]}>
-                  New
-                </Text>
-              </View>
-            ) : null}
+            <View style={styles.badgeRow}>
+              {isNew ? (
+                <View
+                  style={[
+                    styles.newBadge,
+                    {
+                      backgroundColor: newBadgeBg,
+                      borderColor: newBadgeBorder,
+                    },
+                  ]}
+                >
+                  <Sparkles size={8} color={infoColor} />
+                  <Text style={[styles.newBadgeText, { color: infoColor }]}>
+                    New
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
 
           <View style={styles.metaRow}>
+            <Users
+              size={10}
+              color={textSecondaryColor}
+              style={{ marginRight: 3 }}
+            />
             <Text
               style={[styles.meta, { color: textSecondaryColor }]}
               numberOfLines={1}
@@ -282,13 +296,14 @@ function CommunityCard({
           </View>
         </View>
 
+        {/* Action */}
         <View style={styles.cardActions}>
           <View
             style={[
               styles.statusBadge,
               {
-                backgroundColor: statusBadgeColor,
-                borderColor: statusBadgeBorderColor,
+                backgroundColor: statusBg,
+                borderColor: statusBorder,
               },
             ]}
           >
@@ -296,9 +311,107 @@ function CommunityCard({
               {isJoined ? "Joined" : "Join"}
             </Text>
           </View>
-          <ChevronRight size={15} color={textSecondaryColor} />
+          <ChevronRight size={14} color={textSecondaryColor} />
         </View>
       </View>
+    </Pressable>
+  );
+}
+
+// ─── Popular Rail Card ────────────────────────────────────────────────────────
+type PopularCardProps = {
+  group: Group;
+  memberCount: number;
+  cardColor: string;
+  textColor: string;
+  textSecondaryColor: string;
+  borderColor: string;
+  tintColor: string;
+  isDark: boolean;
+  onPress: () => void;
+};
+
+function PopularCard({
+  group,
+  memberCount,
+  cardColor,
+  textColor,
+  textSecondaryColor,
+  borderColor,
+  tintColor,
+  isDark,
+  onPress,
+}: PopularCardProps) {
+  const memberLabel =
+    memberCount >= 1000
+      ? `${(memberCount / 1000).toFixed(1)}k members`
+      : `${memberCount} ${memberCount === 1 ? "member" : "members"}`;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.popularCardOuter,
+        {
+          transform: [{ scale: pressed ? 0.95 : 1 }],
+          opacity: pressed ? 0.88 : 1,
+        },
+      ]}
+    >
+      {/* Circle */}
+      <View style={[styles.popularCard, { borderColor }]}>
+        {/* Blurred bg image */}
+        <Image
+          source={{ uri: group.image ?? undefined }}
+          style={StyleSheet.absoluteFillObject}
+          contentFit="cover"
+          blurRadius={22}
+        />
+        {/* Dark bottom scrim */}
+        <LinearGradient
+          colors={["transparent", toRgba("#000000", isDark ? 0.6 : 0.48)]}
+          style={StyleSheet.absoluteFillObject}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+        />
+        {/* Centered sharp avatar */}
+        <View style={[styles.popularAvatarWrap, { borderColor: cardColor }]}>
+          <Image
+            source={{ uri: group.image ?? undefined }}
+            style={styles.popularAvatar}
+            contentFit="cover"
+          />
+        </View>
+        {/* Member pill — bottom left */}
+        <View
+          style={[
+            styles.popularMemberPill,
+            {
+              backgroundColor: toRgba("#000000", 0.55),
+              borderColor: toRgba("#ffffff", 0.15),
+            },
+          ]}
+        >
+          <Users size={8} color="rgba(255,255,255,0.82)" />
+          <Text
+            style={[
+              styles.popularMemberText,
+              { color: "rgba(255,255,255,0.88)" },
+            ]}
+          >
+            {memberLabel}
+          </Text>
+        </View>
+      </View>
+
+      {/* Name below circle */}
+      <Text
+        style={[styles.popularName, { color: textColor }]}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {group.name}
+      </Text>
     </Pressable>
   );
 }
@@ -338,17 +451,16 @@ export default function CommunitiesScreen() {
   const tintColor = useThemeColor({}, "tint");
   const shadowColor = isDark ? "#000000" : "#0f172a";
 
-  const headerBg = toRgba(cardColor, isDark ? 0.74 : 0.96);
-  const raisedSurfaceColor = toRgba(cardColor, isDark ? 0.78 : 0.98);
-  const searchSurfaceColor = toRgba(inputBg, isDark ? 0.62 : 0.8);
-  const softBorderColor = toRgba(borderColor, isDark ? 0.54 : 0.3);
-  const subtleBorderColor = toRgba(borderColor, isDark ? 0.42 : 0.22);
+  const headerBg = toRgba(cardColor, isDark ? 0.76 : 0.97);
+  const raisedSurfaceColor = toRgba(cardColor, isDark ? 0.82 : 0.99);
+  const searchSurfaceColor = toRgba(inputBg, isDark ? 0.55 : 0.78);
+  const softBorderColor = toRgba(borderColor, isDark ? 0.5 : 0.28);
+  const subtleBorderColor = toRgba(borderColor, isDark ? 0.38 : 0.18);
   const avatarTintColor = toRgba(inputBg, isDark ? 0.72 : 0.9);
-  const heroIconBg = toRgba(borderColor, isDark ? 0.25 : 0.12);
-  const heroIconBorder = toRgba(borderColor, isDark ? 0.4 : 0.2);
-  const countPillBg = toRgba(tintColor, isDark ? 0.18 : 0.09);
-  const filterShellColor = toRgba(inputBg, isDark ? 0.56 : 0.86);
-  const segmentBase = toRgba(textColor, isDark ? 0.08 : 0.035);
+  const heroIconBg = toRgba(tintColor, isDark ? 0.2 : 0.1);
+  const heroIconBorder = toRgba(tintColor, isDark ? 0.38 : 0.22);
+  const countPillBg = toRgba(tintColor, isDark ? 0.2 : 0.1);
+  const segmentBase = toRgba(textColor, isDark ? 0.08 : 0.04);
   const segmentBorder = toRgba(borderColor, isDark ? 0.44 : 0.2);
   const segmentSelectedBg = toRgba(tintColor, isDark ? 0.26 : 0.14);
   const segmentSelectedBorder = toRgba(tintColor, isDark ? 0.5 : 0.3);
@@ -550,15 +662,20 @@ export default function CommunitiesScreen() {
 
         return a.name.localeCompare(b.name);
       })
-      .slice(0, 10);
+      .slice(0, 12);
   }, [groups, joinedSet, memberCountByGroup]);
 
   const showPopularRail = !normalizedQuery && popularGroups.length > 0;
 
-  const visibleCountLabel = `${visibleGroups.length} of ${groups.length}`;
+  const joinedCount = joinedGroupIds.length;
+  const totalCount = groups.length;
+
+  // Approximate header height for padding
+  const headerPaddingTop = 148;
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
+      {/* ── Sticky blurred header ── */}
       <View
         style={[
           styles.topBarContainer,
@@ -568,8 +685,8 @@ export default function CommunitiesScreen() {
               Platform.OS === "web" ? tabBarBackgroundColor : "transparent",
             ...(Platform.OS === "web"
               ? ({
-                  backdropFilter: "saturate(140%) blur(18px)",
-                  WebkitBackdropFilter: "saturate(140%) blur(18px)",
+                  backdropFilter: "saturate(160%) blur(20px)",
+                  WebkitBackdropFilter: "saturate(160%) blur(20px)",
                 } as any)
               : {}),
           },
@@ -580,7 +697,7 @@ export default function CommunitiesScreen() {
             {androidBlurReady ? (
               <BlurView
                 tint={isDark ? "systemMaterialDark" : "systemMaterialLight"}
-                intensity={70}
+                intensity={80}
                 experimentalBlurMethod={
                   Platform.OS === "android" ? "dimezisBlurView" : undefined
                 }
@@ -596,7 +713,8 @@ export default function CommunitiesScreen() {
           </View>
         ) : null}
 
-        <View style={[styles.topBarContent, { paddingTop: 20 }]}>
+        <View style={[styles.topBarContent, { paddingTop: 30 }]}>
+          {/* Title row */}
           <View style={styles.headerTopRow}>
             <View style={styles.headerTitleRow}>
               <View
@@ -605,29 +723,47 @@ export default function CommunitiesScreen() {
                   { backgroundColor: heroIconBg, borderColor: heroIconBorder },
                 ]}
               >
-                <Compass size={13} color={tintColor} />
+                <Compass size={14} color={tintColor} />
               </View>
               <Text style={[styles.title, { color: textColor }]}>
                 Communities
               </Text>
             </View>
 
-            <View
-              style={[
-                styles.countPill,
-                { backgroundColor: countPillBg, borderColor: heroIconBorder },
-              ]}
-            >
-              <Text style={[styles.countPillText, { color: tintColor }]}>
-                {groups.length}
-              </Text>
+            {/* Stats pill */}
+            <View style={styles.statsPillRow}>
+              <View
+                style={[
+                  styles.countPill,
+                  { backgroundColor: countPillBg, borderColor: heroIconBorder },
+                ]}
+              >
+                <Text style={[styles.countPillText, { color: tintColor }]}>
+                  {totalCount}
+                </Text>
+              </View>
+              {joinedCount > 0 ? (
+                <View
+                  style={[
+                    styles.countPill,
+                    {
+                      backgroundColor: toRgba(
+                        successColor,
+                        isDark ? 0.18 : 0.1,
+                      ),
+                      borderColor: toRgba(successColor, isDark ? 0.4 : 0.25),
+                    },
+                  ]}
+                >
+                  <Text style={[styles.countPillText, { color: successColor }]}>
+                    {joinedCount} joined
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
 
-          <Text style={[styles.subtitle, { color: textSecondaryColor }]}>
-            {visibleCountLabel} visible
-          </Text>
-
+          {/* Search bar */}
           <View
             style={[
               styles.searchWrapper,
@@ -638,22 +774,24 @@ export default function CommunitiesScreen() {
             ]}
           >
             <Search
-              size={16}
+              size={15}
               color={placeholderColor}
               style={styles.searchIcon}
             />
             <TextInput
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Search communities"
+              placeholder="Search communities…"
               placeholderTextColor={placeholderColor}
               style={[styles.searchInput, { color: textColor }]}
               returnKeyType="search"
+              clearButtonMode="while-editing"
             />
           </View>
         </View>
       </View>
 
+      {/* ── Main list ── */}
       <FlatList
         data={visibleGroups}
         keyExtractor={(item) => item.id}
@@ -667,23 +805,26 @@ export default function CommunitiesScreen() {
             textColor={textColor}
             textSecondaryColor={textSecondaryColor}
             borderColor={softBorderColor}
-            avatarColor={avatarTintColor}
+            avatarBgColor={avatarTintColor}
             shadowColor={shadowColor}
             successColor={successColor}
             infoColor={infoColor}
+            tintColor={tintColor}
+            isDark={isDark}
             onPress={() => router.push(`/community/${item.id}`)}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
         contentContainerStyle={[
           styles.listContent,
-          { paddingTop: 148, paddingBottom: 104 + insets.bottom },
+          { paddingTop: headerPaddingTop, paddingBottom: 100 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
         refreshing={refreshing}
         onRefresh={handleRefresh}
         ListHeaderComponent={
           <>
+            {/* Popular discover rail */}
             {showPopularRail ? (
               <View
                 style={[
@@ -692,9 +833,19 @@ export default function CommunitiesScreen() {
                 ]}
               >
                 <View style={styles.discoveryHeader}>
-                  <Compass size={14} color={textSecondaryColor} />
+                  <View
+                    style={[
+                      styles.discoverIconWrap,
+                      {
+                        backgroundColor: toRgba(tintColor, isDark ? 0.2 : 0.1),
+                        borderColor: toRgba(tintColor, isDark ? 0.38 : 0.2),
+                      },
+                    ]}
+                  >
+                    <TrendingUp size={11} color={tintColor} />
+                  </View>
                   <Text style={[styles.discoveryTitle, { color: textColor }]}>
-                    Popular
+                    Trending
                   </Text>
                 </View>
 
@@ -703,42 +854,39 @@ export default function CommunitiesScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.discoveryRail}
                 >
-                  {popularGroups.map((group) => {
-                    return (
-                      <Pressable
-                        key={group.id}
-                        onPress={() => router.push(`/community/${group.id}`)}
-                        style={({ pressed }) => [
-                          styles.discoveryCard,
-                          {
-                            backgroundColor: raisedSurfaceColor,
-                            borderColor: softBorderColor,
-                            transform: [{ scale: pressed ? 0.98 : 1 }],
-                            opacity: pressed ? 0.96 : 1,
-                          },
-                        ]}
-                      >
-                        <Image
-                          source={{ uri: group.image ?? undefined }}
-                          style={styles.discoveryAvatar}
-                        />
-                        <View style={styles.discoveryTextWrap}>
-                          <Text
-                            style={[styles.discoveryName, { color: textColor }]}
-                            numberOfLines={1}
-                            ellipsizeMode="tail"
-                            adjustsFontSizeToFit
-                            minimumFontScale={0.82}
-                          >
-                            {group.name}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
+                  {popularGroups.map((group) => (
+                    <PopularCard
+                      key={group.id}
+                      group={group}
+                      memberCount={memberCountByGroup[group.id] ?? 0}
+                      cardColor={raisedSurfaceColor}
+                      textColor={textColor}
+                      textSecondaryColor={textSecondaryColor}
+                      borderColor={softBorderColor}
+                      tintColor={tintColor}
+                      isDark={isDark}
+                      onPress={() => router.push(`/community/${group.id}`)}
+                    />
+                  ))}
                 </ScrollView>
               </View>
             ) : null}
+
+            {/* Section label + filter bar */}
+            <View style={styles.sectionLabelRow}>
+              <Text
+                style={[styles.sectionLabel, { color: textSecondaryColor }]}
+              >
+                {visibilityFilter === "joined"
+                  ? "Your communities"
+                  : "All communities"}
+              </Text>
+              <Text
+                style={[styles.sectionCount, { color: textSecondaryColor }]}
+              >
+                {visibleGroups.length}
+              </Text>
+            </View>
 
             <FilterBar
               selectedTab={visibilityFilter === "joined" ? "Joined" : "All"}
@@ -751,8 +899,6 @@ export default function CommunitiesScreen() {
                   current === "relevance" ? "popular" : "relevance",
                 )
               }
-              shellColor={filterShellColor}
-              shellBorder={softBorderColor}
               segmentBase={segmentBase}
               segmentBorder={segmentBorder}
               segmentSelectedBg={segmentSelectedBg}
@@ -770,24 +916,36 @@ export default function CommunitiesScreen() {
                 { backgroundColor: headerBg, borderColor: softBorderColor },
               ]}
             >
-              {loadError ? (
-                <Users size={36} color={textSecondaryColor} />
+              {isLoading ? (
+                <ActivityIndicator color={tintColor} size="large" />
+              ) : loadError ? (
+                <Users size={40} color={textSecondaryColor} />
               ) : normalizedQuery ? (
-                <Search size={36} color={textSecondaryColor} />
+                <Search size={40} color={textSecondaryColor} />
               ) : (
-                <Compass size={36} color={textSecondaryColor} />
+                <Compass size={40} color={textSecondaryColor} />
               )}
               <Text style={[styles.emptyText, { color: textSecondaryColor }]}>
                 {isLoading
-                  ? "Loading communities..."
+                  ? "Finding communities…"
                   : loadError
                     ? loadError
                     : normalizedQuery
                       ? "No communities match this search"
                       : visibilityFilter === "joined"
-                        ? "You have not joined any communities yet"
+                        ? "You haven't joined any communities yet"
                         : "No communities yet"}
               </Text>
+              {!isLoading &&
+              !loadError &&
+              visibilityFilter === "joined" &&
+              !normalizedQuery ? (
+                <Text
+                  style={[styles.emptyHint, { color: toRgba(tintColor, 0.7) }]}
+                >
+                  Switch to "All" to discover communities
+                </Text>
+              ) : null}
             </View>
           </View>
         }
@@ -800,21 +958,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  /* ── Header ── */
   topBarContainer: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     zIndex: 10,
-    borderBottomLeftRadius: 36,
-    borderBottomRightRadius: 36,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     borderWidth: 1,
     overflow: "hidden",
   },
   topBarContent: {
     gap: 10,
-    paddingBottom: 16,
-    paddingHorizontal: 12,
+    paddingBottom: 14,
+    paddingHorizontal: 14,
   },
   headerTopRow: {
     flexDirection: "row",
@@ -827,9 +986,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   inlineIconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -837,29 +996,29 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "800",
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
-  subtitle: {
-    fontSize: 11,
-    marginTop: -2,
+  statsPillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   countPill: {
-    minWidth: 32,
     height: 24,
     borderRadius: 999,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
   },
   countPillText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   searchWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 38,
+    height: 40,
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -872,15 +1031,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     paddingVertical: 0,
   },
+  /* ── List ── */
   listContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingTop: 10,
   },
+  /* ── Section label ── */
+  sectionLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+    marginTop: 4,
+    paddingHorizontal: 2,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  sectionCount: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  /* ── Filter bar ── */
   filterRow: {
-    marginBottom: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 6,
+    marginBottom: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -892,7 +1069,7 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
-    minHeight: 30,
+    minHeight: 32,
     borderRadius: 999,
     borderWidth: 1,
     alignItems: "center",
@@ -900,115 +1077,80 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   segmentText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   sortButton: {
-    minHeight: 30,
+    minHeight: 32,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 11,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 5,
   },
   sortText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   pressedScale: {
-    transform: [{ scale: 0.98 }],
+    transform: [{ scale: 0.97 }],
   },
+  /* ── Community card ── */
   itemSeparator: {
     height: 8,
   },
-  discoverySection: {
-    marginBottom: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 10,
-  },
-  discoveryHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
-  },
-  discoveryTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  discoveryRail: {
-    alignItems: "center",
-    paddingRight: 4,
-    gap: 12,
-  },
-  discoveryCard: {
-    width: 168,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 8,
-  },
-  discoveryAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#e5e7eb",
-    alignSelf: "center",
-  },
-  discoveryTextWrap: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-    alignSelf: "center",
-  },
-  discoveryName: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
   card: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+    overflow: "hidden",
+    flexDirection: "row",
+  },
+  cardAccentStripe: {
+    width: 3,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
   },
   cardInner: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    gap: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 11,
+    gap: 12,
   },
   avatarWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: "#e5e7eb",
   },
   cardText: {
     flex: 1,
     minWidth: 0,
+    gap: 3,
   },
   cardTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  badgeRow: {
+    flexDirection: "row",
+    gap: 4,
   },
   name: {
     flex: 1,
@@ -1018,7 +1160,7 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 2,
+    gap: 3,
   },
   meta: {
     fontSize: 11,
@@ -1027,52 +1169,140 @@ const styles = StyleSheet.create({
   newBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
+    gap: 3,
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   newBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9,
+    fontWeight: "800",
   },
   cardActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginLeft: 4,
+    gap: 4,
   },
   statusBadge: {
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     paddingVertical: 4,
     minWidth: 52,
     alignItems: "center",
   },
   statusBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
   },
+  /* ── Discovery (popular) rail ── */
+  discoverySection: {
+    marginBottom: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  discoveryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginBottom: 10,
+  },
+  discoverIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  discoveryTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.1,
+  },
+  discoveryRail: {
+    gap: 10,
+    paddingRight: 4,
+    paddingBottom: 2,
+  },
+  /* ── Popular card (circle style) ── */
+  popularCardOuter: {
+    width: 96,
+    alignItems: "center",
+    gap: 7,
+  },
+  popularCard: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 2,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  popularAvatarWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 2.5,
+    overflow: "hidden",
+    backgroundColor: "#e5e7eb",
+  },
+  popularAvatar: {
+    width: "100%",
+    height: "100%",
+  },
+  popularMemberPill: {
+    position: "absolute",
+    bottom: 8,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  popularMemberText: {
+    fontSize: 8,
+    fontWeight: "600",
+  },
+  popularName: {
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  /* ── Empty state ── */
   empty: {
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 40,
-    paddingHorizontal: 8,
+    paddingTop: 24,
+    paddingHorizontal: 6,
   },
   emptyCard: {
     width: "100%",
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 28,
-    paddingHorizontal: 14,
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+    gap: 10,
   },
   emptyText: {
-    marginTop: 10,
     fontSize: 14,
     textAlign: "center",
+    fontWeight: "500",
+  },
+  emptyHint: {
+    fontSize: 12,
+    textAlign: "center",
+    fontWeight: "500",
+    marginTop: 2,
   },
 });

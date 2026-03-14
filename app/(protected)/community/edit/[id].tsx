@@ -222,55 +222,45 @@ export default function EditCommunityPage() {
     type: "avatar" | "banner",
   ) => {
     const userId = user?.id;
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!userId || !supabaseUrl || !supabaseAnonKey) {
-      return {
-        data: null,
-        error: { message: "Missing upload configuration." },
-      };
+    if (!userId) {
+      return { data: null, error: { message: "Not signed in." } };
     }
 
     try {
       const extension = fileExtFromImage(localImage);
+      const mimeType = localImage.mimeType ?? "image/jpeg";
       const objectPath = `groups/${userId}/${type}_${Date.now()}_${Math.random()
         .toString(36)
         .slice(2, 8)}.${extension}`;
 
-      const localUri = localImage.uri.startsWith("content://")
-        ? `${FileSystem.cacheDirectory}upload_${Date.now()}.${extension}`
-        : localImage.uri;
-
+      // On Android, content:// URIs must be copied to a local cache file first
+      let localUri = localImage.uri;
       if (localImage.uri.startsWith("content://")) {
+        localUri = `${FileSystem.cacheDirectory}upload_${Date.now()}.${extension}`;
         await FileSystem.copyAsync({ from: localImage.uri, to: localUri });
       }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      const uploadUrl = `${supabaseUrl}/storage/v1/object/${COMMUNITY_MEDIA_BUCKET}/${objectPath}`;
-      const accessToken = session?.access_token ?? supabaseAnonKey;
-
-      const uploadResult = await FileSystem.uploadAsync(uploadUrl, localUri, {
-        httpMethod: "POST",
-        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": localImage.mimeType ?? "image/jpeg",
-          "x-upsert": "false",
-        },
+      // Read as base64 then convert to a Uint8Array (works on both iOS & Android)
+      const base64 = await FileSystem.readAsStringAsync(localUri, {
+        encoding: FileSystem.EncodingType.Base64,
       });
 
-      if (uploadResult.status < 200 || uploadResult.status >= 300) {
-        return {
-          data: null,
-          error: {
-            message: `Upload failed (${uploadResult.status})`,
-          },
-        };
+      // Decode base64 → binary
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from(COMMUNITY_MEDIA_BUCKET)
+        .upload(objectPath, bytes, {
+          contentType: mimeType,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        return { data: null, error: { message: uploadError.message } };
       }
 
       const { data } = supabase.storage

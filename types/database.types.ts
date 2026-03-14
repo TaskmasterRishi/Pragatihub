@@ -619,6 +619,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      is_group_moderator_for_post: {
+        Args: { p_post_id: string; p_user_id: string }
+        Returns: boolean
+      }
       requesting_user_id: { Args: never; Returns: string }
       requesting_user_id_uuid: { Args: never; Returns: string }
     }
