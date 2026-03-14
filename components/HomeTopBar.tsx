@@ -9,10 +9,12 @@ import {
   Text,
   TextInput,
   View,
+  Animated,
   useColorScheme,
 } from "react-native";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { useTabBarVisibility } from "@/utils/tabBarVisibility";
 
 type HomeTopBarProps = {
   searchQuery: string;
@@ -64,8 +66,20 @@ export default function HomeTopBar({
     "tabBarBackground",
   );
 
+  const visible = useTabBarVisibility();
+  const transY = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.spring(transY, {
+      toValue: visible ? 0 : -100, // slide up
+      useNativeDriver: true,
+      bounciness: 0,
+      speed: 15,
+    }).start();
+  }, [visible]);
+
   return (
-    <View
+    <Animated.View
       style={[
         styles.container,
         {
@@ -78,6 +92,7 @@ export default function HomeTopBar({
                 WebkitBackdropFilter: "saturate(140%) blur(18px)",
               } as any)
             : {}),
+          transform: [{ translateY: transY }],
         },
       ]}
     >
@@ -109,7 +124,7 @@ export default function HomeTopBar({
         searchQuery={searchQuery}
         onChangeSearchQuery={onChangeSearchQuery}
       />
-    </View>
+    </Animated.View>
   );
 }
 

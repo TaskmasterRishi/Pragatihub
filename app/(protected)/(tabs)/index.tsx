@@ -3,8 +3,9 @@ import PostListItem from "@/components/PostListItem";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
-import { useEffect, useMemo, useState } from "react";
-import { FlatList, View } from "react-native";
+import { setTabBarVisible } from "@/utils/tabBarVisibility";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FlatList, NativeSyntheticEvent, NativeScrollEvent, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PAGE_SIZE = 5;
@@ -16,6 +17,40 @@ export default function HomeScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    
+    // Clear existing timeout
+    if (scrollTimeout.current) {
+      clearTimeout(scrollTimeout.current);
+    }
+
+    if (offsetY <= 10) {
+      // At or very near the top: show immediately, no debounce
+      setTabBarVisible(true);
+    } else if (offsetY > 50) {
+      // Scrolled down: hide, then show after debounce
+      setTabBarVisible(false);
+      scrollTimeout.current = setTimeout(() => {
+        setTabBarVisible(true);
+      }, 500); // Reduced timing
+    } else {
+      // Between 10 and 50: show immediately
+      setTabBarVisible(true);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimeout.current) {
+        clearTimeout(scrollTimeout.current);
+      }
+      setTabBarVisible(true);
+    };
+  }, []);
 
   useEffect(() => {
     fetchPosts();
@@ -138,6 +173,8 @@ export default function HomeScreen() {
         }}
         refreshing={refreshing}
         onRefresh={handleRefresh}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         progressViewOffset={insets.top + 80}
         onEndReached={() => {
           if (page * PAGE_SIZE < filteredPosts.length) {

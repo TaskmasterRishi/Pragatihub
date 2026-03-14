@@ -6,9 +6,12 @@ import {
   Platform,
   StyleSheet,
   View,
+  Animated,
   useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { useTabBarVisibility } from "@/utils/tabBarVisibility";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -63,6 +66,18 @@ export default function TabLayout() {
     },
     "tabBarBorder",
   );
+
+  const visible = useTabBarVisibility();
+  const transY = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.spring(transY, {
+      toValue: visible ? 0 : 150, // slide down
+      useNativeDriver: true,
+      bounciness: 0,
+      speed: 15,
+    }).start();
+  }, [visible]);
 
   const renderIcon = (
     Icon: React.ComponentType<{ size?: number; color?: string }>,
@@ -129,6 +144,7 @@ export default function TabLayout() {
 
         tabBarStyle: {
           position: "absolute",
+          transform: [{ translateY: transY }],
           marginHorizontal: 12,
           bottom: Math.max(insets.bottom, 8),
 
