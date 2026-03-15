@@ -13,6 +13,7 @@ import {
 } from "lucide-react-native";
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -742,6 +743,7 @@ function PostListItem({
   const [reportDetails, setReportDetails] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportSubmitted, setReportSubmitted] = useState(false);
+  const [isWritingDetails, setIsWritingDetails] = useState(false);
   const [isSubmittingModeratorSupport, setIsSubmittingModeratorSupport] =
     useState(false);
   const updatedAt = post.updated_at ?? post.edited_at ?? null;
@@ -778,17 +780,26 @@ function PostListItem({
   };
 
   const handleSubmitReport = async () => {
-    if (!selectedReason || reportSubmitting) return;
+    if (!selectedReason || reportSubmitting || !user?.id) return;
     setReportSubmitting(true);
     const { error } = await submitReport(
       post.id,
       post.group.id,
       selectedReason,
+      user.id,
       reportDetails,
     );
     setReportSubmitting(false);
     if (!error) {
       setReportSubmitted(true);
+      setTimeout(() => {
+        setReportSheetVisible(false);
+        setReportSubmitted(false);
+        setSelectedReason(null);
+        setReportDetails("");
+      }, 2000);
+    } else {
+      Alert.alert("Error", (error as Error)?.message || "Failed to submit report. Please try again.");
     }
   };
 
@@ -1178,50 +1189,52 @@ function PostListItem({
           navigationBarTranslucent
           onRequestClose={() => setReportSheetVisible(false)}
         >
-          <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-          >
+          <View style={{ flex: 1 }}>
             <Pressable
               style={{
-                flex: 1,
+                ...StyleSheet.absoluteFillObject,
                 backgroundColor: "rgba(0,0,0,0.5)",
-                justifyContent: "flex-end",
               }}
               onPress={() => setReportSheetVisible(false)}
+            />
+            <Pressable
+              onPress={(e) => e.stopPropagation()}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: card,
+                borderTopLeftRadius: 28,
+                borderTopRightRadius: 28,
+                borderTopWidth: 1,
+                borderColor: border,
+                maxHeight: "92%",
+                paddingBottom: bottomInset + 36,
+                marginBottom: -bottomInset,
+              }}
             >
-              <Pressable onPress={(e) => e.stopPropagation()}>
+              {/* Handle */}
+              <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
                 <View
                   style={{
-                    backgroundColor: card,
-                    borderTopLeftRadius: 28,
-                    borderTopRightRadius: 28,
-                    borderTopWidth: 1,
-                    borderColor: border,
-                    maxHeight: "92%",
+                    width: 40,
+                    height: 4,
+                    borderRadius: 999,
+                    backgroundColor: `${muted}40`,
                   }}
-                >
-                  {/* Handle */}
-                  <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
-                    <View
-                      style={{
-                        width: 40,
-                        height: 4,
-                        borderRadius: 999,
-                        backgroundColor: `${muted}40`,
-                      }}
-                    />
-                  </View>
+                />
+              </View>
 
-                  <ScrollView
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{
-                      paddingHorizontal: 20,
-                      paddingTop: 12,
-                      paddingBottom: bottomInset + 36,
-                    }}
-                  >
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{
+                  paddingHorizontal: 20,
+                  paddingTop: 12,
+                  paddingBottom: 20,
+                }}
+              >
                     {reportSubmitted ? (
                       /* ── Success State ── */
                       <View style={{ alignItems: "center", paddingVertical: 32, gap: 14 }}>
@@ -1356,88 +1369,88 @@ function PostListItem({
                           })}
                         </View>
 
-                        {/* Details input */}
-                        <Text style={{ color: text, fontSize: 13, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 10, opacity: 0.6 }}>
-                          Additional details
-                        </Text>
-                        <View
-                          style={{
-                            borderWidth: 1.5,
-                            borderColor: reportDetails.length > 0 ? `${muted}60` : border,
-                            borderRadius: 16,
-                            overflow: "hidden",
-                            marginBottom: 6,
-                          }}
-                        >
-                          <TextInput
-                            value={reportDetails}
-                            onChangeText={setReportDetails}
-                            placeholder="Describe what's wrong with this post… (optional)"
-                            placeholderTextColor={`${muted}60`}
-                            multiline
-                            maxLength={500}
+                        {/* Details input wrapped in KeyboardAvoidingView */}
+                        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "position" : "padding"} keyboardVerticalOffset={Platform.OS === "ios" ? 140 : 80}>
+                          <Text style={{ color: text, fontSize: 13, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 10, opacity: 0.6 }}>
+                            Additional details
+                          </Text>
+                          <View
                             style={{
-                              paddingHorizontal: 14,
-                              paddingVertical: 12,
-                              color: text,
-                              fontSize: 14,
-                              minHeight: 80,
-                              textAlignVertical: "top",
-                              lineHeight: 20,
-                            }}
-                          />
-                        </View>
-                        <Text style={{ color: muted, fontSize: 11.5, textAlign: "right", marginBottom: 20 }}>
-                          {reportDetails.length}/500
-                        </Text>
-
-                        {/* Submit button */}
-                        <TouchableOpacity
-                          disabled={!selectedReason || reportSubmitting}
-                          onPress={() => { void handleSubmitReport(); }}
-                          style={{
-                            paddingVertical: 15,
-                            borderRadius: 18,
-                            backgroundColor: selectedReason && !reportSubmitting ? "#EF4444" : `${muted}25`,
-                            alignItems: "center",
-                            marginBottom: 10,
-                            shadowColor: selectedReason ? "#EF4444" : "transparent",
-                            shadowOpacity: 0.35,
-                            shadowRadius: 10,
-                            shadowOffset: { width: 0, height: 4 },
-                            elevation: selectedReason ? 4 : 0,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: selectedReason && !reportSubmitting ? "#fff" : muted,
-                              fontSize: 15.5,
-                              fontWeight: "800",
-                              letterSpacing: 0.2,
+                              borderWidth: 1.5,
+                              borderColor: reportDetails.length > 0 ? `${muted}60` : border,
+                              borderRadius: 16,
+                              overflow: "hidden",
+                              marginBottom: 6,
                             }}
                           >
-                            {reportSubmitting ? "Submitting…" : "Submit Report"}
+                            <TextInput
+                              value={reportDetails}
+                              onChangeText={setReportDetails}
+                              placeholder="Describe what's wrong with this post… (optional)"
+                              placeholderTextColor={`${muted}60`}
+                              multiline
+                              maxLength={500}
+                              style={{
+                                paddingHorizontal: 14,
+                                paddingVertical: 12,
+                                color: text,
+                                fontSize: 14,
+                                minHeight: 80,
+                                textAlignVertical: "top",
+                                lineHeight: 20,
+                              }}
+                            />
+                          </View>
+                          <Text style={{ color: muted, fontSize: 11.5, textAlign: "right", marginBottom: 20 }}>
+                            {reportDetails.length}/500
                           </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          onPress={() => setReportSheetVisible(false)}
-                          style={{ paddingVertical: 12, alignItems: "center" }}
-                        >
-                          <Text style={{ color: muted, fontSize: 14.5, fontWeight: "600" }}>Cancel</Text>
-                        </TouchableOpacity>
+  
+                          {/* Submit button */}
+                          <TouchableOpacity
+                            disabled={!selectedReason || reportSubmitting}
+                            onPress={() => { void handleSubmitReport(); }}
+                            style={{
+                              paddingVertical: 15,
+                              borderRadius: 18,
+                              backgroundColor: selectedReason && !reportSubmitting ? "#EF4444" : `${muted}25`,
+                              alignItems: "center",
+                              marginBottom: 10,
+                              shadowColor: selectedReason ? "#EF4444" : "transparent",
+                              shadowOpacity: 0.35,
+                              shadowRadius: 10,
+                              shadowOffset: { width: 0, height: 4 },
+                              elevation: selectedReason ? 4 : 0,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color: selectedReason && !reportSubmitting ? "#fff" : muted,
+                                fontSize: 15.5,
+                                fontWeight: "800",
+                                letterSpacing: 0.2,
+                              }}
+                            >
+                              {reportSubmitting ? "Submitting…" : "Submit Report"}
+                            </Text>
+                          </TouchableOpacity>
+  
+                          <TouchableOpacity
+                            onPress={() => setReportSheetVisible(false)}
+                            style={{ paddingVertical: 12, alignItems: "center" }}
+                          >
+                            <Text style={{ color: muted, fontSize: 14.5, fontWeight: "600" }}>Cancel</Text>
+                          </TouchableOpacity>
+                        </KeyboardAvoidingView>
                       </>
                     )}
                   </ScrollView>
-                </View>
               </Pressable>
-            </Pressable>
-          </KeyboardAvoidingView>
-        </Modal>
+            </View>
+          </Modal>
 
-      </>
-    </FadeInView>
-  );
-}
-
-export default memo(PostListItem);
+        </>
+      </FadeInView>
+    );
+  }
+  
+  export default memo(PostListItem);

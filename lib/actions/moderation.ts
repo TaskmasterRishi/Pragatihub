@@ -102,17 +102,15 @@ export async function submitReport(
   postId: string,
   groupId: string,
   reason: ReportReason,
+  reporterId: string,
   details?: string,
 ): Promise<{ error: unknown }> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: new Error("Not authenticated") };
+  if (!reporterId) return { error: new Error("Not authenticated") };
 
   const { error } = await supabase.from("post_reports").insert({
     post_id: postId,
     group_id: groupId,
-    reporter_id: user.id,
+    reporter_id: reporterId,
     reason,
     details: details?.trim() || null,
   });
