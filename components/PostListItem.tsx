@@ -5,6 +5,7 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import {
   Check,
   EllipsisVertical,
+  Flag,
   Loader2,
   MessageSquare,
   Share2,
@@ -15,11 +16,15 @@ import {
   Animated,
   Dimensions,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -29,6 +34,11 @@ import VoteButtons from "@/components/VoteButtons";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
+import {
+  REPORT_REASONS,
+  submitReport,
+  type ReportReason,
+} from "@/lib/actions/moderation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -727,6 +737,13 @@ function PostListItem({
     (post.post_type === "video" && !!primaryMediaUrl);
   const isPollPost = post.post_type === "poll";
   const [ownerSheetVisible, setOwnerSheetVisible] = useState(false);
+  const [reportSheetVisible, setReportSheetVisible] = useState(false);
+  const [selectedReason, setSelectedReason] = useState<ReportReason | null>(null);
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
+  const [isSubmittingModeratorSupport, setIsSubmittingModeratorSupport] =
+    useState(false);
   const updatedAt = post.updated_at ?? post.edited_at ?? null;
   const isEdited =
     post.is_edited === true ||
@@ -751,6 +768,28 @@ function PostListItem({
 
   const openOwnerMenu = () => {
     setOwnerSheetVisible(true);
+  };
+
+  const openReportMenu = () => {
+    setSelectedReason(null);
+    setReportDetails("");
+    setReportSubmitted(false);
+    setReportSheetVisible(true);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!selectedReason || reportSubmitting) return;
+    setReportSubmitting(true);
+    const { error } = await submitReport(
+      post.id,
+      post.group.id,
+      selectedReason,
+      reportDetails,
+    );
+    setReportSubmitting(false);
+    if (!error) {
+      setReportSubmitted(true);
+    }
   };
 
   const supportAuthorAsModerator = async () => {
@@ -993,9 +1032,25 @@ function PostListItem({
                 }}
               />
 
-              <AnimatedIconButton>
+              <AnimatedIconButton onPress={handleShare}>
                 <Share2 size={17} color={muted} />
               </AnimatedIconButton>
+
+              <View
+                style={{
+                  width: 1,
+                  height: 18,
+                  backgroundColor: border,
+                  marginHorizontal: 10,
+                }}
+              />
+
+              {/* Report button — hidden for post owner */}
+              {user?.id !== post.user.id && (
+                <AnimatedIconButton onPress={openReportMenu}>
+                  <Flag size={17} color={muted} />
+                </AnimatedIconButton>
+              )}
             </View>
           </View>
         </View>
@@ -1112,6 +1167,272 @@ function PostListItem({
               </TouchableOpacity>
             </Pressable>
           </View>
+        </Modal>
+
+        {/* ── Report Modal ── */}
+        <Modal
+          transparent
+          visible={reportSheetVisible}
+          animationType="slide"
+          statusBarTranslucent
+          navigationBarTranslucent
+          onRequestClose={() => setReportSheetVisible(false)}
+        >
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+          >
+            <Pressable
+              style={{
+                flex: 1,
+                backgroundColor: "rgba(0,0,0,0.5)",
+                justifyContent: "flex-end",
+              }}
+              onPress={() => setReportSheetVisible(false)}
+            >
+              <Pressable onPress={(e) => e.stopPropagation()}>
+                <View
+                  style={{
+                    backgroundColor: card,
+                    borderTopLeftRadius: 28,
+                    borderTopRightRadius: 28,
+                    borderTopWidth: 1,
+                    borderColor: border,
+                    maxHeight: "92%",
+                  }}
+                >
+                  {/* Handle */}
+                  <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
+                    <View
+                      style={{
+                        width: 40,
+                        height: 4,
+                        borderRadius: 999,
+                        backgroundColor: `${muted}40`,
+                      }}
+                    />
+                  </View>
+
+                  <ScrollView
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{
+                      paddingHorizontal: 20,
+                      paddingTop: 12,
+                      paddingBottom: bottomInset + 36,
+                    }}
+                  >
+                    {reportSubmitted ? (
+                      /* ── Success State ── */
+                      <View style={{ alignItems: "center", paddingVertical: 32, gap: 14 }}>
+                        <View
+                          style={{
+                            width: 72,
+                            height: 72,
+                            borderRadius: 36,
+                            backgroundColor: "#22c55e18",
+                            borderWidth: 1.5,
+                            borderColor: "#22c55e44",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Flag size={32} color="#22c55e" />
+                        </View>
+                        <View style={{ alignItems: "center", gap: 6 }}>
+                          <Text style={{ color: text, fontSize: 20, fontWeight: "800", letterSpacing: -0.3 }}>
+                            Report Submitted
+                          </Text>
+                          <Text style={{ color: muted, fontSize: 14, textAlign: "center", lineHeight: 22, maxWidth: 260 }}>
+                            Moderators will review your report and take appropriate action.
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => setReportSheetVisible(false)}
+                          style={{
+                            marginTop: 4,
+                            paddingVertical: 13,
+                            paddingHorizontal: 40,
+                            borderRadius: 16,
+                            backgroundColor: "#22c55e",
+                          }}
+                        >
+                          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Done</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      /* ── Report Form ── */
+                      <>
+                        {/* Header */}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 6 }}>
+                          <View
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 20,
+                              backgroundColor: "#EF444418",
+                              borderWidth: 1,
+                              borderColor: "#EF444433",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Flag size={18} color="#EF4444" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: text, fontSize: 18, fontWeight: "800", letterSpacing: -0.3 }}>
+                              Report Post
+                            </Text>
+                            <Text style={{ color: muted, fontSize: 12.5, marginTop: 1 }}>
+                              Help keep the community safe
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Divider */}
+                        <View style={{ height: 1, backgroundColor: border, marginVertical: 16 }} />
+
+                        <Text style={{ color: text, fontSize: 13, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 12, opacity: 0.6 }}>
+                          Select a reason
+                        </Text>
+
+                        {/* Reason Grid — 2 columns */}
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+                          {REPORT_REASONS.map((reason) => {
+                            const isSelected = selectedReason === reason.value;
+                            return (
+                              <TouchableOpacity
+                                key={reason.value}
+                                onPress={() => setSelectedReason(reason.value)}
+                                style={{
+                                  width: "48%",
+                                  paddingVertical: 13,
+                                  paddingHorizontal: 14,
+                                  borderRadius: 16,
+                                  borderWidth: 1.5,
+                                  borderColor: isSelected ? reason.color : `${border}`,
+                                  backgroundColor: isSelected ? `${reason.color}18` : `${muted}08`,
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                }}
+                              >
+                                {/* Color dot */}
+                                <View
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: 5,
+                                    backgroundColor: isSelected ? reason.color : `${muted}60`,
+                                  }}
+                                />
+                                <Text
+                                  style={{
+                                    color: isSelected ? reason.color : text,
+                                    fontSize: 13.5,
+                                    fontWeight: isSelected ? "700" : "500",
+                                    flex: 1,
+                                  }}
+                                  numberOfLines={1}
+                                >
+                                  {reason.label}
+                                </Text>
+                                {isSelected && (
+                                  <View
+                                    style={{
+                                      width: 16,
+                                      height: 16,
+                                      borderRadius: 8,
+                                      backgroundColor: reason.color,
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <Check size={10} color="#fff" strokeWidth={3} />
+                                  </View>
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+
+                        {/* Details input */}
+                        <Text style={{ color: text, fontSize: 13, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 10, opacity: 0.6 }}>
+                          Additional details
+                        </Text>
+                        <View
+                          style={{
+                            borderWidth: 1.5,
+                            borderColor: reportDetails.length > 0 ? `${muted}60` : border,
+                            borderRadius: 16,
+                            overflow: "hidden",
+                            marginBottom: 6,
+                          }}
+                        >
+                          <TextInput
+                            value={reportDetails}
+                            onChangeText={setReportDetails}
+                            placeholder="Describe what's wrong with this post… (optional)"
+                            placeholderTextColor={`${muted}60`}
+                            multiline
+                            maxLength={500}
+                            style={{
+                              paddingHorizontal: 14,
+                              paddingVertical: 12,
+                              color: text,
+                              fontSize: 14,
+                              minHeight: 80,
+                              textAlignVertical: "top",
+                              lineHeight: 20,
+                            }}
+                          />
+                        </View>
+                        <Text style={{ color: muted, fontSize: 11.5, textAlign: "right", marginBottom: 20 }}>
+                          {reportDetails.length}/500
+                        </Text>
+
+                        {/* Submit button */}
+                        <TouchableOpacity
+                          disabled={!selectedReason || reportSubmitting}
+                          onPress={() => { void handleSubmitReport(); }}
+                          style={{
+                            paddingVertical: 15,
+                            borderRadius: 18,
+                            backgroundColor: selectedReason && !reportSubmitting ? "#EF4444" : `${muted}25`,
+                            alignItems: "center",
+                            marginBottom: 10,
+                            shadowColor: selectedReason ? "#EF4444" : "transparent",
+                            shadowOpacity: 0.35,
+                            shadowRadius: 10,
+                            shadowOffset: { width: 0, height: 4 },
+                            elevation: selectedReason ? 4 : 0,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: selectedReason && !reportSubmitting ? "#fff" : muted,
+                              fontSize: 15.5,
+                              fontWeight: "800",
+                              letterSpacing: 0.2,
+                            }}
+                          >
+                            {reportSubmitting ? "Submitting…" : "Submit Report"}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={() => setReportSheetVisible(false)}
+                          style={{ paddingVertical: 12, alignItems: "center" }}
+                        >
+                          <Text style={{ color: muted, fontSize: 14.5, fontWeight: "600" }}>Cancel</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </ScrollView>
+                </View>
+              </Pressable>
+            </Pressable>
+          </KeyboardAvoidingView>
         </Modal>
 
       </>

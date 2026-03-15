@@ -2,11 +2,13 @@ import AppLoader from "@/components/AppLoader";
 import { HapticTab } from "@/components/haptic-tab";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
+import { checkIsModerator, fetchPendingReportCount } from "@/lib/actions/moderation";
 import { BlurView } from "expo-blur";
 import { Tabs, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ChevronLeft,
   MessageCircle,
+  Shield,
   UserIcon,
   Users as UsersIcon,
 } from "lucide-react-native";
@@ -31,6 +33,8 @@ export default function CommunityLayout() {
 
   const [community, setCommunity] = useState<Group | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isMod, setIsMod] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
 
   const bg = useThemeColor({}, "background");
   const text = useThemeColor({}, "text");
@@ -116,9 +120,15 @@ export default function CommunityLayout() {
 
     const load = async () => {
       setLoading(true);
-      const { data } = await fetchGroupById(communityId);
+      const [{ data }, modStatus, count] = await Promise.all([
+        fetchGroupById(communityId),
+        checkIsModerator(communityId),
+        fetchPendingReportCount(communityId),
+      ]);
       if (cancelled) return;
       setCommunity(data ?? null);
+      setIsMod(modStatus);
+      setPendingCount(count);
       setLoading(false);
     };
 
@@ -258,14 +268,42 @@ export default function CommunityLayout() {
       <Tabs.Screen
         name="chat"
         options={{
-          title: "chat",
+          title: "Chat",
           tabBarIcon: ({ focused }) => renderIcon(MessageCircle, focused, 24),
         }}
       />
       <Tabs.Screen
         name="moderation"
         options={{
-          href: null,
+          href: isMod ? undefined : null,
+          title: "Mod",
+          tabBarIcon: ({ focused }) => (
+            <View style={{ position: "relative" }}>
+              {renderIcon(Shield, focused, 22)}
+              {isMod && pendingCount > 0 && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: -2,
+                    right: -4,
+                    minWidth: 16,
+                    height: 16,
+                    borderRadius: 8,
+                    backgroundColor: "#EF4444",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    paddingHorizontal: 3,
+                  }}
+                >
+                  <Text
+                    style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}
+                  >
+                    {pendingCount > 99 ? "99+" : pendingCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ),
         }}
       />
     </Tabs>
