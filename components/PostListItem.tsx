@@ -694,6 +694,36 @@ function AnimatedIconButton({
   );
 }
 
+function ScalePressable({
+  children,
+  onPress,
+  style,
+  disabled = false,
+  pressedScale = 0.97,
+}: {
+  children: React.ReactNode;
+  onPress?: () => void;
+  style?: any;
+  disabled?: boolean;
+  pressedScale?: number;
+}) {
+  const { scale, onPressIn, onPressOut } = usePressScale(1, pressedScale);
+
+  return (
+    <Animated.View style={[{ transform: [{ scale }] }, style]}>
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        android_ripple={{ color: "#00000008" }}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 /* ───────────────────────────────────────────── */
 /* Main Post Card */
 /* ───────────────────────────────────────────── */
@@ -737,6 +767,7 @@ function PostListItem({
     firstMedia?.media_type === "video" ||
     (post.post_type === "video" && !!primaryMediaUrl);
   const isPollPost = post.post_type === "poll";
+  const canReportPost = user?.id !== post.user.id;
   const [ownerSheetVisible, setOwnerSheetVisible] = useState(false);
   const [reportSheetVisible, setReportSheetVisible] = useState(false);
   const [selectedReason, setSelectedReason] = useState<ReportReason | null>(null);
@@ -746,12 +777,45 @@ function PostListItem({
   const [isWritingDetails, setIsWritingDetails] = useState(false);
   const [isSubmittingModeratorSupport, setIsSubmittingModeratorSupport] =
     useState(false);
+  const reportSheetAnim = useRef(new Animated.Value(0)).current;
+  const reportSuccessAnim = useRef(new Animated.Value(0)).current;
   const updatedAt = post.updated_at ?? post.edited_at ?? null;
   const isEdited =
     post.is_edited === true ||
     (typeof updatedAt === "string" &&
       new Date(updatedAt).getTime() - new Date(post.created_at).getTime() >
         1000);
+  const reportSheetTranslateY = reportSheetAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [36, 0],
+  });
+  const reportSuccessTranslateY = reportSuccessAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [12, 0],
+  });
+
+  useEffect(() => {
+    if (!reportSheetVisible) return;
+    reportSheetAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(reportSheetAnim, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [reportSheetVisible, reportSheetAnim]);
+
+  useEffect(() => {
+    if (!reportSubmitted) return;
+    reportSuccessAnim.setValue(0);
+    Animated.spring(reportSuccessAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 16,
+      bounciness: 7,
+    }).start();
+  }, [reportSubmitted, reportSuccessAnim]);
 
   const handleShare = async () => {
     if (onSharePost) {
@@ -1047,17 +1111,19 @@ function PostListItem({
                 <Share2 size={17} color={muted} />
               </AnimatedIconButton>
 
-              <View
-                style={{
-                  width: 1,
-                  height: 18,
-                  backgroundColor: border,
-                  marginHorizontal: 10,
-                }}
-              />
+              {canReportPost && (
+                <View
+                  style={{
+                    width: 1,
+                    height: 18,
+                    backgroundColor: border,
+                    marginHorizontal: 10,
+                  }}
+                />
+              )}
 
               {/* Report button — hidden for post owner */}
-              {user?.id !== post.user.id && (
+              {canReportPost && (
                 <AnimatedIconButton onPress={openReportMenu}>
                   <Flag size={17} color={muted} />
                 </AnimatedIconButton>
@@ -1193,7 +1259,7 @@ function PostListItem({
             <Pressable
               style={{
                 ...StyleSheet.absoluteFillObject,
-                backgroundColor: "rgba(0,0,0,0.5)",
+                backgroundColor: "rgba(2, 6, 23, 0.58)",
               }}
               onPress={() => setReportSheetVisible(false)}
             />
@@ -1201,43 +1267,64 @@ function PostListItem({
               onPress={(e) => e.stopPropagation()}
               style={{
                 position: "absolute",
+                top: 0,
                 left: 0,
                 right: 0,
                 bottom: 0,
-                backgroundColor: card,
-                borderTopLeftRadius: 28,
-                borderTopRightRadius: 28,
-                borderTopWidth: 1,
-                borderColor: border,
-                maxHeight: "92%",
-                paddingBottom: bottomInset + 36,
-                marginBottom: -bottomInset,
+                justifyContent: "flex-end",
               }}
             >
-              {/* Handle */}
-              <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
-                <View
-                  style={{
-                    width: 40,
-                    height: 4,
-                    borderRadius: 999,
-                    backgroundColor: `${muted}40`,
-                  }}
-                />
-              </View>
-
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{
-                  paddingHorizontal: 20,
-                  paddingTop: 12,
-                  paddingBottom: 20,
+              <Animated.View
+                style={{
+                  backgroundColor: card,
+                  borderTopLeftRadius: 30,
+                  borderTopRightRadius: 30,
+                  borderTopWidth: 1,
+                  borderColor: border,
+                  maxHeight: "92%",
+                  paddingBottom: bottomInset + 20,
+                  overflow: "hidden",
+                  shadowColor: "#000",
+                  shadowOpacity: 0.2,
+                  shadowRadius: 16,
+                  shadowOffset: { width: 0, height: -8 },
+                  elevation: 12,
+                  opacity: reportSheetAnim,
+                  transform: [{ translateY: reportSheetTranslateY }],
                 }}
               >
+                {/* Handle */}
+                <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
+                  <View
+                    style={{
+                      width: 52,
+                      height: 5,
+                      borderRadius: 999,
+                      backgroundColor: `${muted}40`,
+                    }}
+                  />
+                </View>
+
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{
+                    paddingHorizontal: 20,
+                    paddingTop: 14,
+                    paddingBottom: 20,
+                  }}
+                >
                     {reportSubmitted ? (
                       /* ── Success State ── */
-                      <View style={{ alignItems: "center", paddingVertical: 32, gap: 14 }}>
+                      <Animated.View
+                        style={{
+                          alignItems: "center",
+                          paddingVertical: 34,
+                          gap: 14,
+                          opacity: reportSuccessAnim,
+                          transform: [{ translateY: reportSuccessTranslateY }],
+                        }}
+                      >
                         <View
                           style={{
                             width: 72,
@@ -1250,7 +1337,7 @@ function PostListItem({
                             justifyContent: "center",
                           }}
                         >
-                          <Flag size={32} color="#22c55e" />
+                          <Check size={32} color="#22c55e" />
                         </View>
                         <View style={{ alignItems: "center", gap: 6 }}>
                           <Text style={{ color: text, fontSize: 20, fontWeight: "800", letterSpacing: -0.3 }}>
@@ -1260,24 +1347,37 @@ function PostListItem({
                             Moderators will review your report and take appropriate action.
                           </Text>
                         </View>
-                        <TouchableOpacity
+                        <ScalePressable
                           onPress={() => setReportSheetVisible(false)}
+                          pressedScale={0.96}
                           style={{
                             marginTop: 4,
-                            paddingVertical: 13,
-                            paddingHorizontal: 40,
+                            overflow: "hidden",
                             borderRadius: 16,
                             backgroundColor: "#22c55e",
                           }}
                         >
-                          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Done</Text>
-                        </TouchableOpacity>
-                      </View>
+                          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700", paddingVertical: 13, paddingHorizontal: 40 }}>Done</Text>
+                        </ScalePressable>
+                      </Animated.View>
                     ) : (
                       /* ── Report Form ── */
                       <>
                         {/* Header */}
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 6 }}>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 12,
+                            marginBottom: 6,
+                            paddingHorizontal: 12,
+                            paddingVertical: 12,
+                            borderRadius: 16,
+                            backgroundColor: `${muted}10`,
+                            borderWidth: 1,
+                            borderColor: `${muted}20`,
+                          }}
+                        >
                           <View
                             style={{
                               width: 40,
@@ -1296,83 +1396,91 @@ function PostListItem({
                             <Text style={{ color: text, fontSize: 18, fontWeight: "800", letterSpacing: -0.3 }}>
                               Report Post
                             </Text>
-                            <Text style={{ color: muted, fontSize: 12.5, marginTop: 1 }}>
-                              Help keep the community safe
+                            <Text style={{ color: muted, fontSize: 12.5, marginTop: 2, lineHeight: 18 }}>
+                              Pick the issue that best matches this post.
                             </Text>
                           </View>
                         </View>
 
                         {/* Divider */}
-                        <View style={{ height: 1, backgroundColor: border, marginVertical: 16 }} />
+                        <View style={{ height: 1, backgroundColor: border, marginVertical: 18 }} />
 
-                        <Text style={{ color: text, fontSize: 13, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 12, opacity: 0.6 }}>
-                          Select a reason
+                        <Text style={{ color: text, fontSize: 13, fontWeight: "700", marginBottom: 12, opacity: 0.8 }}>
+                          Why are you reporting this?
                         </Text>
 
                         {/* Reason Grid — 2 columns */}
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 22 }}>
                           {REPORT_REASONS.map((reason) => {
                             const isSelected = selectedReason === reason.value;
                             return (
-                              <TouchableOpacity
+                              <ScalePressable
                                 key={reason.value}
                                 onPress={() => setSelectedReason(reason.value)}
+                                pressedScale={0.975}
                                 style={{
                                   width: "48%",
-                                  paddingVertical: 13,
-                                  paddingHorizontal: 14,
                                   borderRadius: 16,
                                   borderWidth: 1.5,
                                   borderColor: isSelected ? reason.color : `${border}`,
-                                  backgroundColor: isSelected ? `${reason.color}18` : `${muted}08`,
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 8,
+                                  backgroundColor: isSelected ? `${reason.color}16` : `${muted}10`,
+                                  overflow: "hidden",
                                 }}
                               >
-                                {/* Color dot */}
                                 <View
                                   style={{
-                                    width: 10,
-                                    height: 10,
-                                    borderRadius: 5,
-                                    backgroundColor: isSelected ? reason.color : `${muted}60`,
+                                    paddingVertical: 13,
+                                    paddingHorizontal: 14,
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    minHeight: 48,
                                   }}
-                                />
-                                <Text
-                                  style={{
-                                    color: isSelected ? reason.color : text,
-                                    fontSize: 13.5,
-                                    fontWeight: isSelected ? "700" : "500",
-                                    flex: 1,
-                                  }}
-                                  numberOfLines={1}
                                 >
-                                  {reason.label}
-                                </Text>
-                                {isSelected && (
+                                  {/* Color dot */}
                                   <View
                                     style={{
-                                      width: 16,
-                                      height: 16,
-                                      borderRadius: 8,
-                                      backgroundColor: reason.color,
-                                      alignItems: "center",
-                                      justifyContent: "center",
+                                      width: 10,
+                                      height: 10,
+                                      borderRadius: 5,
+                                      backgroundColor: isSelected ? reason.color : `${muted}60`,
                                     }}
+                                  />
+                                  <Text
+                                    style={{
+                                      color: isSelected ? reason.color : text,
+                                      fontSize: 13.5,
+                                      fontWeight: isSelected ? "700" : "500",
+                                      flex: 1,
+                                    }}
+                                    numberOfLines={2}
                                   >
-                                    <Check size={10} color="#fff" strokeWidth={3} />
-                                  </View>
-                                )}
-                              </TouchableOpacity>
+                                    {reason.label}
+                                  </Text>
+                                  {isSelected && (
+                                    <View
+                                      style={{
+                                        width: 16,
+                                        height: 16,
+                                        borderRadius: 8,
+                                        backgroundColor: reason.color,
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <Check size={10} color="#fff" strokeWidth={3} />
+                                    </View>
+                                  )}
+                                </View>
+                              </ScalePressable>
                             );
                           })}
                         </View>
 
                         {/* Details input wrapped in KeyboardAvoidingView */}
                         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "position" : "padding"} keyboardVerticalOffset={Platform.OS === "ios" ? 140 : 80}>
-                          <Text style={{ color: text, fontSize: 13, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 10, opacity: 0.6 }}>
-                            Additional details
+                          <Text style={{ color: text, fontSize: 13, fontWeight: "700", marginBottom: 10, opacity: 0.8 }}>
+                            Additional details (optional)
                           </Text>
                           <View
                             style={{
@@ -1381,6 +1489,7 @@ function PostListItem({
                               borderRadius: 16,
                               overflow: "hidden",
                               marginBottom: 6,
+                              backgroundColor: `${muted}08`,
                             }}
                           >
                             <TextInput
@@ -1395,26 +1504,31 @@ function PostListItem({
                                 paddingVertical: 12,
                                 color: text,
                                 fontSize: 14,
-                                minHeight: 80,
+                                minHeight: 94,
                                 textAlignVertical: "top",
                                 lineHeight: 20,
                               }}
                             />
                           </View>
-                          <Text style={{ color: muted, fontSize: 11.5, textAlign: "right", marginBottom: 20 }}>
-                            {reportDetails.length}/500
-                          </Text>
+                          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                            <Text style={{ color: muted, fontSize: 11.5 }}>
+                              Include context to help moderators review faster.
+                            </Text>
+                            <Text style={{ color: muted, fontSize: 11.5 }}>
+                              {reportDetails.length}/500
+                            </Text>
+                          </View>
   
                           {/* Submit button */}
-                          <TouchableOpacity
+                          <ScalePressable
                             disabled={!selectedReason || reportSubmitting}
                             onPress={() => { void handleSubmitReport(); }}
+                            pressedScale={0.965}
                             style={{
-                              paddingVertical: 15,
                               borderRadius: 18,
                               backgroundColor: selectedReason && !reportSubmitting ? "#EF4444" : `${muted}25`,
-                              alignItems: "center",
-                              marginBottom: 10,
+                              overflow: "hidden",
+                              marginBottom: 12,
                               shadowColor: selectedReason ? "#EF4444" : "transparent",
                               shadowOpacity: 0.35,
                               shadowRadius: 10,
@@ -1422,29 +1536,41 @@ function PostListItem({
                               elevation: selectedReason ? 4 : 0,
                             }}
                           >
-                            <Text
-                              style={{
-                                color: selectedReason && !reportSubmitting ? "#fff" : muted,
-                                fontSize: 15.5,
-                                fontWeight: "800",
-                                letterSpacing: 0.2,
-                              }}
-                            >
-                              {reportSubmitting ? "Submitting…" : "Submit Report"}
-                            </Text>
-                          </TouchableOpacity>
+                            <View style={{ alignItems: "center", paddingVertical: 15 }}>
+                              <Text
+                                style={{
+                                  color: selectedReason && !reportSubmitting ? "#fff" : muted,
+                                  fontSize: 15.5,
+                                  fontWeight: "800",
+                                  letterSpacing: 0.2,
+                                }}
+                              >
+                                {reportSubmitting ? "Submitting…" : "Submit Report"}
+                              </Text>
+                            </View>
+                          </ScalePressable>
   
-                          <TouchableOpacity
+                          <ScalePressable
                             onPress={() => setReportSheetVisible(false)}
-                            style={{ paddingVertical: 12, alignItems: "center" }}
+                            pressedScale={0.975}
+                            style={{
+                              borderRadius: 14,
+                              borderWidth: 1,
+                              borderColor: `${muted}25`,
+                              backgroundColor: `${muted}08`,
+                              overflow: "hidden",
+                            }}
                           >
-                            <Text style={{ color: muted, fontSize: 14.5, fontWeight: "600" }}>Cancel</Text>
-                          </TouchableOpacity>
+                            <View style={{ paddingVertical: 12, alignItems: "center" }}>
+                              <Text style={{ color: text, fontSize: 14.5, fontWeight: "600" }}>Cancel</Text>
+                            </View>
+                          </ScalePressable>
                         </KeyboardAvoidingView>
                       </>
                     )}
                   </ScrollView>
-              </Pressable>
+              </Animated.View>
+            </Pressable>
             </View>
           </Modal>
 

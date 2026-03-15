@@ -2,11 +2,12 @@ import AppLoader from "@/components/AppLoader";
 import CommunityHeader from "@/components/CommunityHeader";
 import PostListItem from "@/components/PostListItem";
 import { type Post } from "@/constants/types";
+import { useCommunityPresence } from "@/hooks/use-community-presence";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
 import { supabase } from "@/lib/Supabase";
 import { useGlobalSearchParams } from "expo-router";
-import { FileText, Rss } from "lucide-react-native";
+import { FileText } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -27,6 +28,7 @@ export default function CommunityPostsTab() {
   const [community, setCommunity] = useState<Group | null>(null);
   const [members, setMembers] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [page, setPage] = useState(1);
@@ -46,13 +48,13 @@ export default function CommunityPostsTab() {
   const secondaryColor = useThemeColor({}, "secondary");
   const backgroundSecondary = useThemeColor({}, "backgroundSecondary");
   const success = useThemeColor({}, "success");
+  const { onlineCount } = useCommunityPresence(communityId);
 
-  useEffect(() => {
-    if (!communityId) return;
-    let cancelled = false;
+  const loadCommunityMeta = useCallback(
+    async (showLoader = false) => {
+      if (!communityId) return;
+      if (showLoader) setLoading(true);
 
-    const load = async () => {
-      setLoading(true);
       const [{ data }, membersRes] = await Promise.all([
         fetchGroupById(communityId),
         supabase
@@ -61,15 +63,17 @@ export default function CommunityPostsTab() {
           .eq("group_id", communityId),
       ]);
 
-      if (cancelled) return;
       setCommunity(data ?? null);
       if (membersRes.count !== null) setMembers(membersRes.count);
-      setLoading(false);
-    };
+      if (showLoader) setLoading(false);
+    },
+    [communityId],
+  );
 
-    void load();
-    return () => { cancelled = true; };
-  }, [communityId]);
+  useEffect(() => {
+    if (!communityId) return;
+    void loadCommunityMeta(true);
+  }, [communityId, loadCommunityMeta]);
 
   const fetchPosts = useCallback(
     async (p = 1, replace = false) => {
@@ -140,6 +144,16 @@ export default function CommunityPostsTab() {
     void fetchPosts(1, true);
   }, [communityId, fetchPosts]);
 
+  const handleRefresh = useCallback(async () => {
+    if (!communityId) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([loadCommunityMeta(false), fetchPosts(1, true)]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [communityId, fetchPosts, loadCommunityMeta]);
+
   if (loading || !community) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
@@ -169,6 +183,10 @@ export default function CommunityPostsTab() {
           </View>
         )}
         showsVerticalScrollIndicator={false}
+        refreshing={refreshing}
+        onRefresh={() => {
+          void handleRefresh();
+        }}
         onEndReached={() => {
           if (!postsLoading && loadingPageRef.current === null && hasMore && posts.length > 0)
             void fetchPosts(page + 1);
@@ -178,6 +196,7 @@ export default function CommunityPostsTab() {
           <CommunityHeader
             community={community}
             membersCount={members}
+            onlineCount={onlineCount}
             bg={bg}
             card={card}
             border={border}

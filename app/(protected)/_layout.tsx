@@ -1,4 +1,5 @@
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { communityPresenceManager } from "@/lib/realtime/community-presence";
 import { syncUserToSupabase } from "@/lib/actions/users";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { BlurView } from "expo-blur";
@@ -74,6 +75,14 @@ export default function AppLayout() {
       console.log("User sync error:", error);
     });
   }, [isLoaded, user]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !user?.id) return;
+    communityPresenceManager.start(user.id);
+    return () => {
+      communityPresenceManager.stop();
+    };
+  }, [isLoaded, isSignedIn, user?.id]);
 
   if (!isSignedIn) {
     return <Redirect href="/(auth)" />;

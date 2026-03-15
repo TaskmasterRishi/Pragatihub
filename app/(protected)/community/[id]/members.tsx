@@ -1,15 +1,17 @@
 import AppLoader from "@/components/AppLoader";
+import { useCommunityPresence } from "@/hooks/use-community-presence";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
 import { supabase } from "@/lib/Supabase";
 import type { Tables } from "@/types/database.types";
 import { Image } from "expo-image";
 import { useGlobalSearchParams } from "expo-router";
-import { Shield, Users } from "lucide-react-native";
+import { Crown, Search, Shield, Users } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -25,6 +27,7 @@ type MemberUser = {
 };
 
 type GroupModeratorRow = Tables<"group_moderators">;
+type MemberFilter = "all" | "online" | "moderators";
 
 export default function CommunityMembersTab() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -34,7 +37,9 @@ export default function CommunityMembersTab() {
   const [community, setCommunity] = useState<Group | null>(null);
   const [members, setMembers] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [memberFilter, setMemberFilter] = useState<MemberFilter>("all");
 
   const [memberUsers, setMemberUsers] = useState<MemberUser[]>([]);
   const [moderatorIds, setModeratorIds] = useState<Set<string>>(new Set());
@@ -46,19 +51,23 @@ export default function CommunityMembersTab() {
   const bg = useThemeColor({}, "background");
   const text = useThemeColor({}, "text");
   const secondary = useThemeColor({}, "textSecondary");
+  const textMuted = useThemeColor({}, "textMuted");
   const tint = useThemeColor({}, "tint");
   const card = useThemeColor({}, "card");
   const border = useThemeColor({}, "border");
   const primary = useThemeColor({}, "primary");
-  const backgroundSecondary = useThemeColor({}, "backgroundSecondary");
+  const success = useThemeColor({}, "success");
+  const warning = useThemeColor({}, "warning");
+  const info = useThemeColor({}, "info");
   const input = useThemeColor({}, "input");
+  const backgroundSecondary = useThemeColor({}, "backgroundSecondary");
+  const { onlineUserIds } = useCommunityPresence(communityId);
 
-  useEffect(() => {
-    if (!communityId) return;
-    let cancelled = false;
+  const loadCommunityMeta = useCallback(
+    async (showLoader = false) => {
+      if (!communityId) return;
+      if (showLoader) setLoading(true);
 
-    const load = async () => {
-      setLoading(true);
       const [{ data }, membersRes] = await Promise.all([
         fetchGroupById(communityId),
         supabase
@@ -67,17 +76,17 @@ export default function CommunityMembersTab() {
           .eq("group_id", communityId),
       ]);
 
-      if (cancelled) return;
       setCommunity(data ?? null);
       if (membersRes.count !== null) setMembers(membersRes.count);
-      setLoading(false);
-    };
+      if (showLoader) setLoading(false);
+    },
+    [communityId],
+  );
 
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [communityId]);
+  useEffect(() => {
+    if (!communityId) return;
+    void loadCommunityMeta(true);
+  }, [communityId, loadCommunityMeta]);
 
   const fetchMembers = useCallback(async () => {
     if (!communityId || membersLoadedRef.current) return;
@@ -141,6 +150,17 @@ export default function CommunityMembersTab() {
     void fetchMembers();
   }, [communityId, fetchMembers]);
 
+  const handleRefresh = useCallback(async () => {
+    if (!communityId) return;
+    setRefreshing(true);
+    try {
+      membersLoadedRef.current = false;
+      await Promise.all([loadCommunityMeta(false), fetchMembers()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [communityId, fetchMembers, loadCommunityMeta]);
+
   const formatJoinedDate = useCallback((value: string | null) => {
     if (!value) return null;
     const date = new Date(value);
@@ -157,6 +177,18 @@ export default function CommunityMembersTab() {
         m.name.toLowerCase().includes(search.toLowerCase()),
       )
     : memberUsers;
+  const filteredMembers = filtered.filter((member) => {
+    const isOwner = !!community.owner_id && member.id === community.owner_id;
+    const isMod = isOwner || moderatorIds.has(member.id);
+    const isActive = onlineUserIds.has(member.id);
+    if (memberFilter === "online") return isActive;
+    if (memberFilter === "moderators") return isMod;
+    return true;
+  });
+  const onlineCount = onlineUserIds.size;
+  const moderatorsCount =
+    moderatorIds.size +
+    (community.owner_id && !moderatorIds.has(community.owner_id) ? 1 : 0);
 
   if (loading || !community) {
     return (
@@ -180,21 +212,73 @@ export default function CommunityMembersTab() {
           paddingBottom: insets.bottom + 90,
           flexGrow: 1,
         }}
-        data={filtered}
+        data={filteredMembers}
         keyExtractor={(i) => i.id}
         showsVerticalScrollIndicator={false}
+        refreshing={refreshing}
+        onRefresh={() => {
+          void handleRefresh();
+        }}
         ListHeaderComponent={
           <View style={styles.headerArea}>
-            {/* Title row */}
-            <View style={styles.titleRow}>
+            <View
+              style={[
+                styles.heroCard,
+                { backgroundColor: card, borderColor: border },
+              ]}
+            >
               <View>
                 <Text style={[styles.headerTitle, { color: text }]}>
                   Members
                 </Text>
-                <View style={styles.countRow}>
-                  <Users size={14} color={secondary} />
-                  <Text style={[styles.countLabel, { color: secondary }]}>
-                    {members} {members === 1 ? "member" : "members"}
+                <Text style={[styles.headerSubtitle, { color: secondary }]}>
+                  Community directory and live presence
+                </Text>
+              </View>
+
+              <View style={styles.countGrid}>
+                <View
+                  style={[
+                    styles.countPill,
+                    { backgroundColor: backgroundSecondary, borderColor: border },
+                  ]}
+                >
+                  <Users size={13} color={primary} />
+                  <Text style={[styles.countPillValue, { color: text }]}>
+                    {members}
+                  </Text>
+                  <Text style={[styles.countPillLabel, { color: secondary }]}>
+                    Total
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.countPill,
+                    { backgroundColor: `${success}14`, borderColor: `${success}35` },
+                  ]}
+                >
+                  <View style={[styles.liveDot, { backgroundColor: success }]} />
+                  <Text style={[styles.countPillValue, { color: text }]}>
+                    {onlineCount}
+                  </Text>
+                  <Text style={[styles.countPillLabel, { color: secondary }]}>
+                    Online
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.countPill,
+                    { backgroundColor: `${info}14`, borderColor: `${info}35` },
+                  ]}
+                >
+                  <Shield size={13} color={info} />
+                  <Text style={[styles.countPillValue, { color: text }]}>
+                    {moderatorsCount}
+                  </Text>
+                  <Text style={[styles.countPillLabel, { color: secondary }]}>
+                    Mods
                   </Text>
                 </View>
               </View>
@@ -204,10 +288,10 @@ export default function CommunityMembersTab() {
             <View
               style={[
                 styles.searchBar,
-                { backgroundColor: backgroundSecondary, borderColor: border },
+                { backgroundColor: input, borderColor: border },
               ]}
             >
-              <Users size={16} color={secondary} />
+              <Search size={16} color={secondary} />
               <TextInput
                 value={search}
                 onChangeText={setSearch}
@@ -218,12 +302,45 @@ export default function CommunityMembersTab() {
               />
             </View>
 
-            {/* Section label */}
-            {!search && moderatorIds.size > 0 && (
-              <Text style={[styles.sectionLabel, { color: secondary }]}>
-                All Members
-              </Text>
-            )}
+            <View style={styles.filterRow}>
+              {[
+                { key: "all" as const, label: "All", count: members },
+                { key: "online" as const, label: "Online", count: onlineCount },
+                { key: "moderators" as const, label: "Moderators", count: moderatorsCount },
+              ].map((item) => {
+                const active = item.key === memberFilter;
+                return (
+                  <Pressable
+                    key={item.key}
+                    onPress={() => setMemberFilter(item.key)}
+                    style={[
+                      styles.filterChip,
+                      {
+                        backgroundColor: active ? `${primary}18` : backgroundSecondary,
+                        borderColor: active ? `${primary}44` : border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipLabel,
+                        { color: active ? primary : secondary },
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.filterChipCount,
+                        { color: active ? primary : textMuted },
+                      ]}
+                    >
+                      {item.count}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         }
         renderItem={({ item }) => {
@@ -231,6 +348,9 @@ export default function CommunityMembersTab() {
           const isOwner =
             !!community.owner_id && member.id === community.owner_id;
           const isMod = isOwner || moderatorIds.has(member.id);
+          const isActive = onlineUserIds.has(member.id);
+          const roleLabel = isOwner ? "Owner" : isMod ? "Moderator" : "Member";
+          const roleColor = isOwner ? warning : isMod ? info : primary;
           const initials = (member.name || "U")
             .split(" ")
             .filter(Boolean)
@@ -245,6 +365,13 @@ export default function CommunityMembersTab() {
                 { backgroundColor: card, borderColor: border },
               ]}
             >
+              <View
+                style={[
+                  styles.memberAccent,
+                  { backgroundColor: isActive ? success : `${border}` },
+                ]}
+              />
+
               {/* Avatar */}
               <View style={styles.avatarWrapper}>
                 {member.image ? (
@@ -267,16 +394,16 @@ export default function CommunityMembersTab() {
                   </View>
                 )}
 
-                {/* Online dot — decorative */}
-                {isMod && (
+                {/* Online dot */}
+                {isActive && (
                   <View
                     style={[
-                      styles.modDot,
+                      styles.activeDot,
                       { backgroundColor: bg, borderColor: bg },
                     ]}
                   >
                     <View
-                      style={[styles.modDotInner, { backgroundColor: primary }]}
+                      style={[styles.activeDotInner, { backgroundColor: success }]}
                     />
                   </View>
                 )}
@@ -298,29 +425,68 @@ export default function CommunityMembersTab() {
                     {formatJoinedDate(member.joined_at)}
                   </Text>
                 )}
-              </View>
-
-              {/* Badge */}
-              <View
-                style={[
-                  styles.badge,
-                  {
-                    backgroundColor: isMod
-                      ? `${primary}18`
-                      : backgroundSecondary,
-                    borderColor: isMod ? `${primary}44` : border,
-                  },
-                ]}
-              >
-                {isMod && <Shield size={11} color={primary} />}
                 <Text
                   style={[
-                    styles.badgeLabel,
-                    { color: isMod ? primary : secondary },
+                    styles.memberLiveMeta,
+                    { color: isActive ? success : textMuted },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {isActive ? "Live now" : "Offline"}
+                </Text>
+              </View>
+
+              <View style={styles.badgesCol}>
+                <View
+                  style={[
+                    styles.badge,
+                    {
+                      backgroundColor: `${roleColor}15`,
+                      borderColor: `${roleColor}40`,
+                    },
                   ]}
                 >
-                  {isOwner ? "Owner" : isMod ? "Mod" : "Member"}
-                </Text>
+                  {isOwner ? (
+                    <Crown size={11} color={roleColor} />
+                  ) : isMod ? (
+                    <Shield size={11} color={roleColor} />
+                  ) : (
+                    <Users size={11} color={roleColor} />
+                  )}
+                  <Text
+                    style={[
+                      styles.badgeLabel,
+                      { color: roleColor },
+                    ]}
+                  >
+                    {roleLabel}
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor: isActive ? `${success}16` : backgroundSecondary,
+                      borderColor: isActive ? `${success}45` : border,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.statusBadgeDot,
+                      { backgroundColor: isActive ? success : textMuted },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.statusBadgeLabel,
+                      { color: isActive ? success : secondary },
+                    ]}
+                  >
+                    {isActive ? "Online" : "Away"}
+                  </Text>
+                </View>
               </View>
             </View>
           );
@@ -350,7 +516,11 @@ export default function CommunityMembersTab() {
               <Text style={[styles.emptyText, { color: secondary }]}>
                 {search
                   ? `Nobody matched "${search}"`
-                  : "When people join, they'll appear here."}
+                  : memberFilter === "online"
+                    ? "No members are online right now."
+                    : memberFilter === "moderators"
+                      ? "No moderators found in this community."
+                      : "When people join, they'll appear here."}
               </Text>
             </View>
           )
@@ -367,27 +537,52 @@ const styles = StyleSheet.create({
 
   headerArea: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 12,
+    gap: 12,
   },
-  titleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: 14,
+  heroCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
   },
   headerTitle: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: "800",
     letterSpacing: -0.5,
   },
-  countRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+  headerSubtitle: {
+    fontSize: 13.5,
     marginTop: 3,
   },
-  countLabel: {
-    fontSize: 14,
+  countGrid: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  countPill: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    justifyContent: "center",
+  },
+  countPillValue: {
+    fontSize: 13.5,
+    fontWeight: "800",
+  },
+  countPillLabel: {
+    fontSize: 11.5,
+    fontWeight: "600",
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
 
   searchBar: {
@@ -400,29 +595,48 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 18,
   },
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 6,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  filterChipLabel: {
+    fontSize: 12.5,
+    fontWeight: "700",
+  },
+  filterChipCount: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
   searchInput: {
     flex: 1,
     fontSize: 15,
   },
 
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 6,
-    paddingHorizontal: 2,
-  },
-
   memberCard: {
     marginHorizontal: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     borderRadius: 18,
     borderWidth: 1,
+  },
+  memberAccent: {
+    width: 3,
+    alignSelf: "stretch",
+    borderRadius: 99,
+    marginRight: -2,
   },
 
   avatarWrapper: { position: "relative" },
@@ -439,7 +653,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
-  modDot: {
+  activeDot: {
     position: "absolute",
     bottom: 0,
     right: 0,
@@ -450,7 +664,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  modDotInner: {
+  activeDotInner: {
     width: 8,
     height: 8,
     borderRadius: 4,
@@ -459,17 +673,40 @@ const styles = StyleSheet.create({
   memberInfo: { flex: 1, minWidth: 0 },
   memberName: { fontSize: 15, fontWeight: "700" },
   memberMeta: { fontSize: 12.5, marginTop: 2 },
+  memberLiveMeta: { fontSize: 11.5, marginTop: 3, fontWeight: "700" },
 
+  badgesCol: {
+    alignItems: "flex-end",
+  },
   badge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  badgeLabel: { fontSize: 10.5, fontWeight: "700" },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
   },
-  badgeLabel: { fontSize: 11, fontWeight: "600" },
+  statusBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusBadgeLabel: {
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
 
   emptyCenter: {
     flex: 1,

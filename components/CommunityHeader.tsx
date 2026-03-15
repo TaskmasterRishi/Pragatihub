@@ -26,6 +26,7 @@ import {
 interface CommunityHeaderProps {
   community: Group;
   membersCount: number;
+  onlineCount: number;
   bg: string;
   card: string;
   border: string;
@@ -40,6 +41,7 @@ interface CommunityHeaderProps {
 export default function CommunityHeader({
   community,
   membersCount,
+  onlineCount,
   bg,
   card,
   border,
@@ -93,8 +95,6 @@ export default function CommunityHeader({
     if (!pathname.endsWith("/chat"))
       router.push(`/community/${community.id}/chat`);
   };
-
-  const onlineCount = Math.max(1, Math.floor(membersCount * 0.1));
 
   return (
     <View style={styles.root}>
