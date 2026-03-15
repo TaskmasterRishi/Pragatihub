@@ -172,6 +172,14 @@ export default function CommunityMembersTab() {
     })}`;
   }, []);
 
+  if (loading || !community) {
+    return (
+      <View style={[styles.center, { backgroundColor: bg }]}>
+        <AppLoader fullScreen />
+      </View>
+    );
+  }
+
   const filtered = search.trim()
     ? memberUsers.filter((m) =>
         m.name.toLowerCase().includes(search.toLowerCase()),
@@ -189,14 +197,6 @@ export default function CommunityMembersTab() {
   const moderatorsCount =
     moderatorIds.size +
     (community.owner_id && !moderatorIds.has(community.owner_id) ? 1 : 0);
-
-  if (loading || !community) {
-    return (
-      <View style={[styles.center, { backgroundColor: bg }]}>
-        <AppLoader fullScreen />
-      </View>
-    );
-  }
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>

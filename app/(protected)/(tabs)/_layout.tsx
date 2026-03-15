@@ -2,12 +2,12 @@ import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
 import React from "react";
 import {
+  Animated,
   InteractionManager,
   Platform,
   StyleSheet,
-  View,
-  Animated,
   useColorScheme,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -106,8 +106,9 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        lazy: false,
+        lazy: true,
         headerShown: false,
+        freezeOnBlur: true,
         tabBarButton: HapticTab,
 
         tabBarActiveTintColor: tabBarActiveTint,
@@ -125,10 +126,14 @@ export default function TabLayout() {
                 >
                   {androidBlurReady ? (
                     <BlurView
-                      tint={isDark ? "systemMaterialDark" : "systemMaterialLight"}
+                      tint={
+                        isDark ? "systemMaterialDark" : "systemMaterialLight"
+                      }
                       intensity={70}
                       experimentalBlurMethod={
-                        Platform.OS === "android" ? "dimezisBlurView" : undefined
+                        Platform.OS === "android"
+                          ? "dimezisBlurView"
+                          : undefined
                       }
                       style={StyleSheet.absoluteFillObject}
                     />
