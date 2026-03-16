@@ -1,18 +1,21 @@
-
 import { useThemeColor } from "@/hooks/use-theme-color";
 import {
+  checkIsModerator,
   fetchReports,
+  notifyAuthorToChangeContent,
   REPORT_REASONS,
   resolveReport,
   type PostReport,
   type ReportStatus,
 } from "@/lib/actions/moderation";
+import { useUser } from "@clerk/clerk-expo";
 import { Image } from "expo-image";
 import { useGlobalSearchParams } from "expo-router";
 import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  MessageSquare,
   Shield,
   Trash2,
   XCircle,
@@ -22,9 +25,11 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -43,13 +48,19 @@ const STATUS_COLORS: Record<ReportStatus, string> = {
 
 export default function CommunityModerationTab() {
   const { id } = useGlobalSearchParams<{ id: string }>();
+  const { user } = useUser();
   const communityId = Array.isArray(id) ? id[0] : id;
   const insets = useSafeAreaInsets();
 
   const [activeStatus, setActiveStatus] = useState<ReportStatus>("pending");
   const [reports, setReports] = useState<PostReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isModerator, setIsModerator] = useState<boolean | null>(null);
   const [resolving, setResolving] = useState<string | null>(null);
+  const [notifyModalOpen, setNotifyModalOpen] = useState(false);
+  const [notifyTarget, setNotifyTarget] = useState<PostReport | null>(null);
+  const [notifyMessage, setNotifyMessage] = useState("");
+  const [notifying, setNotifying] = useState(false);
 
   const requestIdRef = useRef(0);
 
@@ -77,8 +88,27 @@ export default function CommunityModerationTab() {
   );
 
   useEffect(() => {
+    if (!communityId) return;
+    let cancelled = false;
+
+    const verifyModerator = async () => {
+      setLoading(true);
+      const allowed = await checkIsModerator(communityId, user?.id);
+      if (cancelled) return;
+      setIsModerator(allowed);
+      if (!allowed) setLoading(false);
+    };
+
+    void verifyModerator();
+    return () => {
+      cancelled = true;
+    };
+  }, [communityId, user?.id]);
+
+  useEffect(() => {
+    if (isModerator !== true) return;
     void loadReports(activeStatus);
-  }, [activeStatus, loadReports]);
+  }, [activeStatus, isModerator, loadReports]);
 
   const handleResolve = useCallback(
     (report: PostReport, action: "dismissed" | "removed") => {
@@ -99,6 +129,7 @@ export default function CommunityModerationTab() {
               report.id,
               report.post_id,
               action,
+              user?.id,
             );
             setResolving(null);
             if (error) {
@@ -110,8 +141,46 @@ export default function CommunityModerationTab() {
         },
       ]);
     },
-    [],
+    [user?.id],
   );
+
+  const handleOpenNotify = useCallback((report: PostReport) => {
+    const reasonCfg = REPORT_REASONS.find((r) => r.value === report.reason) ?? {
+      label: report.reason,
+    };
+    setNotifyTarget(report);
+    setNotifyMessage(
+      `Your post was reported for "${reasonCfg.label}". Please edit the post so it follows community rules.`,
+    );
+    setNotifyModalOpen(true);
+  }, []);
+
+  const handleSendNotify = useCallback(async () => {
+    if (!notifyTarget) return;
+    if (!notifyMessage.trim()) {
+      Alert.alert("Add message", "Please enter guidance for the author.");
+      return;
+    }
+
+    setNotifying(true);
+    const { error } = await notifyAuthorToChangeContent(
+      notifyTarget.id,
+      notifyTarget.post_id,
+      notifyMessage,
+      user?.id,
+    );
+    setNotifying(false);
+
+    if (error) {
+      Alert.alert("Error", "Failed to notify author. Please try again.");
+      return;
+    }
+
+    setReports((prev) => prev.filter((r) => r.id !== notifyTarget.id));
+    setNotifyModalOpen(false);
+    setNotifyTarget(null);
+    setNotifyMessage("");
+  }, [notifyMessage, notifyTarget, user?.id]);
 
   const formatDate = (value: string) => {
     const d = new Date(value);
@@ -131,6 +200,8 @@ export default function CommunityModerationTab() {
   const renderReport = ({ item }: { item: PostReport }) => {
     const reasonCfg = getReasonConfig(item.reason);
     const isResolving = resolving === item.id;
+    const isNotifying = notifying && notifyTarget?.id === item.id;
+    const isBusy = isResolving || isNotifying;
     const reporter = item.reporter;
     const post = item.post;
     const initials = reporter
@@ -226,7 +297,7 @@ export default function CommunityModerationTab() {
         {/* Actions (only for pending) */}
         {item.status === "pending" && (
           <View style={styles.actionRow}>
-            {isResolving ? (
+            {isBusy ? (
               <View style={styles.resolvingContainer}>
                 <ActivityIndicator size="small" color={tint} />
                 <Text style={[styles.resolvingText, { color: secondary }]}>
@@ -235,6 +306,18 @@ export default function CommunityModerationTab() {
               </View>
             ) : (
               <>
+                <Pressable
+                  onPress={() => handleOpenNotify(item)}
+                  style={[
+                    styles.actionBtn,
+                    { backgroundColor: `${primary}15`, borderColor: `${primary}40` },
+                  ]}
+                >
+                  <MessageSquare size={15} color={primary} />
+                  <Text style={[styles.actionBtnLabel, { color: primary }]}>
+                    Notify Author
+                  </Text>
+                </Pressable>
                 <Pressable
                   onPress={() => handleResolve(item, "dismissed")}
                   style={[
@@ -257,7 +340,7 @@ export default function CommunityModerationTab() {
                 >
                   <Trash2 size={15} color="#EF4444" />
                   <Text style={[styles.actionBtnLabel, { color: "#EF4444" }]}>
-                    Remove Post
+                    Delete Post
                   </Text>
                 </Pressable>
               </>
@@ -267,6 +350,31 @@ export default function CommunityModerationTab() {
       </View>
     );
   };
+
+  if (loading || isModerator === null) {
+    return (
+      <View style={[styles.emptyCenter, { backgroundColor: bg }]}>
+        <ActivityIndicator size="large" color={tint} />
+        <Text style={[styles.emptyText, { color: secondary }]}>
+          Checking moderation access…
+        </Text>
+      </View>
+    );
+  }
+
+  if (!isModerator) {
+    return (
+      <View style={[styles.emptyCenter, { backgroundColor: bg }]}>
+        <View style={[styles.emptyIcon, { backgroundColor: backgroundSecondary }]}>
+          <Shield size={32} color={secondary} />
+        </View>
+        <Text style={[styles.emptyTitle, { color: text }]}>Access denied</Text>
+        <Text style={[styles.emptyText, { color: secondary }]}>
+          Only community admins and moderators can review reports.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
@@ -367,6 +475,72 @@ export default function CommunityModerationTab() {
           )
         }
       />
+
+      <Modal
+        visible={notifyModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!notifying) setNotifyModalOpen(false);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: card, borderColor: border }]}>
+            <Text style={[styles.modalTitle, { color: text }]}>
+              Notify Author to Edit
+            </Text>
+            <Text style={[styles.modalSub, { color: secondary }]}>
+              Send guidance comment to the post author and resolve this report.
+            </Text>
+            <TextInput
+              value={notifyMessage}
+              onChangeText={setNotifyMessage}
+              placeholder="Explain what should be changed..."
+              placeholderTextColor={secondary}
+              style={[
+                styles.modalInput,
+                { color: text, borderColor: border, backgroundColor: backgroundSecondary },
+              ]}
+              multiline
+              textAlignVertical="top"
+              editable={!notifying}
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => {
+                  if (!notifying) {
+                    setNotifyModalOpen(false);
+                    setNotifyTarget(null);
+                    setNotifyMessage("");
+                  }
+                }}
+                style={[
+                  styles.modalBtn,
+                  { borderColor: border, backgroundColor: backgroundSecondary },
+                ]}
+              >
+                <Text style={[styles.modalBtnText, { color: secondary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  void handleSendNotify();
+                }}
+                disabled={notifying}
+                style={[
+                  styles.modalBtn,
+                  { borderColor: `${primary}55`, backgroundColor: `${primary}20` },
+                ]}
+              >
+                {notifying ? (
+                  <ActivityIndicator size="small" color={primary} />
+                ) : (
+                  <Text style={[styles.modalBtnText, { color: primary }]}>Send Notice</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -474,11 +648,13 @@ const styles = StyleSheet.create({
 
   actionRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: 2,
   },
   actionBtn: {
-    flex: 1,
+    minWidth: "31%",
+    flexGrow: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -500,6 +676,52 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   resolvingText: { fontSize: 13, fontWeight: "600" },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  modalCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  modalSub: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  modalInput: {
+    minHeight: 96,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  modalBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  modalBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
 
   emptyCenter: {
     flex: 1,

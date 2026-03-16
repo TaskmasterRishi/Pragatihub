@@ -201,10 +201,7 @@ export default function CreateScreen() {
         };
       }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const accessToken = session?.access_token ?? supabaseAnonKey;
+      const accessToken = supabaseAnonKey;
       const uploadUrl = `${supabaseUrl}/storage/v1/object/${POST_MEDIA_BUCKET}/${objectPath}`;
 
       const uploadResult = await FileSystem.uploadAsync(uploadUrl, localUri, {
@@ -310,6 +307,7 @@ export default function CreateScreen() {
           : undefined,
       groupId: selectedCommunity.id,
       userId: user.id,
+      useAnonClient: postType === "photo" || postType === "video",
     });
 
     if (error) {

@@ -3,6 +3,7 @@ import { HapticTab } from "@/components/haptic-tab";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
 import { checkIsModerator, fetchPendingReportCount } from "@/lib/actions/moderation";
+import { useUser } from "@clerk/clerk-expo";
 import { BlurView } from "expo-blur";
 import { Tabs, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -29,6 +30,7 @@ const TAB_BAR_RADIUS = 28;
 export default function CommunityLayout() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useUser();
   const communityId = Array.isArray(id) ? id[0] : id;
 
   const [community, setCommunity] = useState<Group | null>(null);
@@ -122,12 +124,13 @@ export default function CommunityLayout() {
       setLoading(true);
       const [{ data }, modStatus, count] = await Promise.all([
         fetchGroupById(communityId),
-        checkIsModerator(communityId),
+        checkIsModerator(communityId, user?.id),
         fetchPendingReportCount(communityId),
       ]);
       if (cancelled) return;
       setCommunity(data ?? null);
-      setIsMod(modStatus);
+      const isOwner = !!data?.owner_id && data.owner_id === user?.id;
+      setIsMod(modStatus || isOwner);
       setPendingCount(count);
       setLoading(false);
     };
@@ -136,7 +139,7 @@ export default function CommunityLayout() {
     return () => {
       cancelled = true;
     };
-  }, [communityId]);
+  }, [communityId, user?.id]);
 
   if (loading) {
     return (

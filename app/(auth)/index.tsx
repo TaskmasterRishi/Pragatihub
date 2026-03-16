@@ -1,6 +1,8 @@
 import FloatingIconsBackground from "@/components/floating-icons-background";
 import InputField from "@/components/ui/input-field";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { syncUserToSupabase } from "@/lib/actions/users";
+import { setSupabaseAccessTokenProvider } from "@/lib/Supabase";
 import { useWarmUpBrowser } from "@/hooks/useWarmUpBrowser";
 import { useAuth, useOAuth, useSignIn, useSignUp } from "@clerk/clerk-expo";
 import { LinearGradient } from "expo-linear-gradient";
@@ -40,7 +42,7 @@ const getClerkErrorMessage = (err: any): string => {
 };
 
 export default function AuthScreen() {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, getToken } = useAuth();
 
   if (isSignedIn) {
     return <Redirect href="../(protected)/(tabs)/index" />;
@@ -184,6 +186,28 @@ export default function AuthScreen() {
       }
 
       await setSignUpActive({ session: attempt.createdSessionId });
+
+      const template = process.env.EXPO_PUBLIC_CLERK_SUPABASE_TEMPLATE ?? "supabase";
+      setSupabaseAccessTokenProvider(async () => {
+        const token = await getToken({ template });
+        return token ?? null;
+      });
+
+      const createdUserId =
+        attempt.createdUserId ?? signUp.createdUserId ?? signUp.id;
+      if (createdUserId && email.trim().length > 0) {
+        const displayName = name.trim().length > 0 ? name.trim() : "Anonymous";
+        const { error: syncError } = await syncUserToSupabase({
+          id: createdUserId,
+          email: email.trim(),
+          name: displayName,
+          image: null,
+        });
+        if (syncError) {
+          console.log("Post-signup user sync error:", syncError);
+        }
+      }
+
       router.replace("/(protected)/(tabs)");
     } catch (err) {
       throw new Error(getClerkErrorMessage(err));

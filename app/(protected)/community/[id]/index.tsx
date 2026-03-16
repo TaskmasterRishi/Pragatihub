@@ -5,13 +5,16 @@ import { type Post } from "@/constants/types";
 import { useCommunityPresence } from "@/hooks/use-community-presence";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
+import { checkIsModerator, fetchPendingReportCount } from "@/lib/actions/moderation";
 import { supabase } from "@/lib/Supabase";
-import { useGlobalSearchParams } from "expo-router";
-import { FileText } from "lucide-react-native";
+import { useUser } from "@clerk/clerk-expo";
+import { useGlobalSearchParams, useRouter } from "expo-router";
+import { FileText, Shield } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -22,6 +25,8 @@ const PAGE_SIZE = 8;
 
 export default function CommunityPostsTab() {
   const { id } = useGlobalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const { user } = useUser();
   const communityId = Array.isArray(id) ? id[0] : id;
   const insets = useSafeAreaInsets();
 
@@ -29,6 +34,8 @@ export default function CommunityPostsTab() {
   const [members, setMembers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
+  const [pendingReports, setPendingReports] = useState(0);
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [page, setPage] = useState(1);
@@ -55,19 +62,24 @@ export default function CommunityPostsTab() {
       if (!communityId) return;
       if (showLoader) setLoading(true);
 
-      const [{ data }, membersRes] = await Promise.all([
+      const [{ data }, membersRes, modStatus, reportCount] = await Promise.all([
         fetchGroupById(communityId),
         supabase
           .from("user_groups")
           .select("group_id, user_id", { count: "exact", head: true })
           .eq("group_id", communityId),
+        checkIsModerator(communityId, user?.id),
+        fetchPendingReportCount(communityId),
       ]);
 
       setCommunity(data ?? null);
       if (membersRes.count !== null) setMembers(membersRes.count);
+      const isOwner = !!data?.owner_id && data.owner_id === user?.id;
+      setIsModerator(modStatus || isOwner);
+      setPendingReports(reportCount);
       if (showLoader) setLoading(false);
     },
-    [communityId],
+    [communityId, user?.id],
   );
 
   useEffect(() => {
@@ -193,20 +205,65 @@ export default function CommunityPostsTab() {
         }}
         onEndReachedThreshold={0.3}
         ListHeaderComponent={
-          <CommunityHeader
-            community={community}
-            membersCount={members}
-            onlineCount={onlineCount}
-            bg={bg}
-            card={card}
-            border={border}
-            primary={primary}
-            secondaryColor={secondaryColor}
-            text={text}
-            secondary={secondary}
-            backgroundSecondary={backgroundSecondary}
-            success={success}
-          />
+          <View>
+            <CommunityHeader
+              community={community}
+              membersCount={members}
+              onlineCount={onlineCount}
+              bg={bg}
+              card={card}
+              border={border}
+              primary={primary}
+              secondaryColor={secondaryColor}
+              text={text}
+              secondary={secondary}
+              backgroundSecondary={backgroundSecondary}
+              success={success}
+            />
+            {isModerator && (
+              <Pressable
+                onPress={() => {
+                  router.push(`/community/${community.id}/moderation`);
+                }}
+                style={[
+                  styles.adminCard,
+                  { backgroundColor: card, borderColor: border },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.adminIconWrap,
+                    { backgroundColor: `${primary}18`, borderColor: `${primary}35` },
+                  ]}
+                >
+                  <Shield size={18} color={primary} />
+                </View>
+                <View style={styles.adminContent}>
+                  <Text style={[styles.adminTitle, { color: text }]}>
+                    Admin Reports
+                  </Text>
+                  <Text style={[styles.adminSub, { color: secondary }]}>
+                    Review reports, notify authors, or delete violating posts.
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.adminCountPill,
+                    { backgroundColor: `${pendingReports > 0 ? "#EF4444" : primary}22` },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.adminCountText,
+                      { color: pendingReports > 0 ? "#EF4444" : primary },
+                    ]}
+                  >
+                    {pendingReports}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+          </View>
         }
         ListEmptyComponent={
           postsLoading && posts.length === 0 ? (
@@ -247,6 +304,50 @@ const styles = StyleSheet.create({
   postWrap: {
     paddingHorizontal: 14,
     marginTop: 4,
+  },
+  adminCard: {
+    marginHorizontal: 14,
+    marginTop: 2,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  adminIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminContent: {
+    flex: 1,
+  },
+  adminTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  adminSub: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  adminCountPill: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  adminCountText: {
+    fontSize: 12,
+    fontWeight: "800",
   },
 
   emptyCenter: {

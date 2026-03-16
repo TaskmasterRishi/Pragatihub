@@ -1,4 +1,5 @@
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { setSupabaseAccessTokenProvider } from "@/lib/Supabase";
 import { communityPresenceManager } from "@/lib/realtime/community-presence";
 import { syncUserToSupabase } from "@/lib/actions/users";
 import { useAuth, useUser } from "@clerk/clerk-expo";
@@ -15,7 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function AppLayout() {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, getToken } = useAuth();
   const { isLoaded, user } = useUser();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -54,6 +55,23 @@ export default function AppLayout() {
     },
     "tabBarBackground",
   );
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) {
+      setSupabaseAccessTokenProvider(null);
+      return;
+    }
+
+    const template = process.env.EXPO_PUBLIC_CLERK_SUPABASE_TEMPLATE ?? "supabase";
+    setSupabaseAccessTokenProvider(async () => {
+      const token = await getToken({ template });
+      return token ?? null;
+    });
+
+    return () => {
+      setSupabaseAccessTokenProvider(null);
+    };
+  }, [getToken, isLoaded, isSignedIn]);
 
   useEffect(() => {
     if (!isLoaded || !user) {

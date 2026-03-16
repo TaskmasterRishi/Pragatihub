@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/Supabase";
-import { Enums } from "@/types/database.types";
+import { Database, Enums } from "@/types/database.types";
+import { createClient } from "@supabase/supabase-js";
 
 export type PostType = Enums<"post_type">;
 
@@ -23,6 +24,7 @@ export type CreatePostInput = {
   userId: string;
   createdAt?: string;
   id?: string;
+  useAnonClient?: boolean;
 };
 
 const generatePostId = () =>
@@ -38,6 +40,19 @@ type StorageObject = {
 
 const POST_MEDIA_BUCKET =
   process.env.EXPO_PUBLIC_SUPABASE_POST_MEDIA_BUCKET ?? "post-media";
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+const anonSupabase =
+  SUPABASE_URL && SUPABASE_ANON_KEY
+    ? createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      })
+    : null;
 
 const STORAGE_URL_PATTERNS = [
   /\/storage\/v1\/object\/public\/([^/]+)\/(.+)/,
@@ -174,6 +189,7 @@ export async function deletePost(postId: string, userId: string) {
 }
 
 export async function createPost(input: CreatePostInput) {
+  const client = input.useAnonClient && anonSupabase ? anonSupabase : supabase;
   const postType = input.postType ?? "text";
   const nowIso = input.createdAt ?? new Date().toISOString();
   const postId = input.id ?? generatePostId();
@@ -191,7 +207,7 @@ export async function createPost(input: CreatePostInput) {
     created_at: nowIso,
   };
 
-  const { data: postData, error: postError } = await supabase
+  const { data: postData, error: postError } = await client
     .from("posts")
     .insert(payload)
     .select()
@@ -202,7 +218,7 @@ export async function createPost(input: CreatePostInput) {
   }
 
   if ((postType === "photo" || postType === "video") && input.mediaUrl) {
-    const { error: mediaError } = await supabase.from("post_media").insert({
+    const { error: mediaError } = await client.from("post_media").insert({
       id: generateId("media"),
       post_id: postId,
       media_type: postType,
@@ -212,7 +228,7 @@ export async function createPost(input: CreatePostInput) {
     });
 
     if (mediaError) {
-      await supabase.from("posts").delete().eq("id", postId);
+      await client.from("posts").delete().eq("id", postId);
       return { data: null, error: mediaError };
     }
   }
@@ -223,7 +239,7 @@ export async function createPost(input: CreatePostInput) {
       .filter((option) => option.length > 0);
 
     if (cleanedOptions.length < 2) {
-      await supabase.from("posts").delete().eq("id", postId);
+      await client.from("posts").delete().eq("id", postId);
       return {
         data: null,
         error: { message: "A poll needs at least two options." },
@@ -235,7 +251,7 @@ export async function createPost(input: CreatePostInput) {
       Date.now() + input.poll.durationHours * 60 * 60 * 1000,
     ).toISOString();
 
-    const { error: pollError } = await supabase.from("post_polls").insert({
+    const { error: pollError } = await client.from("post_polls").insert({
       id: pollId,
       post_id: postId,
       allows_multiple: input.poll.allowsMultiple ?? false,
@@ -244,7 +260,7 @@ export async function createPost(input: CreatePostInput) {
     });
 
     if (pollError) {
-      await supabase.from("posts").delete().eq("id", postId);
+      await client.from("posts").delete().eq("id", postId);
       return { data: null, error: pollError };
     }
 
@@ -256,12 +272,12 @@ export async function createPost(input: CreatePostInput) {
       created_at: nowIso,
     }));
 
-    const { error: optionError } = await supabase
+    const { error: optionError } = await client
       .from("post_poll_options")
       .insert(optionRows);
 
     if (optionError) {
-      await supabase.from("posts").delete().eq("id", postId);
+      await client.from("posts").delete().eq("id", postId);
       return { data: null, error: optionError };
     }
   }
