@@ -10,6 +10,7 @@ import {
   CheckCheck,
   MessageCircle,
   RefreshCw,
+  Megaphone,
   ShieldAlert,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +26,7 @@ import {
   View,
 } from "react-native";
 
-type InboxKind = "comment" | "reply" | "moderation";
+type InboxKind = "comment" | "reply" | "moderation" | "community_post";
 type InboxFilter = "all" | "unread";
 
 type InboxItem = {
@@ -76,6 +77,17 @@ function getNotificationsModule() {
 }
 
 async function fetchInboxItems(userId: string): Promise<InboxItem[]> {
+  const membershipsResult = await supabase
+    .from("user_groups")
+    .select("group_id")
+    .eq("user_id", userId)
+    .limit(300);
+
+  if (membershipsResult.error) throw membershipsResult.error;
+  const memberGroupIds = (membershipsResult.data ?? []).map(
+    (row) => row.group_id,
+  );
+
   const ownPostsResult = await supabase
     .from("posts")
     .select("id, title")
@@ -87,7 +99,7 @@ async function fetchInboxItems(userId: string): Promise<InboxItem[]> {
   const ownPostIds = ownPosts.map((post) => post.id);
   const ownPostTitleMap = new Map(ownPosts.map((post) => [post.id, post.title]));
 
-  const [commentsResult, reportsResult] = await Promise.all([
+  const [commentsResult, reportsResult, communityPostsResult] = await Promise.all([
     ownPostIds.length > 0
       ? supabase
           .from("comments")
@@ -106,16 +118,30 @@ async function fetchInboxItems(userId: string): Promise<InboxItem[]> {
       .neq("status", "pending")
       .order("resolved_at", { ascending: false })
       .limit(100),
+    memberGroupIds.length > 0
+      ? supabase
+          .from("posts")
+          .select(
+            "id, title, description, created_at, group_id, user_id",
+          )
+          .in("group_id", memberGroupIds)
+          .neq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(200)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (commentsResult.error) throw commentsResult.error;
   if (reportsResult.error) throw reportsResult.error;
+  if (communityPostsResult.error) throw communityPostsResult.error;
 
   const comments = commentsResult.data ?? [];
   const reports = reportsResult.data ?? [];
+  const communityPosts = communityPostsResult.data ?? [];
 
   const actorIds = new Set<string>();
   const missingPostIds = new Set<string>();
+  const communityGroupIds = new Set<string>();
   for (const comment of comments) {
     actorIds.add(comment.user_id);
     if (!ownPostTitleMap.has(comment.post_id)) {
@@ -126,8 +152,12 @@ async function fetchInboxItems(userId: string): Promise<InboxItem[]> {
     if (report.resolved_by) actorIds.add(report.resolved_by);
     if (report.post_id) missingPostIds.add(report.post_id);
   }
+  for (const post of communityPosts) {
+    actorIds.add(post.user_id);
+    communityGroupIds.add(post.group_id);
+  }
 
-  const [actorsResult, postsResult] = await Promise.all([
+  const [actorsResult, postsResult, groupsResult] = await Promise.all([
     actorIds.size > 0
       ? supabase
           .from("users")
@@ -140,10 +170,17 @@ async function fetchInboxItems(userId: string): Promise<InboxItem[]> {
           .select("id, title")
           .in("id", Array.from(missingPostIds))
       : Promise.resolve({ data: [], error: null }),
+    communityGroupIds.size > 0
+      ? supabase
+          .from("groups")
+          .select("id, name")
+          .in("id", Array.from(communityGroupIds))
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (actorsResult.error) throw actorsResult.error;
   if (postsResult.error) throw postsResult.error;
+  if (groupsResult.error) throw groupsResult.error;
 
   const actorMap = new Map(
     ((actorsResult.data ?? []) as UserRow[]).map((user) => [user.id, user]),
@@ -151,6 +188,9 @@ async function fetchInboxItems(userId: string): Promise<InboxItem[]> {
   for (const post of postsResult.data ?? []) {
     ownPostTitleMap.set(post.id, post.title);
   }
+  const groupNameMap = new Map(
+    (groupsResult.data ?? []).map((group) => [group.id, group.name ?? "your community"]),
+  );
 
   const commentItems: InboxItem[] = comments.map((comment) => {
     const actor = actorMap.get(comment.user_id);
@@ -197,7 +237,23 @@ async function fetchInboxItems(userId: string): Promise<InboxItem[]> {
     };
   });
 
-  return [...commentItems, ...reportItems].sort(
+  const communityPostItems: InboxItem[] = communityPosts.map((post) => {
+    const actor = actorMap.get(post.user_id);
+    const groupName = groupNameMap.get(post.group_id) ?? "your community";
+    const previewSource = normalizeText(post.description) || normalizeText(post.title) || "New post";
+    return {
+      id: `community-post:${post.id}`,
+      kind: "community_post",
+      createdAt: post.created_at,
+      title: `${actor?.name ?? "Someone"} posted in ${groupName}`,
+      preview: truncate(previewSource, 110),
+      actorName: actor?.name ?? "Unknown user",
+      actorImage: actor?.image ?? null,
+      path: `/post/${post.id}`,
+    };
+  });
+
+  return [...commentItems, ...reportItems, ...communityPostItems].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
@@ -333,6 +389,11 @@ export default function InboxScreen() {
       }, 900);
     };
 
+    const postFilter =
+      userId && typeof userId === "string"
+        ? { filter: `user_id=neq.${userId}` }
+        : {};
+
     const channel = supabase
       .channel(`inbox-${userId}-${Date.now()}`)
       .on(
@@ -343,6 +404,11 @@ export default function InboxScreen() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "post_reports" },
+        queueRefresh,
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "posts", ...postFilter },
         queueRefresh,
       )
       .subscribe();
@@ -455,6 +521,7 @@ export default function InboxScreen() {
 
   const renderIcon = (kind: InboxKind, isUnread: boolean) => {
     const color = isUnread ? accentColor : secondaryTextColor;
+    if (kind === "community_post") return <Megaphone size={18} color={color} />;
     if (kind === "moderation") return <ShieldAlert size={18} color={color} />;
     if (kind === "reply") return <MessageCircle size={18} color={color} />;
     return <Bell size={18} color={color} />;
