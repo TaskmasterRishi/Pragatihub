@@ -202,7 +202,8 @@ function FadeInView({
 /* Post Image */
 /* ───────────────────────────────────────────── */
 const PostImage = memo(({ uri }: { uri: string }) => {
-  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+  // Default to square so we render immediately; update when metadata arrives
+  const [aspectRatio, setAspectRatio] = useState<number>(1);
   const [isLoaded, setIsLoaded] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1.05)).current;
@@ -212,7 +213,7 @@ const PostImage = memo(({ uri }: { uri: string }) => {
     Image.getSize(
       uri,
       (w, h) => setAspectRatio(w / h),
-      () => setAspectRatio(1),
+      () => setAspectRatio(1), // fall back if remote size lookup fails
     );
   }, [uri]);
 
@@ -238,8 +239,6 @@ const PostImage = memo(({ uri }: { uri: string }) => {
     ]).start();
   };
 
-  if (!aspectRatio) return null;
-
   return (
     <View
       style={{
@@ -263,7 +262,8 @@ const PostImage = memo(({ uri }: { uri: string }) => {
         source={{ uri }}
         resizeMode="cover"
         onLoad={onLoad}
-        blurRadius={4}
+        onError={() => setIsLoaded(true)}
+        blurRadius={isLoaded ? 0 : 8}
         style={{
           width: "100%",
           height: "100%",
@@ -1159,6 +1159,7 @@ function PostListItem({
   }, [loadingPulseAnim, refreshing]);
 
   const entranceDelay = Math.min(index * 40, 200);
+  const isOnDetail = isDetailedPost;
 
   return (
     <FadeInView delay={entranceDelay} fromTranslateY={24} fromScale={0.96}>
@@ -1169,13 +1170,13 @@ function PostListItem({
             borderRadius: 18,
             padding: 14,
             borderWidth: 1,
-            marginBottom: 14,
+            marginBottom: isOnDetail ? 10 : 14,
             borderColor: cardBorder,
             shadowColor: "#0b1220",
-            shadowOpacity: 0.06,
-            shadowRadius: 10,
-            shadowOffset: { width: 0, height: 6 },
-            elevation: 3,
+            shadowOpacity: isOnDetail ? 0.04 : 0.06,
+            shadowRadius: isOnDetail ? 7 : 10,
+            shadowOffset: { width: 0, height: isOnDetail ? 4 : 6 },
+            elevation: isOnDetail ? 2 : 3,
             position: "relative",
           }}
         >

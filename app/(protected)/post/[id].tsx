@@ -1,7 +1,6 @@
-import AppLoader from "@/components/AppLoader";
 import CommentInput from "@/components/CommentInput";
 import CommentItem from "@/components/CommentItem";
-import PostListItem from "@/components/PostListItem";
+import PostListItem, { PostSkeletonCard } from "@/components/PostListItem";
 import { Comment, Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
@@ -18,14 +17,54 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-function addDepthToComments(comments: any[]): any[] {
-  // Add depth information to all top-level comments
-  // Preserve the original structure including replies
-  return comments.map((comment) => ({
+const SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+};
+
+function addDepthToComments(comments: Comment[], depth = 0): Comment[] {
+  return comments.map((comment, index) => ({
     ...comment,
-    depth: 0,
-    isLastInThread: false,
+    depth,
+    isLastInThread: index === comments.length - 1,
+    replies: comment.replies ? addDepthToComments(comment.replies, depth + 1) : [],
   }));
+}
+
+function CommentSkeleton() {
+  const muted = useThemeColor({}, "textMuted");
+  const placeholder = `${muted}30`;
+
+  return (
+    <View style={{ gap: SPACING.xs }}>
+      <View
+        style={{
+          height: 32,
+          width: "52%",
+          borderRadius: 10,
+          backgroundColor: placeholder,
+        }}
+      />
+      <View
+        style={{
+          height: 14,
+          width: "88%",
+          borderRadius: 8,
+          backgroundColor: placeholder,
+        }}
+      />
+      <View
+        style={{
+          height: 14,
+          width: "72%",
+          borderRadius: 8,
+          backgroundColor: placeholder,
+        }}
+      />
+    </View>
+  );
 }
 
 export default function DetailedPost() {
@@ -142,20 +181,33 @@ export default function DetailedPost() {
 
   if (loading) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: background,
-        }}
-      >
-        <AppLoader size="large" color={textColor} fullScreen />
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: background }}>
+        <FlatList
+          data={[0, 1, 2, 3]}
+          keyExtractor={(item) => `skeleton-${item}`}
+          ListHeaderComponent={
+            <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.md }}>
+              <PostSkeletonCard index={0} />
+              <View style={{ height: SPACING.md }} />
+              <View style={{ width: 120, height: 18, borderRadius: 8, backgroundColor: `${textColor}15` }} />
+            </View>
+          }
+          renderItem={() => (
+            <View style={{ paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md }}>
+              <CommentSkeleton />
+            </View>
+          )}
+          ItemSeparatorComponent={() => <View style={{ height: SPACING.sm }} />}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + SPACING.lg * 2 }}
+        />
+      </SafeAreaView>
     );
   }
 
   if (!detailedPost) {
     return (
-      <View
+      <SafeAreaView
         style={{
           flex: 1,
           backgroundColor: background,
@@ -164,7 +216,7 @@ export default function DetailedPost() {
         }}
       >
         <Text style={{ color: textColor, fontSize: 18 }}>Post not found</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -225,78 +277,64 @@ export default function DetailedPost() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "transparent" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: background }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 16}
       >
-        <View style={{ flex: 1, margin: 16 }}>
-          <FlatList
-            data={topLevelComments}
-            keyExtractor={(item) => item.id}
-            ListHeaderComponent={
-              <View style={{ backgroundColor: background }}>
-                <View style={{ paddingTop: 8 }}>
-                  <PostListItem post={detailedPost} isDetailedPost={true} />
-                </View>
-                <View
-                  style={{
-                    height: 8,
-                    backgroundColor: background,
-                  }}
-                />
-                <View
-                  style={{
-                    height: 1,
-                    backgroundColor: border,
-                  }}
-                />
-                <View
-                  style={{
-                    height: 8,
-                    backgroundColor: background,
-                  }}
-                />
-                <Text
-                  style={{
-                    color: textColor,
-                    fontSize: 18,
-                    fontWeight: "bold",
-                    paddingHorizontal: 16,
-                    paddingBottom: 16,
-                  }}
-                >
-                  Comments ({allComments.length})
-                </Text>
-              </View>
-            }
-            renderItem={({ item }) => (
+        <FlatList
+          data={topLevelComments}
+          keyExtractor={(item) => item.id}
+          ListHeaderComponent={
+            <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.md }}>
+              <PostListItem post={detailedPost} isDetailedPost={true} index={0} />
+              <View style={{ height: SPACING.md }} />
+              <Text
+                style={{
+                  color: textColor,
+                  fontSize: 14,
+                  fontWeight: "600",
+                  opacity: 0.72,
+                  letterSpacing: 0.1,
+                }}
+              >
+                Comments ({allComments.length})
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <View style={{ paddingHorizontal: SPACING.lg }}>
               <CommentItem
                 comment={item}
                 depth={item.depth}
                 isLastInThread={item.isLastInThread}
               />
-            )}
-            contentContainerStyle={{
-              paddingBottom: insets.bottom + 120,
-              backgroundColor: background,
-            }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={{ backgroundColor: background }}
+            </View>
+          )}
+          ItemSeparatorComponent={() => <View style={{ height: SPACING.sm }} />}
+          contentContainerStyle={{
+            paddingBottom: insets.bottom + SPACING.lg * 5,
+          }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          removeClippedSubviews
+        />
+
+        <View
+          style={{
+            paddingHorizontal: SPACING.lg,
+            paddingTop: SPACING.sm,
+            paddingBottom: insets.bottom + SPACING.xs,
+            borderTopWidth: 1,
+            borderColor: `${border}33`,
+            backgroundColor: background,
+          }}
+        >
+          <CommentInput
+            onSubmit={handleAddComment}
+            containerStyle={{ marginBottom: 0 }}
           />
-          <View
-            style={{
-              paddingBottom: insets.bottom + 8,
-              backgroundColor: "transparent",
-            }}
-          >
-            <CommentInput
-              onSubmit={handleAddComment}
-              containerStyle={{ marginBottom: 0 }}
-            />
-          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
