@@ -20,12 +20,14 @@ import {
   ActivityIndicator,
   FlatList,
   InteractionManager,
+  LayoutAnimation,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  UIManager,
   useColorScheme,
   View,
 } from "react-native";
@@ -68,6 +70,11 @@ type CommunityCardProps = {
 
 const RECENT_WINDOW_DAYS = 14;
 const FILTER_TABS: CommunityTab[] = ["Joined", "All"];
+
+// Enable layout animation on Android
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const normalizeText = (value: string) =>
   value
@@ -146,10 +153,15 @@ function FilterBar({
           return (
             <Pressable
               key={tab}
-              onPress={() => onChangeTab(tab)}
+              onPress={() => {
+                if (tab === selectedTab) return;
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                onChangeTab(tab);
+              }}
               style={({ pressed }) => [
                 styles.segment,
                 { backgroundColor: segmentBase, borderColor: segmentBorder },
+                selected && styles.segmentSelected,
                 selected && {
                   backgroundColor: segmentSelectedBg,
                   borderColor: segmentSelectedBorder,
@@ -460,10 +472,10 @@ export default function CommunitiesScreen() {
   const heroIconBg = toRgba(tintColor, isDark ? 0.2 : 0.1);
   const heroIconBorder = toRgba(tintColor, isDark ? 0.38 : 0.22);
   const countPillBg = toRgba(tintColor, isDark ? 0.2 : 0.1);
-  const segmentBase = toRgba(textColor, isDark ? 0.08 : 0.04);
-  const segmentBorder = toRgba(borderColor, isDark ? 0.44 : 0.2);
-  const segmentSelectedBg = toRgba(tintColor, isDark ? 0.26 : 0.14);
-  const segmentSelectedBorder = toRgba(tintColor, isDark ? 0.5 : 0.3);
+  const segmentBase = toRgba(textColor, isDark ? 0.12 : 0.06);
+  const segmentBorder = toRgba(borderColor, isDark ? 0.48 : 0.24);
+  const segmentSelectedBg = toRgba(tintColor, isDark ? 0.32 : 0.18);
+  const segmentSelectedBorder = toRgba(tintColor, isDark ? 0.58 : 0.38);
   const tabBarBackgroundColor = useThemeColor(
     {
       light: "rgba(255, 255, 255, 0.68)",
@@ -1065,7 +1077,7 @@ const styles = StyleSheet.create({
   segmentRow: {
     flex: 1,
     flexDirection: "row",
-    gap: 6,
+    gap: 12,
   },
   segment: {
     flex: 1,
@@ -1075,6 +1087,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
+  },
+  segmentSelected: {
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   segmentText: {
     fontSize: 12,
