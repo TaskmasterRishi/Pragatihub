@@ -31,6 +31,18 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInUp,
+  FadeOut,
+  Layout,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type VisibilityFilter = "all" | "joined";
@@ -75,6 +87,8 @@ const FILTER_TABS: CommunityTab[] = ["Joined", "All"];
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
 const normalizeText = (value: string) =>
   value
@@ -197,6 +211,178 @@ function FilterBar({
         <Text style={[styles.sortText, { color: tintColor }]}>{sortLabel}</Text>
       </Pressable>
     </View>
+  );
+}
+
+// ─── Shimmer + Skeletons ──────────────────────────────────────────────────────
+type ShimmerProps = {
+  width: number | string;
+  height: number;
+  borderRadius?: number;
+  baseColor: string;
+  highlightColor: string;
+  style?: any;
+};
+
+function Shimmer({
+  width,
+  height,
+  borderRadius = 8,
+  baseColor,
+  highlightColor,
+  style,
+}: ShimmerProps) {
+  const progress = useSharedValue(-1);
+
+  useEffect(() => {
+    progress.value = -1;
+    const animation = withRepeat(
+      withTiming(1, {
+        duration: 1200,
+        easing: Easing.linear,
+      }),
+      -1,
+      false,
+    );
+    progress.value = animation;
+  }, [progress]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        {
+          translateX: interpolate(progress.value, [-1, 1], [-200, 200]),
+        },
+      ],
+    };
+  });
+
+  return (
+    <View
+      style={[
+        {
+          width,
+          height,
+          borderRadius,
+          overflow: "hidden",
+          backgroundColor: baseColor,
+        },
+        style,
+      ]}
+    >
+      <AnimatedLinearGradient
+        colors={["transparent", highlightColor, "transparent"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={[StyleSheet.absoluteFillObject, animatedStyle]}
+      />
+    </View>
+  );
+}
+
+type SkeletonPalette = {
+  base: string;
+  highlight: string;
+  card: string;
+  border: string;
+};
+
+type CommunitySkeletonProps = {
+  palette: SkeletonPalette;
+  tintColor: string;
+  index: number;
+};
+
+function CommunityCardSkeleton({ palette, tintColor, index }: CommunitySkeletonProps) {
+  return (
+    <Animated.View
+      entering={FadeInUp.duration(220).delay(index * 35)}
+      layout={Layout.springify().damping(18).mass(0.5)}
+      style={[
+        styles.card,
+        {
+          backgroundColor: palette.card,
+          borderColor: palette.border,
+        },
+      ]}
+    >
+      <View style={styles.cardInner}>
+        <View
+          style={[
+            styles.avatarWrap,
+            { backgroundColor: palette.base, borderColor: palette.border },
+          ]}
+        >
+          <Shimmer
+            width={42}
+            height={42}
+            borderRadius={21}
+            baseColor={palette.base}
+            highlightColor={palette.highlight}
+          />
+        </View>
+
+        <View style={styles.cardText}>
+          <Shimmer
+            width="70%"
+            height={14}
+            borderRadius={6}
+            baseColor={palette.base}
+            highlightColor={palette.highlight}
+            style={{ marginBottom: 6 }}
+          />
+          <Shimmer
+            width="40%"
+            height={11}
+            borderRadius={6}
+            baseColor={palette.base}
+            highlightColor={palette.highlight}
+          />
+        </View>
+
+        <View style={styles.cardActions}>
+          <Shimmer
+            width={56}
+            height={22}
+            borderRadius={999}
+            baseColor={palette.base}
+            highlightColor={palette.highlight}
+          />
+          <ChevronRight size={14} color={palette.base} />
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+type PopularSkeletonProps = {
+  palette: SkeletonPalette;
+  index: number;
+};
+
+function PopularSkeleton({ palette, index }: PopularSkeletonProps) {
+  return (
+    <Animated.View
+      entering={FadeIn.duration(200).delay(index * 60)}
+      style={styles.popularCardOuter}
+    >
+      <View style={[styles.popularCard, { borderColor: palette.border }]}>
+        <Shimmer
+          width={96}
+          height={96}
+          borderRadius={48}
+          baseColor={palette.card}
+          highlightColor={palette.highlight}
+        />
+      </View>
+      <Shimmer
+        width={70}
+        height={10}
+        borderRadius={6}
+        baseColor={palette.base}
+        highlightColor={palette.highlight}
+      />
+    </Animated.View>
   );
 }
 
@@ -476,6 +662,12 @@ export default function CommunitiesScreen() {
   const segmentBorder = toRgba(borderColor, isDark ? 0.48 : 0.24);
   const segmentSelectedBg = toRgba(tintColor, isDark ? 0.32 : 0.18);
   const segmentSelectedBorder = toRgba(tintColor, isDark ? 0.58 : 0.38);
+  const skeletonPalette: SkeletonPalette = {
+    base: toRgba(textColor, isDark ? 0.08 : 0.06),
+    highlight: toRgba(textColor, isDark ? 0.18 : 0.12),
+    card: raisedSurfaceColor,
+    border: softBorderColor,
+  };
   const tabBarBackgroundColor = useThemeColor(
     {
       light: "rgba(255, 255, 255, 0.68)",
@@ -588,14 +780,20 @@ export default function CommunitiesScreen() {
     void loadCommunities("refresh");
   };
 
-  const searchTokens = useMemo(() => {
-    const normalized = normalizeText(searchQuery);
-    return normalized ? normalized.split(" ").filter(Boolean) : [];
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQuery(searchQuery), 250);
+    return () => clearTimeout(handle);
   }, [searchQuery]);
 
+  const searchTokens = useMemo(() => {
+    const normalized = normalizeText(debouncedQuery);
+    return normalized ? normalized.split(" ").filter(Boolean) : [];
+  }, [debouncedQuery]);
+
   const normalizedQuery = useMemo(
-    () => normalizeText(searchQuery),
-    [searchQuery],
+    () => normalizeText(debouncedQuery),
+    [debouncedQuery],
   );
 
   const visibleGroups = useMemo(() => {
@@ -681,6 +879,8 @@ export default function CommunitiesScreen() {
 
   const joinedCount = joinedGroupIds.length;
   const totalCount = groups.length;
+  const isSkeleton = isLoading && !loadError;
+  const listData = isSkeleton ? Array.from({ length: 8 }, (_, i) => i) : visibleGroups;
 
   // Approximate header height for padding
   const headerPaddingTop = 148;
@@ -805,27 +1005,43 @@ export default function CommunitiesScreen() {
 
       {/* ── Main list ── */}
       <FlatList
-        data={visibleGroups}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <CommunityCard
-            item={item}
-            isJoined={joinedSet.has(item.id)}
-            isNew={isRecentlyCreated(item)}
-            memberCount={memberCountByGroup[item.id] ?? 0}
-            cardColor={raisedSurfaceColor}
-            textColor={textColor}
-            textSecondaryColor={textSecondaryColor}
-            borderColor={softBorderColor}
-            avatarBgColor={avatarTintColor}
-            shadowColor={shadowColor}
-            successColor={successColor}
-            infoColor={infoColor}
-            tintColor={tintColor}
-            isDark={isDark}
-            onPress={() => router.push(`/community/${item.id}`)}
-          />
-        )}
+        data={listData}
+        keyExtractor={(item) => (isSkeleton ? `skeleton-${item}` : (item as Group).id)}
+        renderItem={({ item, index }) =>
+          isSkeleton ? (
+            <CommunityCardSkeleton
+              palette={skeletonPalette}
+              tintColor={tintColor}
+              index={index}
+            />
+          ) : (
+            <Animated.View
+              entering={FadeInUp.duration(220).delay(index * 40)}
+              exiting={FadeOut.duration(160)}
+              layout={Layout.springify().damping(18).mass(0.5)}
+            >
+              <View style={{ opacity: refreshing ? 0.96 : 1 }}>
+                <CommunityCard
+                  item={item as Group}
+                  isJoined={joinedSet.has((item as Group).id)}
+                  isNew={isRecentlyCreated(item as Group)}
+                  memberCount={memberCountByGroup[(item as Group).id] ?? 0}
+                  cardColor={raisedSurfaceColor}
+                  textColor={textColor}
+                  textSecondaryColor={textSecondaryColor}
+                  borderColor={softBorderColor}
+                  avatarBgColor={avatarTintColor}
+                  shadowColor={shadowColor}
+                  successColor={successColor}
+                  infoColor={infoColor}
+                  tintColor={tintColor}
+                  isDark={isDark}
+                  onPress={() => router.push(`/community/${(item as Group).id}`)}
+                />
+              </View>
+            </Animated.View>
+          )
+        }
         ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
         contentContainerStyle={[
           styles.listContent,
@@ -837,7 +1053,45 @@ export default function CommunitiesScreen() {
         ListHeaderComponent={
           <>
             {/* Popular discover rail */}
-            {showPopularRail ? (
+            {isSkeleton ? (
+              <View
+                style={[
+                  styles.discoverySection,
+                  { backgroundColor: headerBg, borderColor: softBorderColor },
+                ]}
+              >
+                <View style={styles.discoveryHeader}>
+                  <View
+                    style={[
+                      styles.discoverIconWrap,
+                      {
+                        backgroundColor: toRgba(tintColor, isDark ? 0.2 : 0.1),
+                        borderColor: toRgba(tintColor, isDark ? 0.38 : 0.2),
+                      },
+                    ]}
+                  >
+                    <TrendingUp size={11} color={tintColor} />
+                  </View>
+                  <Text style={[styles.discoveryTitle, { color: textColor }]}>
+                    Trending
+                  </Text>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.discoveryRail}
+                >
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <PopularSkeleton
+                      key={`pop-skeleton-${i}`}
+                      palette={skeletonPalette}
+                      index={i}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            ) : showPopularRail ? (
               <View
                 style={[
                   styles.discoverySection,
@@ -867,18 +1121,24 @@ export default function CommunitiesScreen() {
                   contentContainerStyle={styles.discoveryRail}
                 >
                   {popularGroups.map((group) => (
-                    <PopularCard
+                    <Animated.View
                       key={group.id}
-                      group={group}
-                      memberCount={memberCountByGroup[group.id] ?? 0}
-                      cardColor={raisedSurfaceColor}
-                      textColor={textColor}
-                      textSecondaryColor={textSecondaryColor}
-                      borderColor={softBorderColor}
-                      tintColor={tintColor}
-                      isDark={isDark}
-                      onPress={() => router.push(`/community/${group.id}`)}
-                    />
+                      entering={FadeIn.duration(200).delay(60)}
+                    >
+                      <View style={{ transform: [{ scale: refreshing ? 0.99 : 1 }] }}>
+                        <PopularCard
+                          group={group}
+                          memberCount={memberCountByGroup[group.id] ?? 0}
+                          cardColor={raisedSurfaceColor}
+                          textColor={textColor}
+                          textSecondaryColor={textSecondaryColor}
+                          borderColor={softBorderColor}
+                          tintColor={tintColor}
+                          isDark={isDark}
+                          onPress={() => router.push(`/community/${group.id}`)}
+                        />
+                      </View>
+                    </Animated.View>
                   ))}
                 </ScrollView>
               </View>
