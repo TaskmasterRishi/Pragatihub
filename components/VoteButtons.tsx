@@ -50,7 +50,7 @@ function usePressScale(initial = 1, pressed = 0.9) {
       speed: 30,
       bounciness: 6,
     }).start();
-  }, []);
+  }, [pressed, scale]);
 
   const onPressOut = useCallback(() => {
     Animated.spring(scale, {
@@ -59,7 +59,7 @@ function usePressScale(initial = 1, pressed = 0.9) {
       speed: 25,
       bounciness: 5,
     }).start();
-  }, []);
+  }, [initial, scale]);
 
   return { scale, onPressIn, onPressOut };
 }
@@ -68,15 +68,18 @@ function AnimatedIconButton({
   children,
   onPress,
   disabled,
+  extraScale,
 }: {
   children: React.ReactNode;
   onPress?: () => void;
   disabled?: boolean;
+  extraScale?: Animated.Value;
 }) {
   const { scale, onPressIn, onPressOut } = usePressScale();
+  const combinedScale = extraScale ? Animated.multiply(scale, extraScale) : scale;
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View style={{ transform: [{ scale: combinedScale }] }}>
       <Pressable
         onPress={onPress}
         onPressIn={onPressIn}
@@ -106,6 +109,8 @@ export default function VoteButtons({
   const [downvotes, setDownvotes] = useState<number>(initialDownvotes || 0);
   const [voteState, setVoteState] = useState<"up" | "down" | "none">("none");
   const [isLoading, setIsLoading] = useState(false);
+  const upBounce = useRef(new Animated.Value(1)).current;
+  const downBounce = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     setUpvotes(initialUpvotes || 0);
@@ -261,15 +266,33 @@ export default function VoteButtons({
   const handleUpvote = async () => {
     if (!user?.id || isLoading) return;
     setIsLoading(true);
+    let success = false;
     if (voteState === "up") {
-      await removeUpvote();
+      success = await removeUpvote();
     } else if (voteState === "down") {
       const removed = await removeDownvote();
       if (removed) {
-        await addUpvote();
+        success = await addUpvote();
       }
     } else {
-      await addUpvote();
+      success = await addUpvote();
+    }
+    if (success) {
+      upBounce.setValue(1);
+      Animated.sequence([
+        Animated.spring(upBounce, {
+          toValue: 1.2,
+          speed: 30,
+          bounciness: 9,
+          useNativeDriver: true,
+        }),
+        Animated.spring(upBounce, {
+          toValue: 1,
+          speed: 22,
+          bounciness: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
     setIsLoading(false);
   };
@@ -277,15 +300,33 @@ export default function VoteButtons({
   const handleDownvote = async () => {
     if (!user?.id || isLoading) return;
     setIsLoading(true);
+    let success = false;
     if (voteState === "down") {
-      await removeDownvote();
+      success = await removeDownvote();
     } else if (voteState === "up") {
       const removed = await removeUpvote();
       if (removed) {
-        await addDownvote();
+        success = await addDownvote();
       }
     } else {
-      await addDownvote();
+      success = await addDownvote();
+    }
+    if (success) {
+      downBounce.setValue(1);
+      Animated.sequence([
+        Animated.spring(downBounce, {
+          toValue: 1.2,
+          speed: 30,
+          bounciness: 9,
+          useNativeDriver: true,
+        }),
+        Animated.spring(downBounce, {
+          toValue: 1,
+          speed: 22,
+          bounciness: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
     setIsLoading(false);
   };
@@ -297,7 +338,11 @@ export default function VoteButtons({
 
   return (
     <>
-      <AnimatedIconButton onPress={handleUpvote} disabled={isLoading}>
+      <AnimatedIconButton
+        onPress={handleUpvote}
+        disabled={isLoading}
+        extraScale={upBounce}
+      >
         <ArrowBigUp
           size={size}
           color={isUpvoted ? primary : text}
@@ -316,7 +361,11 @@ export default function VoteButtons({
         {upvotes}
       </Text>
 
-      <AnimatedIconButton onPress={handleDownvote} disabled={isLoading}>
+      <AnimatedIconButton
+        onPress={handleDownvote}
+        disabled={isLoading}
+        extraScale={downBounce}
+      >
         <ArrowBigDown
           size={size}
           color={isDownvoted ? primary : text}

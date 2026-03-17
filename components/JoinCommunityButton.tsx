@@ -12,10 +12,14 @@ import {
 
 type JoinCommunityButtonProps = {
   communityId: string;
+  initialJoined?: boolean;
+  loading?: boolean;
 };
 
 export default function JoinCommunityButton({
   communityId,
+  initialJoined,
+  loading = false,
 }: JoinCommunityButtonProps) {
   const primary = useThemeColor({}, "primary");
   const muted = useThemeColor({}, "textMuted");
@@ -26,10 +30,18 @@ export default function JoinCommunityButton({
   );
   const { user, isLoaded } = useUser();
   const [isJoining, setIsJoining] = useState(false);
-  const [isJoined, setIsJoined] = useState(false);
+  const [isJoined, setIsJoined] = useState(initialJoined ?? false);
+
+  useEffect(() => {
+    if (initialJoined !== undefined) {
+      setIsJoined(initialJoined);
+    }
+  }, [initialJoined]);
 
   useEffect(() => {
     const checkMembership = async () => {
+      if (loading) return;
+      if (initialJoined !== undefined) return; // already hydrated
       if (!user?.id) return;
       const { data, error } = await isUserInGroup({
         userId: user.id,
@@ -43,7 +55,22 @@ export default function JoinCommunityButton({
     };
 
     checkMembership();
-  }, [communityId, user?.id]);
+  }, [communityId, user?.id, initialJoined, loading]);
+
+  if (loading) {
+    return (
+      <Pressable
+        disabled
+        style={{
+          backgroundColor: "rgba(148,163,184,0.25)",
+          borderRadius: 999,
+          width: 74,
+          height: 28,
+          opacity: 0.8,
+        }}
+      />
+    );
+  }
 
   return (
     <Pressable

@@ -1,22 +1,107 @@
 import HomeTopBar from "@/components/HomeTopBar";
-import PostListItem from "@/components/PostListItem";
+import PostListItem, { PostSkeletonCard } from "@/components/PostListItem";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
 import { setTabBarVisible } from "@/utils/tabBarVisibility";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, NativeSyntheticEvent, NativeScrollEvent, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, FlatList, NativeScrollEvent, NativeSyntheticEvent, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useUser } from "@clerk/clerk-expo";
 
 const PAGE_SIZE = 5;
+
+const EmptyState = () => {
+  const text = useThemeColor({}, "text");
+  const muted = useThemeColor({}, "textMuted");
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 240,
+        useNativeDriver: true,
+      }),
+      Animated.spring(translateY, {
+        toValue: 0,
+        speed: 16,
+        bounciness: 6,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [opacity, translateY]);
+
+  return (
+    <Animated.View
+      style={{
+        paddingTop: 120,
+        paddingHorizontal: 32,
+        alignItems: "center",
+        gap: 8,
+        opacity,
+        transform: [{ translateY }],
+      }}
+    >
+      <Text style={{ color: text, fontSize: 18, fontWeight: "800" }}>
+        No posts yet
+      </Text>
+      <Text
+        style={{
+          color: muted,
+          fontSize: 14,
+          textAlign: "center",
+          lineHeight: 20,
+        }}
+      >
+        Pull to refresh or be the first to share something with the community.
+      </Text>
+    </Animated.View>
+  );
+};
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
+  const { user } = useUser();
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isMembershipLoading, setIsMembershipLoading] = useState(true);
+  const [joinedGroupIds, setJoinedGroupIds] = useState<Set<string>>(new Set());
+  const skeletonData = useMemo(
+    () => Array.from({ length: 6 }).map((_, i) => ({ id: `skeleton-${i}` })),
+    [],
+  );
+  const skeletonOpacity = useRef(new Animated.Value(1)).current;
+  const contentOpacity = useRef(new Animated.Value(0)).current;
+  const loadMemberships = useCallback(async () => {
+    if (!user?.id) {
+      setJoinedGroupIds(new Set());
+      setIsMembershipLoading(false);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from("user_groups")
+        .select("group_id")
+        .eq("user_id", user.id);
+      if (error) {
+        console.log("Membership fetch error:", error);
+        setJoinedGroupIds(new Set());
+      } else {
+        setJoinedGroupIds(new Set((data ?? []).map((g) => g.group_id)));
+      }
+    } catch (e) {
+      console.log("Membership fetch error:", e);
+      setJoinedGroupIds(new Set());
+    } finally {
+      setIsMembershipLoading(false);
+    }
+  }, [user?.id]);
 
   const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -56,7 +141,31 @@ export default function HomeScreen() {
     fetchPosts();
   }, []);
 
+  useEffect(() => {
+    loadMemberships();
+  }, [loadMemberships]);
+
+  useEffect(() => {
+    if (isInitialLoading) return;
+    Animated.parallel([
+      Animated.timing(skeletonOpacity, {
+        toValue: 0,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [isInitialLoading, skeletonOpacity, contentOpacity]);
+
   const fetchPosts = async () => {
+    if (!isInitialLoading && !refreshing) {
+      setRefreshing(true);
+    }
+
     const { data, error } = await supabase
       .from("posts")
       .select(
@@ -71,12 +180,16 @@ export default function HomeScreen() {
 
     if (error) {
       console.log("Posts fetch error:", error);
+      setIsInitialLoading(false);
+      setRefreshing(false);
       return;
     }
 
     if (!data) {
       console.log("No posts data returned");
       setPosts([]);
+      setIsInitialLoading(false);
+      setRefreshing(false);
       return;
     }
 
@@ -114,6 +227,8 @@ export default function HomeScreen() {
 
     console.log("Posts with counts:", JSON.stringify(postsWithCounts, null, 2));
     setPosts(postsWithCounts);
+    setIsInitialLoading(false);
+    setRefreshing(false);
   };
 
   const [page, setPage] = useState(1);
@@ -145,7 +260,7 @@ export default function HomeScreen() {
   }, [searchQuery]);
 
   const handleRefresh = async () => {
-    if (refreshing) return;
+    if (refreshing || isInitialLoading) return;
     setRefreshing(true);
     setPage(1);
     try {
@@ -155,6 +270,18 @@ export default function HomeScreen() {
     }
   };
 
+  const renderItem = ({ item, index: itemIndex }: { item: Post; index: number }) => (
+    <PostListItem
+      post={item}
+      index={itemIndex}
+      refreshing={refreshing}
+      isMembershipLoading={isMembershipLoading}
+      initialJoined={joinedGroupIds.has(item.group.id)}
+    />
+  );
+
+  const showEmptyState = !isInitialLoading && !refreshing && posts.length === 0;
+
   return (
     <View style={{ flex: 1, backgroundColor }}>
       {/* Floating top bar */}
@@ -163,27 +290,55 @@ export default function HomeScreen() {
         onChangeSearchQuery={setSearchQuery}
       />
 
-      <FlatList
-        data={visiblePosts}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <PostListItem post={item} />}
-        contentContainerStyle={{
-          paddingHorizontal: 20,
-          paddingTop: insets.top + 80,
-        }}
-        refreshing={refreshing}
-        onRefresh={handleRefresh}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        progressViewOffset={insets.top + 80}
-        onEndReached={() => {
-          if (page * PAGE_SIZE < filteredPosts.length) {
-            setPage((p) => p + 1);
-          }
-        }}
-        onEndReachedThreshold={0.5}
-        showsVerticalScrollIndicator={false}
-      />
+      <View style={{ flex: 1 }}>
+        {/* Skeleton stays mounted so we can fade it out smoothly */}
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFillObject, { opacity: skeletonOpacity }]}
+        >
+          <FlatList
+            data={skeletonData}
+            keyExtractor={(item) => item.id}
+            renderItem={({ index: i }) => <PostSkeletonCard index={i} />}
+            contentContainerStyle={{
+              paddingHorizontal: 20,
+              paddingTop: insets.top + 80,
+              paddingBottom: insets.bottom + 40,
+            }}
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={false}
+          />
+        </Animated.View>
+
+        {showEmptyState ? (
+          <EmptyState />
+        ) : (
+          <Animated.View style={{ flex: 1, opacity: contentOpacity }}>
+            <FlatList
+              data={visiblePosts}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingTop: insets.top + 80,
+                paddingBottom: insets.bottom + 40,
+              }}
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              progressViewOffset={insets.top + 80}
+              onEndReached={() => {
+                if (page * PAGE_SIZE < filteredPosts.length) {
+                  setPage((p) => p + 1);
+                }
+              }}
+              onEndReachedThreshold={0.5}
+              showsVerticalScrollIndicator={false}
+            />
+          </Animated.View>
+        )}
+      </View>
     </View>
   );
 }
