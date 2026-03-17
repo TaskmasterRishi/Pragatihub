@@ -279,6 +279,11 @@ export default function HomeScreen() {
       initialJoined={joinedGroupIds.has(item.group.id)}
     />
   );
+  const memoizedRenderItem = useCallback(renderItem, [
+    refreshing,
+    isMembershipLoading,
+    joinedGroupIds,
+  ]);
 
   const showEmptyState = !isInitialLoading && !refreshing && posts.length === 0;
 
@@ -299,7 +304,7 @@ export default function HomeScreen() {
           <FlatList
             data={skeletonData}
             keyExtractor={(item) => item.id}
-            renderItem={({ index: i }) => <PostSkeletonCard index={i} />}
+              renderItem={({ index: i }) => <PostSkeletonCard index={i} />}
             contentContainerStyle={{
               paddingHorizontal: 20,
               paddingTop: insets.top + 80,
@@ -317,12 +322,16 @@ export default function HomeScreen() {
             <FlatList
               data={visiblePosts}
               keyExtractor={(item) => item.id}
-              renderItem={renderItem}
+              renderItem={memoizedRenderItem}
               contentContainerStyle={{
                 paddingHorizontal: 20,
                 paddingTop: insets.top + 80,
                 paddingBottom: insets.bottom + 40,
               }}
+              removeClippedSubviews
+              maxToRenderPerBatch={5}
+              windowSize={7}
+              initialNumToRender={5}
               refreshing={refreshing}
               onRefresh={handleRefresh}
               onScroll={handleScroll}

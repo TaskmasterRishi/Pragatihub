@@ -51,9 +51,10 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 /* ───────────────────────────────────────────── */
 function useShimmer(duration = 1200) {
   const progress = useRef(new Animated.Value(0)).current;
+  const loopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    const loop = Animated.loop(
+    loopRef.current = Animated.loop(
       Animated.timing(progress, {
         toValue: 1,
         duration,
@@ -61,8 +62,8 @@ function useShimmer(duration = 1200) {
         useNativeDriver: true,
       }),
     );
-    loop.start();
-    return () => loop.stop();
+    loopRef.current.start();
+    return () => loopRef.current?.stop?.();
   }, [duration, progress]);
 
   const translateX = progress.interpolate({
@@ -90,7 +91,7 @@ const ShimmerBar = ({
         width: "100%",
         overflow: "hidden",
         borderRadius,
-        backgroundColor: "rgba(148, 163, 184, 0.15)",
+        backgroundColor: "rgba(148, 163, 184, 0.12)",
         ...style,
       }}
     >
@@ -100,10 +101,10 @@ const ShimmerBar = ({
           position: "absolute",
           top: 0,
           bottom: 0,
-          width: SCREEN_WIDTH * 0.45,
+          width: SCREEN_WIDTH * 0.35,
           transform: [{ translateX }],
-          backgroundColor: "rgba(255,255,255,0.35)",
-          opacity: 0.55,
+          backgroundColor: "rgba(255,255,255,0.32)",
+          opacity: 0.45,
         }}
       />
     </View>
@@ -113,15 +114,15 @@ const ShimmerBar = ({
 /* ───────────────────────────────────────────── */
 /* Shared Press Scale Hook */
 /* ───────────────────────────────────────────── */
-function usePressScale(initial = 1, pressed = 0.9) {
+function usePressScale(initial = 1, pressed = 0.96) {
   const scale = useRef(new Animated.Value(initial)).current;
 
   const onPressIn = useCallback(() => {
-    Animated.spring(scale, {
+    Animated.timing(scale, {
       toValue: pressed,
+      duration: 80,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: true,
-      speed: 30,
-      bounciness: 6,
     }).start();
   }, [pressed, scale]);
 
@@ -129,8 +130,8 @@ function usePressScale(initial = 1, pressed = 0.9) {
     Animated.spring(scale, {
       toValue: initial,
       useNativeDriver: true,
-      speed: 25,
-      bounciness: 5,
+      speed: 20,
+      bounciness: 6,
     }).start();
   }, [initial, scale]);
 
@@ -144,7 +145,7 @@ function FadeInView({
   children,
   delay = 0,
   fromScale = 0.96,
-  fromTranslateY = 0,
+  fromTranslateY = 24,
 }: {
   children: React.ReactNode;
   delay?: number;
@@ -156,12 +157,14 @@ function FadeInView({
   const translateY = useRef(new Animated.Value(fromTranslateY)).current;
 
   useEffect(() => {
+    const clampedDelay = Math.min(delay, 200);
     const animation = Animated.sequence([
-      Animated.delay(delay),
+      Animated.delay(clampedDelay),
       Animated.parallel([
         Animated.timing(opacity, {
           toValue: 1,
           duration: 240,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.spring(scale, {
@@ -200,10 +203,10 @@ function FadeInView({
 /* ───────────────────────────────────────────── */
 const PostImage = memo(({ uri }: { uri: string }) => {
   const [aspectRatio, setAspectRatio] = useState<number | null>(null);
-  const [blurRadius, setBlurRadius] = useState(8);
   const [isLoaded, setIsLoaded] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1.05)).current;
+  const overlayOpacity = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
     Image.getSize(
@@ -215,7 +218,6 @@ const PostImage = memo(({ uri }: { uri: string }) => {
 
   const onLoad = () => {
     setIsLoaded(true);
-    setTimeout(() => setBlurRadius(0), 100);
     Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
@@ -226,6 +228,11 @@ const PostImage = memo(({ uri }: { uri: string }) => {
         toValue: 1,
         speed: 16,
         bounciness: 7,
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 220,
         useNativeDriver: true,
       }),
     ]).start();
@@ -256,7 +263,7 @@ const PostImage = memo(({ uri }: { uri: string }) => {
         source={{ uri }}
         resizeMode="cover"
         onLoad={onLoad}
-        blurRadius={blurRadius}
+        blurRadius={4}
         style={{
           width: "100%",
           height: "100%",
@@ -264,6 +271,17 @@ const PostImage = memo(({ uri }: { uri: string }) => {
           transform: [{ scale }],
         }}
       />
+      {/* subtle overlay fade instead of blur timeout */}
+      {!isLoaded && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: "rgba(0,0,0,0.12)",
+            opacity: overlayOpacity,
+          }}
+        />
+      )}
     </View>
   );
 });
@@ -282,6 +300,7 @@ const PostVideo = memo(
       createdPlayer.play();
     });
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+    const lastAspectRatio = useRef<number | null>(null);
     const [isReady, setIsReady] = useState(false);
     const loadingOpacity = useRef(new Animated.Value(1)).current;
     const videoOpacity = useRef(new Animated.Value(0)).current;
@@ -295,7 +314,11 @@ const PostVideo = memo(
           typeof height === "number" &&
           height > 0
         ) {
-          setAspectRatio(width / height);
+          const next = width / height;
+          if (lastAspectRatio.current !== next) {
+            lastAspectRatio.current = next;
+            setAspectRatio(next);
+          }
           setIsReady(true);
           Animated.timing(loadingOpacity, {
             toValue: 0,
@@ -857,7 +880,7 @@ function AnimatedIconButton({
   children,
   onPress,
   style,
-  pressedScale = 0.9,
+  pressedScale = 0.96,
   enableOpacity = true,
   hitSlop,
 }: {
@@ -911,7 +934,7 @@ function ScalePressable({
   onPress,
   style,
   disabled = false,
-  pressedScale = 0.97,
+  pressedScale = 0.96,
   ...pressableProps
 }: {
   children: React.ReactNode;
@@ -999,6 +1022,7 @@ function PostListItem({
   const [isWritingDetails, setIsWritingDetails] = useState(false);
   const [isSubmittingModeratorSupport, setIsSubmittingModeratorSupport] =
     useState(false);
+  const loadingPulseAnim = useRef(new Animated.Value(0.85)).current;
   const reportSheetAnim = useRef(new Animated.Value(0)).current;
   const reportSuccessAnim = useRef(new Animated.Value(0)).current;
   const updatedAt = post.updated_at ?? post.edited_at ?? null;
@@ -1110,8 +1134,34 @@ function PostListItem({
     }
   };
 
+  // subtle pulse for refresh shimmer
+  useEffect(() => {
+    if (!refreshing) {
+      loadingPulseAnim.setValue(0.85);
+      return;
+    }
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(loadingPulseAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(loadingPulseAnim, {
+          toValue: 0.85,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [loadingPulseAnim, refreshing]);
+
+  const entranceDelay = Math.min(index * 40, 200);
+
   return (
-    <FadeInView delay={index * 50} fromTranslateY={20} fromScale={0.96}>
+    <FadeInView delay={entranceDelay} fromTranslateY={24} fromScale={0.96}>
       <>
         <View
           style={{
@@ -1378,7 +1428,16 @@ function PostListItem({
                 opacity: 0.35,
               }}
             >
-              <ShimmerBar height="100%" borderRadius={18} />
+              <Animated.View
+                style={{
+                  ...StyleSheet.absoluteFillObject,
+                  opacity: refreshing
+                    ? loadingPulseAnim
+                    : 0,
+                }}
+              >
+                <ShimmerBar height="100%" borderRadius={18} />
+              </Animated.View>
             </Animated.View>
           )}
         </View>

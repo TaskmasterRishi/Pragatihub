@@ -2,7 +2,7 @@ import { useUser } from "@clerk/clerk-expo";
 import { useFocusEffect } from "expo-router";
 import { ArrowBigDown, ArrowBigUp } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Pressable, Text } from "react-native";
+import { Animated, Easing, Pressable, Text } from "react-native";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
@@ -111,6 +111,23 @@ export default function VoteButtons({
   const [isLoading, setIsLoading] = useState(false);
   const upBounce = useRef(new Animated.Value(1)).current;
   const downBounce = useRef(new Animated.Value(1)).current;
+  const bounce = useCallback((value: Animated.Value) => {
+    value.setValue(1);
+    Animated.sequence([
+      Animated.timing(value, {
+        toValue: 1.12,
+        duration: 90,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(value, {
+        toValue: 1,
+        speed: 20,
+        bounciness: 6,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   useEffect(() => {
     setUpvotes(initialUpvotes || 0);
@@ -278,21 +295,7 @@ export default function VoteButtons({
       success = await addUpvote();
     }
     if (success) {
-      upBounce.setValue(1);
-      Animated.sequence([
-        Animated.spring(upBounce, {
-          toValue: 1.2,
-          speed: 30,
-          bounciness: 9,
-          useNativeDriver: true,
-        }),
-        Animated.spring(upBounce, {
-          toValue: 1,
-          speed: 22,
-          bounciness: 8,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      bounce(upBounce);
     }
     setIsLoading(false);
   };
@@ -312,21 +315,7 @@ export default function VoteButtons({
       success = await addDownvote();
     }
     if (success) {
-      downBounce.setValue(1);
-      Animated.sequence([
-        Animated.spring(downBounce, {
-          toValue: 1.2,
-          speed: 30,
-          bounciness: 9,
-          useNativeDriver: true,
-        }),
-        Animated.spring(downBounce, {
-          toValue: 1,
-          speed: 22,
-          bounciness: 8,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      bounce(downBounce);
     }
     setIsLoading(false);
   };
