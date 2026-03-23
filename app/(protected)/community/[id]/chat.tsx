@@ -784,12 +784,7 @@ export default function CommunityChatTab() {
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={keyboardOffset}
-        style={[
-          styles.inputContainer,
-          {
-            backgroundColor: bg, // Maintain theme consistency
-          },
-        ]}
+        style={styles.inputContainer}
       >
         {/* ── Typing Indicator ── */}
         {typingUsers.length > 0 && (
