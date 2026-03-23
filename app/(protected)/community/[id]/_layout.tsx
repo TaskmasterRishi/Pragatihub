@@ -2,7 +2,10 @@ import AppLoader from "@/components/AppLoader";
 import { HapticTab } from "@/components/haptic-tab";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
-import { checkIsModerator, fetchPendingReportCount } from "@/lib/actions/moderation";
+import {
+  checkIsModerator,
+  fetchPendingReportCount,
+} from "@/lib/actions/moderation";
 import { useUser } from "@clerk/clerk-expo";
 import { BlurView } from "expo-blur";
 import { Tabs, useLocalSearchParams, useRouter } from "expo-router";
@@ -273,6 +276,7 @@ export default function CommunityLayout() {
         options={{
           title: "Chat",
           tabBarIcon: ({ focused }) => renderIcon(MessageCircle, focused, 24),
+          tabBarStyle: { display: "none" },
         }}
       />
       <Tabs.Screen
