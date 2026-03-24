@@ -18,6 +18,7 @@ type ChatInputProps = {
   value: string;
   onChangeText: (text: string) => void;
   onSend: () => void;
+  onPickMedia?: () => void;
   onTypingStatusChange?: (isTyping: boolean) => void;
   isMember: boolean;
   isAuthed: boolean;
@@ -30,6 +31,7 @@ export default function ChatInput({
   value,
   onChangeText,
   onSend,
+  onPickMedia,
   onTypingStatusChange,
   isMember,
   isAuthed,
@@ -138,9 +140,14 @@ export default function ChatInput({
       <View style={styles.inner}>
         {/* Attachment Button */}
         <Pressable
+          onPress={onPickMedia}
+          disabled={!isMember || !isAuthed || sending}
           style={({ pressed }) => [
             styles.actionBtn,
-            { opacity: pressed ? 0.6 : 1 },
+            {
+              opacity:
+                !isMember || !isAuthed || sending ? 0.45 : pressed ? 0.6 : 1,
+            },
           ]}
         >
           <View

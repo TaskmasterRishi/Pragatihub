@@ -6,7 +6,10 @@ import { fetchGroupById, type Group } from "@/lib/actions/groups";
 import { supabase } from "@/lib/Supabase";
 import type { Tables } from "@/types/database.types";
 import { useUser } from "@clerk/clerk-expo";
+import * as FileSystem from "expo-file-system/legacy";
 import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useGlobalSearchParams } from "expo-router";
 import { MessageCircle, Users } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +18,7 @@ import {
   Animated,
   AppState,
   FlatList,
+  Image as RNImage,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -31,10 +35,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type ChatUser = Pick<Tables<"users">, "id" | "name" | "image">;
 type ChatMessageRow = Tables<"community_chat_messages">;
+type ChatMediaType = "text" | "image" | "gif" | "sticker" | "video";
 type ChatMessage = ChatMessageRow & {
   user: ChatUser | null;
+  media_type?: ChatMediaType | null;
+  media_url?: string | null;
   clientStatus?: "sent" | "sending" | "failed";
 };
+
+const CHAT_MEDIA_BUCKET = "chat_media";
+const MAX_UPLOAD_BYTES = Number(
+  process.env.EXPO_PUBLIC_MAX_UPLOAD_BYTES ?? 50 * 1024 * 1024,
+);
 
 // A "group" is all consecutive messages from the same sender within the same minute.
 type MessageGroup = {
@@ -87,6 +99,26 @@ function formatDateDivider(isoString: string): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function detectChatMediaType(
+  mimeType?: string | null,
+  fileName?: string | null,
+  uri?: string | null,
+): ChatMediaType {
+  const source = `${mimeType ?? ""} ${fileName ?? ""} ${uri ?? ""}`.toLowerCase();
+  if (
+    source.includes("video") ||
+    source.endsWith(".mp4") ||
+    source.endsWith(".mov") ||
+    source.endsWith(".m4v") ||
+    source.endsWith(".webm")
+  ) {
+    return "video";
+  }
+  if (source.includes("gif") || source.endsWith(".gif")) return "gif";
+  if (source.includes("webp") || source.includes("sticker")) return "sticker";
+  return "image";
 }
 
 /** Group a flat list of messages into MessageGroup[] */
@@ -221,6 +253,76 @@ const divStyles = StyleSheet.create({
   label: { fontSize: 11, fontWeight: "600", letterSpacing: 0.3 },
 });
 
+function MessageMedia({
+  mediaType,
+  mediaUrl,
+  hasCaption,
+}: {
+  mediaType?: ChatMediaType | null;
+  mediaUrl?: string | null;
+  hasCaption: boolean;
+}) {
+  const { width } = useWindowDimensions();
+  const [aspectRatio, setAspectRatio] = useState(1);
+  const safeUrl = mediaUrl ?? "";
+  const mediaWidth = Math.max(120, Math.round(Math.min(width * 0.5, 220)));
+  const player = useVideoPlayer({ uri: safeUrl }, (createdPlayer) => {
+    createdPlayer.muted = false;
+    createdPlayer.loop = false;
+    createdPlayer.pause();
+  });
+
+  useEffect(() => {
+    if (!mediaUrl || mediaType === "video") return;
+    RNImage.getSize(
+      mediaUrl,
+      (w, h) => {
+        if (w > 0 && h > 0) setAspectRatio(w / h);
+      },
+      () => setAspectRatio(1),
+    );
+  }, [mediaType, mediaUrl]);
+
+  if (!mediaUrl) return null;
+
+  if (mediaType === "video") {
+    return (
+      <View
+        style={[
+          groupStyles.mediaVideoWrap,
+          !hasCaption ? groupStyles.mediaNoBottomGap : null,
+        ]}
+      >
+        <VideoView
+          style={[
+            groupStyles.media,
+            !hasCaption ? groupStyles.mediaNoBottomGap : null,
+            { width: mediaWidth, aspectRatio },
+          ]}
+          player={player}
+          nativeControls
+          allowsPictureInPicture
+          contentFit="contain"
+          fullscreenOptions={{ enable: true }}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri: mediaUrl }}
+      style={[
+        groupStyles.media,
+        !hasCaption ? groupStyles.mediaNoBottomGap : null,
+        { width: mediaWidth, aspectRatio },
+      ]}
+      contentFit="contain"
+      transition={120}
+    />
+  );
+}
+
 function MessageGroupRow({
   group,
   theme,
@@ -326,7 +428,6 @@ function MessageGroupRow({
       <View style={[groupStyles.bubbleCol, mine && groupStyles.bubbleColMine]}>
         {/* Each message in the group */}
         {messages.map((msg, idx) => {
-          const isFirst = idx === 0;
           const isLast = idx === messages.length - 1;
           // Tail radius: the very last bubble gets the "tail" corner
           // Tail = bottom corner of the LAST bubble only, same side always
@@ -340,6 +441,9 @@ function MessageGroupRow({
               key={msg.id}
               style={[
                 groupStyles.bubble,
+                msg.media_url && !msg.content?.trim()
+                  ? groupStyles.bubbleMediaOnly
+                  : null,
                 {
                   backgroundColor: bubbleBg,
                   borderColor: bubbleBorderColor,
@@ -351,9 +455,16 @@ function MessageGroupRow({
                 },
               ]}
             >
-              <Text style={[groupStyles.messageText, { color: text }]}>
-                {msg.content}
-              </Text>
+              <MessageMedia
+                mediaType={msg.media_type}
+                mediaUrl={msg.media_url}
+                hasCaption={Boolean(msg.content?.trim())}
+              />
+              {msg.content?.trim() ? (
+                <Text style={[groupStyles.messageText, { color: text }]}>
+                  {msg.content}
+                </Text>
+              ) : null}
             </View>
           );
         })}
@@ -422,6 +533,26 @@ const groupStyles = StyleSheet.create({
     paddingVertical: 9,
     minWidth: 56,
     maxWidth: "100%",
+  },
+  bubbleMediaOnly: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    minWidth: 0,
+    overflow: "hidden",
+  },
+  media: {
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: "rgba(0,0,0,0.06)",
+    maxHeight: 320,
+  },
+  mediaNoBottomGap: {
+    marginBottom: 0,
+  },
+  mediaVideoWrap: {
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 8,
   },
   messageText: { fontSize: 14.5, lineHeight: 21 },
   timestampRow: {
@@ -556,7 +687,7 @@ export default function CommunityChatTab() {
     const { data, error } = await supabase
       .from("community_chat_messages")
       .select(
-        "id, group_id, user_id, content, created_at, user:users(id, name, image)",
+        "id, group_id, user_id, content, media_type, media_url, created_at, user:users(id, name, image)",
       )
       .eq("group_id", communityId)
       .order("created_at", { ascending: true })
@@ -570,6 +701,8 @@ export default function CommunityChatTab() {
       group_id: row.group_id as string,
       user_id: row.user_id as string,
       content: row.content as string,
+      media_type: (row.media_type as ChatMediaType | null) ?? "text",
+      media_url: (row.media_url as string | null) ?? null,
       created_at: row.created_at as string,
       clientStatus: "sent" as const,
       user: row.user
@@ -628,6 +761,8 @@ export default function CommunityChatTab() {
 
           const hydrated: ChatMessage = {
             ...next,
+            media_type: (next as any).media_type ?? "text",
+            media_url: (next as any).media_url ?? null,
             clientStatus: "sent",
             user: sender
               ? { id: sender.id, name: sender.name, image: sender.image }
@@ -639,7 +774,8 @@ export default function CommunityChatTab() {
               (m) =>
                 m.clientStatus === "sending" &&
                 m.user_id === hydrated.user_id &&
-                m.content === hydrated.content,
+                m.content === hydrated.content &&
+                (m.media_url ?? null) === (hydrated.media_url ?? null),
             );
             if (optimisticIndex >= 0) {
               const nextMessages = [...prev];
@@ -718,78 +854,214 @@ export default function CommunityChatTab() {
     return buildListItems(groups);
   }, [messages, user?.id]);
 
-  const canSend = useMemo(
-    () => isAuthed && isMember && input.trim().length > 0 && !sending,
-    [input, isAuthed, isMember, sending],
+  const uploadChatMedia = useCallback(
+    async (asset: ImagePicker.ImagePickerAsset) => {
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseAnonKey || !user?.id || !communityId) {
+        return { publicUrl: null, error: "Missing upload configuration." };
+      }
+
+      const extensionFromMime = asset.mimeType?.split("/")?.[1];
+      const extensionFromName = asset.fileName?.split(".").pop();
+      const extensionFromUri = asset.uri.split("?")[0].split(".").pop();
+      const extension =
+        extensionFromMime || extensionFromName || extensionFromUri || "jpg";
+      const inferredType = detectChatMediaType(
+        asset.mimeType,
+        asset.fileName,
+        asset.uri,
+      );
+      const objectPath = `community/${communityId}/${user.id}/chat_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 8)}.${extension}`;
+
+      const localUri = asset.uri.startsWith("content://")
+        ? `${FileSystem.cacheDirectory}chat_upload_${Date.now()}.${extension}`
+        : asset.uri;
+
+      if (asset.uri.startsWith("content://")) {
+        await FileSystem.copyAsync({ from: asset.uri, to: localUri });
+      }
+
+      const fileInfo = await FileSystem.getInfoAsync(localUri);
+      if (!fileInfo.exists) {
+        return { publicUrl: null, error: "Selected file could not be read." };
+      }
+      const fileSize =
+        typeof (fileInfo as { size?: number }).size === "number"
+          ? (fileInfo as { size: number }).size
+          : null;
+      if (fileSize && fileSize > MAX_UPLOAD_BYTES) {
+        const maxMb = (MAX_UPLOAD_BYTES / (1024 * 1024)).toFixed(0);
+        return {
+          publicUrl: null,
+          error: `File exceeds max size (${maxMb} MB).`,
+        };
+      }
+
+      const uploadUrl = `${supabaseUrl}/storage/v1/object/${CHAT_MEDIA_BUCKET}/${objectPath}`;
+      const uploadResult = await FileSystem.uploadAsync(uploadUrl, localUri, {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+          "Content-Type":
+            asset.mimeType ??
+            (inferredType === "video" ? "video/mp4" : "image/jpeg"),
+          "x-upsert": "false",
+        },
+      });
+
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        return {
+          publicUrl: null,
+          error: `Upload failed (${uploadResult.status}).`,
+        };
+      }
+
+      const { data } = supabase.storage
+        .from(CHAT_MEDIA_BUCKET)
+        .getPublicUrl(objectPath);
+      return { publicUrl: data.publicUrl, error: null, mediaType: inferredType };
+    },
+    [communityId, user?.id],
+  );
+
+  const sendChatMessage = useCallback(
+    async ({
+      content,
+      mediaType = "text",
+      mediaUrl = null,
+    }: {
+      content: string;
+      mediaType?: ChatMediaType;
+      mediaUrl?: string | null;
+    }) => {
+      if (!communityId || !user?.id || !isMember || sending) return;
+      const normalizedContent = content.trim();
+      if (!normalizedContent && !mediaUrl) return;
+
+      const optimisticId = `optimistic-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+      const now = new Date().toISOString();
+      const optimistic: ChatMessage = {
+        id: optimisticId,
+        group_id: communityId,
+        user_id: user.id,
+        content: normalizedContent,
+        media_type: mediaType,
+        media_url: mediaUrl,
+        created_at: now,
+        clientStatus: "sending",
+        user: {
+          id: user.id,
+          name: user.fullName || user.firstName || "You",
+          image: user.imageUrl ?? null,
+        },
+      };
+
+      setMessages((prev) => [...prev, optimistic]);
+      setSending(true);
+      setErrorText(null);
+      void setTypingStatus(false);
+
+      const { data, error } = await supabase
+        .from("community_chat_messages")
+        .insert({
+          group_id: communityId,
+          user_id: user.id,
+          content: normalizedContent,
+          media_type: mediaType,
+          media_url: mediaUrl,
+        })
+        .select("id, group_id, user_id, content, media_type, media_url, created_at")
+        .single();
+
+      if (error) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === optimisticId ? { ...m, clientStatus: "failed" } : m,
+          ),
+        );
+        if (!mediaUrl && normalizedContent) setInput(normalizedContent);
+        setErrorText(error.message ?? "Failed to send message.");
+      } else if (data?.id) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === optimisticId
+              ? {
+                  ...m,
+                  id: data.id,
+                  group_id: data.group_id,
+                  user_id: data.user_id,
+                  content: data.content,
+                  media_type: (data as any).media_type ?? "text",
+                  media_url: (data as any).media_url ?? null,
+                  created_at: data.created_at,
+                  clientStatus: "sent",
+                }
+              : m,
+          ),
+        );
+      }
+      setSending(false);
+    },
+    [
+      communityId,
+      isMember,
+      sending,
+      user?.id,
+      user?.fullName,
+      user?.firstName,
+      user?.imageUrl,
+      setTypingStatus,
+    ],
   );
 
   const handleSend = useCallback(async () => {
     const message = input.trim();
-    if (!message || !communityId || !user?.id || !isMember || sending) return;
-    const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const now = new Date().toISOString();
-    const optimistic: ChatMessage = {
-      id: optimisticId,
-      group_id: communityId,
-      user_id: user.id,
-      content: message,
-      created_at: now,
-      clientStatus: "sending",
-      user: {
-        id: user.id,
-        name: user.fullName || user.firstName || "You",
-        image: user.imageUrl ?? null,
-      },
-    };
-
-    setMessages((prev) => [...prev, optimistic]);
-    setSending(true);
-    setErrorText(null);
+    if (!message) return;
     setInput("");
-    // Immediate stop typing
-    void setTypingStatus(false);
-    const { data, error } = await supabase
-      .from("community_chat_messages")
-      .insert({ group_id: communityId, user_id: user.id, content: message })
-      .select("id, group_id, user_id, content, created_at")
-      .single();
-    if (error) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === optimisticId ? { ...m, clientStatus: "failed" } : m,
-        ),
-      );
-      setInput(message);
-      setErrorText(error.message ?? "Failed to send message.");
-    } else if (data?.id) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === optimisticId
-            ? {
-                ...m,
-                id: data.id,
-                group_id: data.group_id,
-                user_id: data.user_id,
-                content: data.content,
-                created_at: data.created_at,
-                clientStatus: "sent",
-              }
-            : m,
-        ),
-      );
+    await sendChatMessage({ content: message });
+  }, [input, sendChatMessage]);
+
+  const handlePickMedia = useCallback(async () => {
+    if (!isMember || !isAuthed || sending) return;
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setErrorText("Media library permission is required to upload images.");
+      return;
     }
-    setSending(false);
-  }, [
-    communityId,
-    input,
-    isMember,
-    sending,
-    user?.id,
-    user?.fullName,
-    user?.firstName,
-    user?.imageUrl,
-    setTypingStatus,
-  ]);
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsEditing: false,
+      allowsMultipleSelection: false,
+      quality: 1,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    const caption = input.trim();
+    if (caption) setInput("");
+
+    const upload = await uploadChatMedia(asset);
+    if (!upload.publicUrl) {
+      if (caption) setInput(caption);
+      setErrorText(upload.error ?? "Failed to upload media.");
+      return;
+    }
+
+    await sendChatMessage({
+      content: caption,
+      mediaType: upload.mediaType ?? "image",
+      mediaUrl: upload.publicUrl,
+    });
+  }, [input, isAuthed, isMember, sending, sendChatMessage, uploadChatMedia]);
 
   // Common styles/themes
   const bg = useThemeColor({}, "background");
@@ -961,6 +1233,7 @@ export default function CommunityChatTab() {
           value={input}
           onChangeText={setInput}
           onSend={() => void handleSend()}
+          onPickMedia={() => void handlePickMedia()}
           onTypingStatusChange={setTypingStatus}
           isMember={isMember}
           isAuthed={isAuthed}
