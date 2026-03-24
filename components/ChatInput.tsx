@@ -1,8 +1,10 @@
+import { Colors } from "@/constants/theme";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { BlurView } from "expo-blur";
 import { Plus, Send } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Platform,
   Pressable,
@@ -75,7 +77,7 @@ export default function ChatInput({
       light: "rgba(255,255,255,0.72)",
       dark: "rgba(28,28,30,0.75)",
     },
-    "tabBarBackground"
+    "tabBarBackground",
   );
 
   const composerBorder = useThemeColor(
@@ -83,11 +85,11 @@ export default function ChatInput({
       light: "rgba(0,0,0,0.05)",
       dark: "rgba(255,255,255,0.1)",
     },
-    "tabBarBorder"
+    "tabBarBorder",
   );
 
   const canSend = isMember && isAuthed && value.trim().length > 0 && !sending;
-
+  const primaryColor = Colors.dark.primary;
   useEffect(() => {
     Animated.spring(sendScale, {
       toValue: canSend ? 1 : 0.85,
@@ -111,14 +113,16 @@ export default function ChatInput({
             },
           ],
           opacity: composerAnim,
-          paddingBottom: Math.max(insets.bottom, 20),
+          paddingBottom: Math.max(insets.bottom, 40),
         },
       ]}
     >
       {/* Background with Blur */}
       {Platform.OS !== "web" && (
         <BlurView
-          tint={isDark ? "systemChromeMaterialDark" : "systemChromeMaterialLight"}
+          tint={
+            isDark ? "systemChromeMaterialDark" : "systemChromeMaterialLight"
+          }
           intensity={90}
           style={StyleSheet.absoluteFillObject}
         />
@@ -142,7 +146,11 @@ export default function ChatInput({
           <View
             style={[
               styles.actionIconWrap,
-              { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" },
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.08)"
+                  : "rgba(0,0,0,0.05)",
+              },
             ]}
           >
             <Plus size={22} color={secondary} strokeWidth={2.5} />
@@ -154,7 +162,9 @@ export default function ChatInput({
           style={[
             styles.inputWrap,
             {
-              backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+              backgroundColor: isDark
+                ? "rgba(255,255,255,0.05)"
+                : "rgba(0,0,0,0.03)",
               borderColor: isFocused ? `${primary}50` : "transparent",
             },
           ]}
@@ -175,23 +185,34 @@ export default function ChatInput({
         </View>
 
         {/* Send Button */}
-        <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+        <Animated.View
+          style={{
+            transform: [{ scale: sendScale }],
+            backgroundColor: primaryColor,
+            borderRadius: 100,
+            padding: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
+        >
           <Pressable
             onPress={handleSend}
             disabled={!canSend}
             style={({ pressed }) => [
               styles.sendBtn,
               {
-                backgroundColor: canSend ? primary : `${primary}25`,
-                opacity: pressed && canSend ? 0.7 : 1,
+                backgroundColor: primary,
+                opacity: pressed ? 0.7 : 1,
               },
             ]}
           >
-            <Send
-              size={18}
-              color={isDark || canSend ? "#fff" : `${secondary}60`}
-              strokeWidth={2.5}
-            />
+            {sending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Send size={20} color="#fff" strokeWidth={2} />
+            )}
           </Pressable>
         </Animated.View>
       </View>
@@ -213,11 +234,11 @@ const styles = StyleSheet.create({
   },
   inner: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     gap: 8,
   },
   actionBtn: {
-    marginBottom: 4,
+    marginBottom: 0,
   },
   actionIconWrap: {
     width: 38,
@@ -245,9 +266,9 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 38,
     height: 38,
-    borderRadius: 19,
+    borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginBottom: 0,
   },
 });

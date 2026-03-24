@@ -1,5 +1,6 @@
 import AppLoader from "@/components/AppLoader";
 import ChatInput from "@/components/ChatInput";
+import { useCommunityStats } from "@/hooks/use-community-stats";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
 import { supabase } from "@/lib/Supabase";
@@ -10,16 +11,19 @@ import { useGlobalSearchParams } from "expo-router";
 import { MessageCircle, Users } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
+  AppState,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  useColorScheme,
   useWindowDimensions,
   View,
-  useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -27,7 +31,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type ChatUser = Pick<Tables<"users">, "id" | "name" | "image">;
 type ChatMessageRow = Tables<"community_chat_messages">;
-type ChatMessage = ChatMessageRow & { user: ChatUser | null };
+type ChatMessage = ChatMessageRow & {
+  user: ChatUser | null;
+  clientStatus?: "sent" | "sending" | "failed";
+};
 
 // A "group" is all consecutive messages from the same sender within the same minute.
 type MessageGroup = {
@@ -258,6 +265,8 @@ function MessageGroupRow({
   const { mine, sender, messages, timestamp } = group;
   const { text, secondary, primary, border, backgroundSecondary, isDark } =
     theme;
+  const hasSending = messages.some((m) => m.clientStatus === "sending");
+  const hasFailed = messages.some((m) => m.clientStatus === "failed");
 
   const bubbleBg = mine
     ? isDark
@@ -349,16 +358,31 @@ function MessageGroupRow({
           );
         })}
 
-        {/* Single timestamp for the whole group */}
-        <Text
+        {/* Single timestamp + send status for the whole group */}
+        <View
           style={[
-            groupStyles.timestamp,
-            { color: secondary },
-            mine && groupStyles.timestampMine,
+            groupStyles.timestampRow,
+            mine && groupStyles.timestampRowMine,
           ]}
         >
-          {timestamp}
-        </Text>
+          <Text
+            style={[
+              groupStyles.timestamp,
+              { color: secondary },
+              mine && groupStyles.timestampMine,
+            ]}
+          >
+            {timestamp}
+          </Text>
+          {mine && hasSending ? (
+            <ActivityIndicator size="small" color={secondary} />
+          ) : null}
+          {mine && hasFailed ? (
+            <Text style={[groupStyles.statusText, { color: "#FF3B30" }]}>
+              Unable to send
+            </Text>
+          ) : null}
+        </View>
       </View>
     </Animated.View>
   );
@@ -400,14 +424,29 @@ const groupStyles = StyleSheet.create({
     maxWidth: "100%",
   },
   messageText: { fontSize: 14.5, lineHeight: 21 },
-  timestamp: {
-    fontSize: 10,
+  timestampRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     marginTop: 4,
     marginLeft: 2,
+  },
+  timestampRowMine: {
+    marginLeft: 0,
+    marginRight: 2,
+    alignSelf: "flex-end",
+  },
+  timestamp: {
+    fontSize: 10,
     opacity: 0.6,
     letterSpacing: 0.2,
   },
-  timestampMine: { marginLeft: 0, marginRight: 2, alignSelf: "flex-end" },
+  timestampMine: { marginLeft: 0, marginRight: 0, alignSelf: "center" },
+  statusText: {
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.1,
+  },
   // Tooltip
   tooltip: {
     position: "absolute",
@@ -445,7 +484,7 @@ export default function CommunityChatTab() {
   const keyboardOffset = Platform.OS === "ios" ? (isTablet ? 90 : 12) : 0;
 
   const [community, setCommunity] = useState<Group | null>(null);
-  const [members, setMembers] = useState(0);
+  const { membersCount: members } = useCommunityStats(communityId);
   const [isMember, setIsMember] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -453,12 +492,13 @@ export default function CommunityChatTab() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]); // Array of user objects
+  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
   const listRef = useRef<FlatList<ListItem> | null>(null);
   const composerAnim = useRef(new Animated.Value(0)).current;
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const isAuthed = !!user?.id;
 
-  const composerReserved = Math.max(insets.bottom, 10) + (isMember ? 80 : 100);
+  const composerReserved = 32 + insets.bottom;
 
   // Slide-up composer on mount
   useEffect(() => {
@@ -470,14 +510,37 @@ export default function CommunityChatTab() {
     }).start();
   }, [composerAnim]);
 
+  // Android fallback: keep composer above keyboard even after app resume.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const showSub = Keyboard.addListener("keyboardDidShow", (event) => {
+      const nextHeight = Math.max(
+        0,
+        (event.endCoordinates?.height ?? 0) - insets.bottom,
+      );
+      setAndroidKeyboardHeight(nextHeight);
+    });
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setAndroidKeyboardHeight(0);
+    });
+    const appStateSub = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active") {
+        setAndroidKeyboardHeight(0);
+      }
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      appStateSub.remove();
+    };
+  }, [insets.bottom]);
+
   const loadCommunityMeta = useCallback(async () => {
     if (!communityId || !isAuthed || !user?.id) return;
-    const [{ data }, membersRes, membershipRes] = await Promise.all([
+    const [{ data }, membershipRes] = await Promise.all([
       fetchGroupById(communityId),
-      supabase
-        .from("user_groups")
-        .select("group_id, user_id", { count: "exact", head: true })
-        .eq("group_id", communityId),
       supabase
         .from("user_groups")
         .select("group_id", { count: "exact", head: true })
@@ -485,7 +548,6 @@ export default function CommunityChatTab() {
         .eq("user_id", user.id),
     ]);
     setCommunity(data ?? null);
-    if (membersRes.count !== null) setMembers(membersRes.count);
     setIsMember((membershipRes.count ?? 0) > 0);
   }, [communityId, isAuthed, user?.id]);
 
@@ -509,6 +571,7 @@ export default function CommunityChatTab() {
       user_id: row.user_id as string,
       content: row.content as string,
       created_at: row.created_at as string,
+      clientStatus: "sent" as const,
       user: row.user
         ? {
             id: row.user.id as string,
@@ -555,8 +618,6 @@ export default function CommunityChatTab() {
         },
         async (payload) => {
           const next = payload.new as ChatMessageRow;
-          // Optimistic check
-          if (messages.some((m) => m.id === next.id)) return;
 
           // Hydrate sender
           const { data: sender } = await supabase
@@ -567,12 +628,24 @@ export default function CommunityChatTab() {
 
           const hydrated: ChatMessage = {
             ...next,
+            clientStatus: "sent",
             user: sender
               ? { id: sender.id, name: sender.name, image: sender.image }
               : null,
           };
           setMessages((prev) => {
             if (prev.some((m) => m.id === hydrated.id)) return prev;
+            const optimisticIndex = prev.findIndex(
+              (m) =>
+                m.clientStatus === "sending" &&
+                m.user_id === hydrated.user_id &&
+                m.content === hydrated.content,
+            );
+            if (optimisticIndex >= 0) {
+              const nextMessages = [...prev];
+              nextMessages[optimisticIndex] = hydrated;
+              return nextMessages;
+            }
             return [...prev, hydrated];
           });
         },
@@ -653,20 +726,70 @@ export default function CommunityChatTab() {
   const handleSend = useCallback(async () => {
     const message = input.trim();
     if (!message || !communityId || !user?.id || !isMember || sending) return;
+    const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const now = new Date().toISOString();
+    const optimistic: ChatMessage = {
+      id: optimisticId,
+      group_id: communityId,
+      user_id: user.id,
+      content: message,
+      created_at: now,
+      clientStatus: "sending",
+      user: {
+        id: user.id,
+        name: user.fullName || user.firstName || "You",
+        image: user.imageUrl ?? null,
+      },
+    };
+
+    setMessages((prev) => [...prev, optimistic]);
     setSending(true);
     setErrorText(null);
     setInput("");
     // Immediate stop typing
     void setTypingStatus(false);
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("community_chat_messages")
-      .insert({ group_id: communityId, user_id: user.id, content: message });
+      .insert({ group_id: communityId, user_id: user.id, content: message })
+      .select("id, group_id, user_id, content, created_at")
+      .single();
     if (error) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === optimisticId ? { ...m, clientStatus: "failed" } : m,
+        ),
+      );
       setInput(message);
       setErrorText(error.message ?? "Failed to send message.");
+    } else if (data?.id) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === optimisticId
+            ? {
+                ...m,
+                id: data.id,
+                group_id: data.group_id,
+                user_id: data.user_id,
+                content: data.content,
+                created_at: data.created_at,
+                clientStatus: "sent",
+              }
+            : m,
+        ),
+      );
     }
     setSending(false);
-  }, [communityId, input, isMember, sending, user?.id, setTypingStatus]);
+  }, [
+    communityId,
+    input,
+    isMember,
+    sending,
+    user?.id,
+    user?.fullName,
+    user?.firstName,
+    user?.imageUrl,
+    setTypingStatus,
+  ]);
 
   // Common styles/themes
   const bg = useThemeColor({}, "background");
@@ -732,6 +855,7 @@ export default function CommunityChatTab() {
         ref={(r) => {
           listRef.current = r as any;
         }}
+        style={styles.list}
         data={listItems}
         keyExtractor={(item) =>
           item.type === "divider" ? item.key : item.data.key
@@ -782,9 +906,15 @@ export default function CommunityChatTab() {
 
       {/* ── Chat Input Area with isolated KeyboardAvoidingView ── */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        enabled={Platform.OS === "ios"}
+        behavior="padding"
         keyboardVerticalOffset={keyboardOffset}
-        style={styles.inputContainer}
+        style={[
+          styles.inputContainer,
+          Platform.OS === "android"
+            ? { marginBottom: androidKeyboardHeight }
+            : null,
+        ]}
       >
         {/* ── Typing Indicator ── */}
         {typingUsers.length > 0 && (
@@ -890,6 +1020,7 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, fontWeight: "500" },
 
   // List
+  list: { flex: 1 },
   listContent: { paddingHorizontal: 14, paddingTop: 6 },
 
   // Empty state
@@ -923,13 +1054,8 @@ const styles = StyleSheet.create({
     marginBottom: 8, // Clear space just above input bar
   },
   inputContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     elevation: 20,
     zIndex: 100,
-    // The background color from chat.tsx is applied via style prop in render
   },
   typingAvatars: {
     flexDirection: "row",

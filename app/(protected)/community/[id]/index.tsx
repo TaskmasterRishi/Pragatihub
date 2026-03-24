@@ -2,7 +2,7 @@ import AppLoader from "@/components/AppLoader";
 import CommunityHeader from "@/components/CommunityHeader";
 import PostListItem from "@/components/PostListItem";
 import { type Post } from "@/constants/types";
-import { useCommunityPresence } from "@/hooks/use-community-presence";
+import { useCommunityStats } from "@/hooks/use-community-stats";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
 import { checkIsModerator, fetchPendingReportCount } from "@/lib/actions/moderation";
@@ -31,7 +31,7 @@ export default function CommunityPostsTab() {
   const insets = useSafeAreaInsets();
 
   const [community, setCommunity] = useState<Group | null>(null);
-  const [members, setMembers] = useState(0);
+  const { membersCount: members, onlineCount } = useCommunityStats(communityId);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isModerator, setIsModerator] = useState(false);
@@ -55,25 +55,19 @@ export default function CommunityPostsTab() {
   const secondaryColor = useThemeColor({}, "secondary");
   const backgroundSecondary = useThemeColor({}, "backgroundSecondary");
   const success = useThemeColor({}, "success");
-  const { onlineCount } = useCommunityPresence(communityId);
 
   const loadCommunityMeta = useCallback(
     async (showLoader = false) => {
       if (!communityId) return;
       if (showLoader) setLoading(true);
 
-      const [{ data }, membersRes, modStatus, reportCount] = await Promise.all([
+      const [{ data }, modStatus, reportCount] = await Promise.all([
         fetchGroupById(communityId),
-        supabase
-          .from("user_groups")
-          .select("group_id, user_id", { count: "exact", head: true })
-          .eq("group_id", communityId),
         checkIsModerator(communityId, user?.id),
         fetchPendingReportCount(communityId),
       ]);
 
       setCommunity(data ?? null);
-      if (membersRes.count !== null) setMembers(membersRes.count);
       const isOwner = !!data?.owner_id && data.owner_id === user?.id;
       setIsModerator(modStatus || isOwner);
       setPendingReports(reportCount);
