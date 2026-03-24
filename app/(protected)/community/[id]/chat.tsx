@@ -11,7 +11,14 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useGlobalSearchParams } from "expo-router";
-import { MessageCircle, Users } from "lucide-react-native";
+import {
+  Gem,
+  Grid,
+  Image as ImageIcon,
+  MessageCircle,
+  Users,
+  X,
+} from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -1330,38 +1337,64 @@ export default function CommunityChatTab() {
         <View style={styles.pickerBackdrop}>
           <View style={[styles.pickerSheet, { backgroundColor: card }]}>
             <View style={styles.pickerHeader}>
+              <View style={styles.pickerHeaderLeft}>
+                <Pressable
+                  style={styles.pickerModeBtn}
+                  onPress={() => void handlePickFromLibrary()}
+                >
+                  <ImageIcon size={14} color={primary} strokeWidth={2.2} />
+                  <Text style={[styles.pickerModeText, { color: primary }]}>
+                    Gallery
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.pickerModeBtn,
+                    pickerMode === "gif" && { backgroundColor: `${primary}22` },
+                  ]}
+                  onPress={() => setPickerMode("gif")}
+                >
+                  <Grid
+                    size={14}
+                    color={pickerMode === "gif" ? primary : text}
+                    strokeWidth={2.2}
+                  />
+                  <Text
+                    style={[
+                      styles.pickerModeText,
+                      { color: pickerMode === "gif" ? primary : text },
+                    ]}
+                  >
+                    GIF
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.pickerModeBtn,
+                    pickerMode === "sticker" && { backgroundColor: `${primary}22` },
+                  ]}
+                  onPress={() => setPickerMode("sticker")}
+                >
+                  <Gem
+                    size={14}
+                    color={pickerMode === "sticker" ? primary : text}
+                    strokeWidth={2.2}
+                  />
+                  <Text
+                    style={[
+                      styles.pickerModeText,
+                      { color: pickerMode === "sticker" ? primary : text },
+                    ]}
+                  >
+                    Sticker
+                  </Text>
+                </Pressable>
+              </View>
               <Pressable
-                style={styles.pickerModeBtn}
-                onPress={() => void handlePickFromLibrary()}
+                style={[styles.pickerCloseBtn, { backgroundColor: `${secondary}1A` }]}
+                onPress={() => setPickerVisible(false)}
               >
-                <Text style={[styles.pickerModeText, { color: primary }]}>
-                  Gallery
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.pickerModeBtn,
-                  pickerMode === "gif" && { backgroundColor: `${primary}22` },
-                ]}
-                onPress={() => setPickerMode("gif")}
-              >
-                <Text style={[styles.pickerModeText, { color: text }]}>GIF</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.pickerModeBtn,
-                  pickerMode === "sticker" && { backgroundColor: `${primary}22` },
-                ]}
-                onPress={() => setPickerMode("sticker")}
-              >
-                <Text style={[styles.pickerModeText, { color: text }]}>
-                  Sticker
-                </Text>
-              </Pressable>
-              <Pressable onPress={() => setPickerVisible(false)}>
-                <Text style={[styles.pickerCloseText, { color: secondary }]}>
-                  Close
-                </Text>
+                <X size={16} color={secondary} strokeWidth={2.4} />
               </Pressable>
             </View>
 
@@ -1621,10 +1654,19 @@ const styles = StyleSheet.create({
   pickerHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
     marginBottom: 10,
   },
+  pickerHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 1,
+  },
   pickerModeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -1634,9 +1676,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
-  pickerCloseText: {
-    fontSize: 12,
-    fontWeight: "700",
+  pickerCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
   },
   pickerSearch: {
     borderWidth: 1,
