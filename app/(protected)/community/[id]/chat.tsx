@@ -21,10 +21,12 @@ import {
   Image as RNImage,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   useColorScheme,
   useWindowDimensions,
   View,
@@ -47,6 +49,8 @@ const CHAT_MEDIA_BUCKET = "chat_media";
 const MAX_UPLOAD_BYTES = Number(
   process.env.EXPO_PUBLIC_MAX_UPLOAD_BYTES ?? 50 * 1024 * 1024,
 );
+const GIPHY_API_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY ?? "LIVDSRZULELA";
+const GIF_PAGE_SIZE = 24;
 
 // A "group" is all consecutive messages from the same sender within the same minute.
 type MessageGroup = {
@@ -63,6 +67,13 @@ type TypingUser = {
   id: string;
   name: string;
   image: string | null;
+};
+
+type PickerMode = "gif" | "sticker";
+type PickerItem = {
+  id: string;
+  previewUrl: string;
+  mediaUrl: string;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -119,6 +130,52 @@ function detectChatMediaType(
   if (source.includes("gif") || source.endsWith(".gif")) return "gif";
   if (source.includes("webp") || source.includes("sticker")) return "sticker";
   return "image";
+}
+
+function parseKeyboardMediaInput(raw: string): {
+  content: string;
+  mediaType?: ChatMediaType;
+  mediaUrl?: string;
+} {
+  const text = raw.trim();
+  if (!text) return { content: "" };
+
+  const urlRegex = /(https?:\/\/[^\s]+)/gi;
+  const urls = text.match(urlRegex) ?? [];
+  if (urls.length === 0) return { content: text };
+
+  const mediaUrl = urls[0];
+  const lower = mediaUrl.toLowerCase();
+
+  const isGif =
+    lower.includes(".gif") || lower.includes("giphy.com") || lower.includes("tenor.com");
+  const isSticker =
+    lower.includes(".webp") || lower.includes("sticker");
+  const isImage =
+    lower.includes(".png") ||
+    lower.includes(".jpg") ||
+    lower.includes(".jpeg") ||
+    lower.includes(".heic");
+  const isVideo =
+    lower.includes(".mp4") ||
+    lower.includes(".mov") ||
+    lower.includes(".m4v") ||
+    lower.includes(".webm");
+
+  if (!isGif && !isSticker && !isImage && !isVideo) {
+    return { content: text };
+  }
+
+  const mediaType: ChatMediaType = isVideo
+    ? "video"
+    : isGif
+      ? "gif"
+      : isSticker
+        ? "sticker"
+        : "image";
+
+  const content = text.replace(mediaUrl, "").trim();
+  return { content, mediaType, mediaUrl };
 }
 
 /** Group a flat list of messages into MessageGroup[] */
@@ -624,6 +681,12 @@ export default function CommunityChatTab() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]); // Array of user objects
   const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerMode, setPickerMode] = useState<PickerMode>("gif");
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  const [pickerItems, setPickerItems] = useState<PickerItem[]>([]);
   const listRef = useRef<FlatList<ListItem> | null>(null);
   const composerAnim = useRef(new Animated.Value(0)).current;
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -929,6 +992,54 @@ export default function CommunityChatTab() {
     [communityId, user?.id],
   );
 
+  const fetchPickerItems = useCallback(
+    async (mode: PickerMode, query: string) => {
+      if (!GIPHY_API_KEY) return;
+      setPickerLoading(true);
+      setPickerError(null);
+      try {
+        const trimmed = query.trim();
+        const endpointBase =
+          mode === "sticker"
+            ? "https://api.giphy.com/v1/stickers"
+            : "https://api.giphy.com/v1/gifs";
+        const endpoint =
+          trimmed.length > 0 ? `${endpointBase}/search` : `${endpointBase}/trending`;
+        const params = new URLSearchParams({
+          api_key: GIPHY_API_KEY,
+          limit: String(GIF_PAGE_SIZE),
+          rating: "pg-13",
+        });
+        if (trimmed.length > 0) params.append("q", trimmed);
+        const response = await fetch(`${endpoint}?${params.toString()}`);
+        if (!response.ok) throw new Error(`Failed (${response.status})`);
+        const payload = await response.json();
+        const mapped: PickerItem[] = (payload?.data ?? [])
+          .map((item: any) => ({
+            id: String(item?.id ?? ""),
+            previewUrl:
+              item?.images?.fixed_width_downsampled?.url ??
+              item?.images?.fixed_width?.url ??
+              item?.images?.original?.url ??
+              "",
+            mediaUrl:
+              item?.images?.original?.url ??
+              item?.images?.downsized_large?.url ??
+              item?.images?.fixed_width?.url ??
+              "",
+          }))
+          .filter((item: PickerItem) => item.id && item.previewUrl && item.mediaUrl);
+        setPickerItems(mapped);
+      } catch (error: any) {
+        setPickerItems([]);
+        setPickerError(error?.message ?? "Failed to load GIFs.");
+      } finally {
+        setPickerLoading(false);
+      }
+    },
+    [],
+  );
+
   const sendChatMessage = useCallback(
     async ({
       content,
@@ -1022,13 +1133,25 @@ export default function CommunityChatTab() {
   );
 
   const handleSend = useCallback(async () => {
-    const message = input.trim();
-    if (!message) return;
+    const parsed = parseKeyboardMediaInput(input);
+    if (!parsed.content && !parsed.mediaUrl) return;
     setInput("");
-    await sendChatMessage({ content: message });
+    await sendChatMessage({
+      content: parsed.content,
+      mediaType: parsed.mediaType ?? "text",
+      mediaUrl: parsed.mediaUrl ?? null,
+    });
   }, [input, sendChatMessage]);
 
-  const handlePickMedia = useCallback(async () => {
+  useEffect(() => {
+    if (!pickerVisible) return;
+    const timer = setTimeout(() => {
+      void fetchPickerItems(pickerMode, pickerQuery);
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [fetchPickerItems, pickerMode, pickerQuery, pickerVisible]);
+
+  const handlePickFromLibrary = useCallback(async () => {
     if (!isMember || !isAuthed || sending) return;
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1062,6 +1185,28 @@ export default function CommunityChatTab() {
       mediaUrl: upload.publicUrl,
     });
   }, [input, isAuthed, isMember, sending, sendChatMessage, uploadChatMedia]);
+
+  const openPicker = useCallback(() => {
+    if (!isMember || !isAuthed || sending) return;
+    setPickerVisible(true);
+    setPickerError(null);
+    setPickerQuery("");
+    setPickerMode("gif");
+  }, [isAuthed, isMember, sending]);
+
+  const handlePickGifOrSticker = useCallback(
+    async (item: PickerItem) => {
+      const caption = input.trim();
+      if (caption) setInput("");
+      setPickerVisible(false);
+      await sendChatMessage({
+        content: caption,
+        mediaType: pickerMode === "sticker" ? "sticker" : "gif",
+        mediaUrl: item.mediaUrl,
+      });
+    },
+    [input, pickerMode, sendChatMessage],
+  );
 
   // Common styles/themes
   const bg = useThemeColor({}, "background");
@@ -1176,6 +1321,98 @@ export default function CommunityChatTab() {
         }
       />
 
+      <Modal
+        visible={pickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerVisible(false)}
+      >
+        <View style={styles.pickerBackdrop}>
+          <View style={[styles.pickerSheet, { backgroundColor: card }]}>
+            <View style={styles.pickerHeader}>
+              <Pressable
+                style={styles.pickerModeBtn}
+                onPress={() => void handlePickFromLibrary()}
+              >
+                <Text style={[styles.pickerModeText, { color: primary }]}>
+                  Gallery
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.pickerModeBtn,
+                  pickerMode === "gif" && { backgroundColor: `${primary}22` },
+                ]}
+                onPress={() => setPickerMode("gif")}
+              >
+                <Text style={[styles.pickerModeText, { color: text }]}>GIF</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.pickerModeBtn,
+                  pickerMode === "sticker" && { backgroundColor: `${primary}22` },
+                ]}
+                onPress={() => setPickerMode("sticker")}
+              >
+                <Text style={[styles.pickerModeText, { color: text }]}>
+                  Sticker
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => setPickerVisible(false)}>
+                <Text style={[styles.pickerCloseText, { color: secondary }]}>
+                  Close
+                </Text>
+              </Pressable>
+            </View>
+
+            <TextInput
+              value={pickerQuery}
+              onChangeText={setPickerQuery}
+              placeholder={
+                pickerMode === "sticker" ? "Search stickers" : "Search GIFs"
+              }
+              placeholderTextColor={`${secondary}80`}
+              style={[
+                styles.pickerSearch,
+                { color: text, borderColor: border, backgroundColor: bg },
+              ]}
+            />
+
+            {pickerLoading ? (
+              <View style={styles.pickerState}>
+                <ActivityIndicator size="small" color={primary} />
+              </View>
+            ) : pickerError ? (
+              <View style={styles.pickerState}>
+                <Text style={[styles.pickerError, { color: "#FF3B30" }]}>
+                  {pickerError}
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={pickerItems}
+                keyExtractor={(item) => item.id}
+                numColumns={3}
+                columnWrapperStyle={styles.pickerRow}
+                contentContainerStyle={styles.pickerGrid}
+                renderItem={({ item }) => (
+                  <Pressable
+                    onPress={() => void handlePickGifOrSticker(item)}
+                    style={styles.pickerCard}
+                  >
+                    <Image
+                      source={{ uri: item.previewUrl }}
+                      style={styles.pickerImage}
+                      contentFit="cover"
+                    />
+                  </Pressable>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Chat Input Area with isolated KeyboardAvoidingView ── */}
       <KeyboardAvoidingView
         enabled={Platform.OS === "ios"}
@@ -1233,7 +1470,7 @@ export default function CommunityChatTab() {
           value={input}
           onChangeText={setInput}
           onSend={() => void handleSend()}
-          onPickMedia={() => void handlePickMedia()}
+          onPickMedia={openPicker}
           onTypingStatusChange={setTypingStatus}
           isMember={isMember}
           isAuthed={isAuthed}
@@ -1367,5 +1604,75 @@ const styles = StyleSheet.create({
     width: 3.5,
     height: 3.5,
     borderRadius: 1.75,
+  },
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.28)",
+    justifyContent: "flex-end",
+  },
+  pickerSheet: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 14,
+    maxHeight: "70%",
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  pickerModeBtn: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "rgba(0,0,0,0.05)",
+  },
+  pickerModeText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  pickerCloseText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  pickerSearch: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  pickerGrid: {
+    paddingBottom: 8,
+    gap: 8,
+  },
+  pickerRow: {
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  pickerCard: {
+    width: "32%",
+    aspectRatio: 1,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "rgba(0,0,0,0.06)",
+  },
+  pickerImage: {
+    width: "100%",
+    height: "100%",
+  },
+  pickerState: {
+    minHeight: 120,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerError: {
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });
