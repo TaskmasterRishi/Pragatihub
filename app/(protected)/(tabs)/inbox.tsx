@@ -2,7 +2,6 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useUser } from "@clerk/clerk-expo";
-import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -26,7 +25,12 @@ import {
   View,
 } from "react-native";
 
-type InboxKind = "comment" | "reply" | "moderation" | "community_post";
+type InboxKind =
+  | "comment"
+  | "reply"
+  | "moderation"
+  | "community_post"
+  | "chat";
 type InboxFilter = "all" | "unread";
 
 type InboxItem = {
@@ -99,45 +103,55 @@ async function fetchInboxItems(userId: string): Promise<InboxItem[]> {
   const ownPostIds = ownPosts.map((post) => post.id);
   const ownPostTitleMap = new Map(ownPosts.map((post) => [post.id, post.title]));
 
-  const [commentsResult, reportsResult, communityPostsResult] = await Promise.all([
-    ownPostIds.length > 0
-      ? supabase
-          .from("comments")
-          .select("id, comment, post_id, user_id, created_at, parent_id")
-          .in("post_id", ownPostIds)
-          .neq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(200)
-      : Promise.resolve({ data: [], error: null }),
-    supabase
-      .from("post_reports")
-      .select(
-        "id, post_id, status, reason, created_at, resolved_at, resolved_by",
-      )
-      .eq("reporter_id", userId)
-      .neq("status", "pending")
-      .order("resolved_at", { ascending: false })
-      .limit(100),
-    memberGroupIds.length > 0
-      ? supabase
-          .from("posts")
-          .select(
-            "id, title, description, created_at, group_id, user_id",
-          )
-          .in("group_id", memberGroupIds)
-          .neq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(200)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+  const [commentsResult, reportsResult, communityPostsResult, chatResult] =
+    await Promise.all([
+      ownPostIds.length > 0
+        ? supabase
+            .from("comments")
+            .select("id, comment, post_id, user_id, created_at, parent_id")
+            .in("post_id", ownPostIds)
+            .neq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(200)
+        : Promise.resolve({ data: [], error: null }),
+      supabase
+        .from("post_reports")
+        .select(
+          "id, post_id, status, reason, created_at, resolved_at, resolved_by",
+        )
+        .eq("reporter_id", userId)
+        .neq("status", "pending")
+        .order("resolved_at", { ascending: false })
+        .limit(100),
+      memberGroupIds.length > 0
+        ? supabase
+            .from("posts")
+            .select("id, title, description, created_at, group_id, user_id")
+            .in("group_id", memberGroupIds)
+            .neq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(200)
+        : Promise.resolve({ data: [], error: null }),
+      memberGroupIds.length > 0
+        ? supabase
+            .from("community_chat_messages")
+            .select("id, content, created_at, group_id, user_id")
+            .in("group_id", memberGroupIds)
+            .neq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(200)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
 
   if (commentsResult.error) throw commentsResult.error;
   if (reportsResult.error) throw reportsResult.error;
   if (communityPostsResult.error) throw communityPostsResult.error;
+  if (chatResult.error) throw chatResult.error;
 
   const comments = commentsResult.data ?? [];
   const reports = reportsResult.data ?? [];
   const communityPosts = communityPostsResult.data ?? [];
+  const chatMessages = chatResult.data ?? [];
 
   const actorIds = new Set<string>();
   const missingPostIds = new Set<string>();
@@ -155,6 +169,10 @@ async function fetchInboxItems(userId: string): Promise<InboxItem[]> {
   for (const post of communityPosts) {
     actorIds.add(post.user_id);
     communityGroupIds.add(post.group_id);
+  }
+  for (const chat of chatMessages) {
+    actorIds.add(chat.user_id);
+    communityGroupIds.add(chat.group_id);
   }
 
   const [actorsResult, postsResult, groupsResult] = await Promise.all([
@@ -253,7 +271,23 @@ async function fetchInboxItems(userId: string): Promise<InboxItem[]> {
     };
   });
 
-  return [...commentItems, ...reportItems, ...communityPostItems].sort(
+  const chatItems: InboxItem[] = chatMessages.map((chat) => {
+    const actor = actorMap.get(chat.user_id);
+    const groupName = groupNameMap.get(chat.group_id) ?? "your community";
+    const preview = truncate(normalizeText(chat.content) || "Sent a message", 110);
+    return {
+      id: `chat:${chat.id}`,
+      kind: "chat",
+      createdAt: chat.created_at,
+      title: `${actor?.name ?? "Someone"} messaged in ${groupName}`,
+      preview,
+      actorName: actor?.name ?? "Unknown user",
+      actorImage: actor?.image ?? null,
+      path: `/community/${chat.group_id}/chat`,
+    };
+  });
+
+  return [...commentItems, ...reportItems, ...communityPostItems, ...chatItems].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
@@ -281,7 +315,6 @@ export default function InboxScreen() {
   const knownIdsRef = useRef<Set<string>>(new Set());
   const seededRealtimeRef = useRef(false);
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notificationListenerRef = useRef<any>(null);
 
   const readSet = useMemo(() => new Set(readIds), [readIds]);
   const unreadCount = useMemo(
@@ -411,6 +444,11 @@ export default function InboxScreen() {
         { event: "INSERT", schema: "public", table: "posts", ...postFilter },
         queueRefresh,
       )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "community_chat_messages" },
+        queueRefresh,
+      )
       .subscribe();
 
     return () => {
@@ -420,62 +458,6 @@ export default function InboxScreen() {
       void supabase.removeChannel(channel);
     };
   }, [loadInbox, userId]);
-
-  useEffect(() => {
-    const Notifications = getNotificationsModule();
-    if (!Notifications || Platform.OS === "web" || !userId) return;
-
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-      }),
-    });
-
-    const register = async () => {
-      try {
-        const existing = await Notifications.getPermissionsAsync();
-        let finalStatus = existing.status;
-        if (finalStatus !== "granted") {
-          const requested = await Notifications.requestPermissionsAsync();
-          finalStatus = requested.status;
-        }
-        if (finalStatus !== "granted") return;
-        const projectId =
-          Constants?.expoConfig?.extra?.eas?.projectId ??
-          Constants?.easConfig?.projectId;
-        await Notifications.getExpoPushTokenAsync(
-          projectId ? { projectId } : undefined,
-        );
-      } catch {
-        // no-op: notifications remain optional
-      }
-    };
-
-    notificationListenerRef.current =
-      Notifications.addNotificationResponseReceivedListener((response: any) => {
-        const data = response?.notification?.request?.content?.data;
-        const path = data?.path;
-        const itemId = data?.itemId;
-        if (typeof itemId === "string") {
-          markAsRead(itemId);
-        }
-        if (typeof path === "string") {
-          router.push(path as never);
-        }
-      });
-
-    void register();
-    return () => {
-      if (notificationListenerRef.current) {
-        Notifications.removeNotificationSubscription(
-          notificationListenerRef.current,
-        );
-      }
-      notificationListenerRef.current = null;
-    };
-  }, [markAsRead, router, userId]);
 
   useEffect(() => {
     const Notifications = getNotificationsModule();
@@ -505,6 +487,7 @@ export default function InboxScreen() {
               title: item.title,
               body: item.preview,
               data: { path: item.path, itemId: item.id },
+              ...(Platform.OS === "android" ? { channelId: "inbox-updates" } : {}),
             },
             trigger: null,
           });
@@ -521,6 +504,7 @@ export default function InboxScreen() {
 
   const renderIcon = (kind: InboxKind, isUnread: boolean) => {
     const color = isUnread ? accentColor : secondaryTextColor;
+    if (kind === "chat") return <MessageCircle size={18} color={color} />;
     if (kind === "community_post") return <Megaphone size={18} color={color} />;
     if (kind === "moderation") return <ShieldAlert size={18} color={color} />;
     if (kind === "reply") return <MessageCircle size={18} color={color} />;

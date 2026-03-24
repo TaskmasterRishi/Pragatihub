@@ -4,10 +4,18 @@ import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
 import { setTabBarVisible } from "@/utils/tabBarVisibility";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, FlatList, NativeScrollEvent, NativeSyntheticEvent, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUser } from "@clerk/clerk-expo";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PAGE_SIZE = 5;
 
@@ -90,13 +98,11 @@ export default function HomeScreen() {
         .select("group_id")
         .eq("user_id", user.id);
       if (error) {
-        console.log("Membership fetch error:", error);
         setJoinedGroupIds(new Set());
       } else {
         setJoinedGroupIds(new Set((data ?? []).map((g) => g.group_id)));
       }
     } catch (e) {
-      console.log("Membership fetch error:", e);
       setJoinedGroupIds(new Set());
     } finally {
       setIsMembershipLoading(false);
@@ -107,7 +113,7 @@ export default function HomeScreen() {
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetY = event.nativeEvent.contentOffset.y;
-    
+
     // Clear existing timeout
     if (scrollTimeout.current) {
       clearTimeout(scrollTimeout.current);
@@ -179,21 +185,17 @@ export default function HomeScreen() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.log("Posts fetch error:", error);
       setIsInitialLoading(false);
       setRefreshing(false);
       return;
     }
 
     if (!data) {
-      console.log("No posts data returned");
       setPosts([]);
       setIsInitialLoading(false);
       setRefreshing(false);
       return;
     }
-
-    console.log("Fetched posts:", data.length);
 
     // For each post, get the upvotes and comments count
     const postsWithCounts = await Promise.all(
@@ -225,7 +227,6 @@ export default function HomeScreen() {
       }),
     );
 
-    console.log("Posts with counts:", JSON.stringify(postsWithCounts, null, 2));
     setPosts(postsWithCounts);
     setIsInitialLoading(false);
     setRefreshing(false);
@@ -270,7 +271,13 @@ export default function HomeScreen() {
     }
   };
 
-  const renderItem = ({ item, index: itemIndex }: { item: Post; index: number }) => (
+  const renderItem = ({
+    item,
+    index: itemIndex,
+  }: {
+    item: Post;
+    index: number;
+  }) => (
     <PostListItem
       post={item}
       index={itemIndex}
@@ -304,7 +311,7 @@ export default function HomeScreen() {
           <FlatList
             data={skeletonData}
             keyExtractor={(item) => item.id}
-              renderItem={({ index: i }) => <PostSkeletonCard index={i} />}
+            renderItem={({ index: i }) => <PostSkeletonCard index={i} />}
             contentContainerStyle={{
               paddingHorizontal: 20,
               paddingTop: insets.top + 80,

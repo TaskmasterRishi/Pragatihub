@@ -29,7 +29,9 @@ function addDepthToComments(comments: Comment[], depth = 0): Comment[] {
     ...comment,
     depth,
     isLastInThread: index === comments.length - 1,
-    replies: comment.replies ? addDepthToComments(comment.replies, depth + 1) : [],
+    replies: comment.replies
+      ? addDepthToComments(comment.replies, depth + 1)
+      : [],
   }));
 }
 
@@ -107,7 +109,6 @@ export default function DetailedPost() {
       .single();
 
     if (postError) {
-      console.log("Post fetch error:", postError);
       setLoading(false);
       return;
     }
@@ -186,20 +187,40 @@ export default function DetailedPost() {
           data={[0, 1, 2, 3]}
           keyExtractor={(item) => `skeleton-${item}`}
           ListHeaderComponent={
-            <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.md }}>
+            <View
+              style={{
+                paddingHorizontal: SPACING.lg,
+                paddingTop: SPACING.md,
+                paddingBottom: SPACING.md,
+              }}
+            >
               <PostSkeletonCard index={0} />
               <View style={{ height: SPACING.md }} />
-              <View style={{ width: 120, height: 18, borderRadius: 8, backgroundColor: `${textColor}15` }} />
+              <View
+                style={{
+                  width: 120,
+                  height: 18,
+                  borderRadius: 8,
+                  backgroundColor: `${textColor}15`,
+                }}
+              />
             </View>
           }
           renderItem={() => (
-            <View style={{ paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md }}>
+            <View
+              style={{
+                paddingHorizontal: SPACING.lg,
+                paddingBottom: SPACING.md,
+              }}
+            >
               <CommentSkeleton />
             </View>
           )}
           ItemSeparatorComponent={() => <View style={{ height: SPACING.sm }} />}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: insets.bottom + SPACING.lg * 2 }}
+          contentContainerStyle={{
+            paddingBottom: insets.bottom + SPACING.lg * 2,
+          }}
         />
       </SafeAreaView>
     );
@@ -287,8 +308,18 @@ export default function DetailedPost() {
           data={topLevelComments}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
-            <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.md }}>
-              <PostListItem post={detailedPost} isDetailedPost={true} index={0} />
+            <View
+              style={{
+                paddingHorizontal: SPACING.lg,
+                paddingTop: SPACING.sm,
+                paddingBottom: SPACING.md,
+              }}
+            >
+              <PostListItem
+                post={detailedPost}
+                isDetailedPost={true}
+                index={0}
+              />
               <View style={{ height: SPACING.md }} />
               <Text
                 style={{
