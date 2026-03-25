@@ -33,6 +33,7 @@ function CommentContent({ comment, isReply = false, onReply }: CommentDisplayPro
   const [avatarFailed, setAvatarFailed] = useState(false);
   const avatarUri = (comment.user.image ?? "").trim();
   const showAvatar = avatarUri.length > 0 && !avatarFailed;
+  const avatarSize = isReply ? 24 : 28;
 
   return (
     <View style={{ paddingVertical: isReply ? 10 : 0 }}>
@@ -41,8 +42,9 @@ function CommentContent({ comment, isReply = false, onReply }: CommentDisplayPro
         {showAvatar ? (
           <Image
             source={{ uri: avatarUri }}
-            className={isReply ? "w-6 h-6" : "w-7 h-7"}
             style={{
+              width: avatarSize,
+              height: avatarSize,
               borderRadius: 999,
               borderWidth: isReply ? 1 : 1.5,
               borderColor: border,
@@ -51,8 +53,9 @@ function CommentContent({ comment, isReply = false, onReply }: CommentDisplayPro
           />
         ) : (
           <View
-            className={isReply ? "w-6 h-6" : "w-7 h-7"}
             style={{
+              width: avatarSize,
+              height: avatarSize,
               borderRadius: 999,
               borderWidth: isReply ? 1 : 1.5,
               borderColor: border,
