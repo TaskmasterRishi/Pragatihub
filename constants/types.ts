@@ -54,6 +54,11 @@ export type Comment = {
   id: string;
   post_id: string;
   content: string;
+  media_type?: "text" | "image" | "gif" | "sticker" | "video" | null;
+  media_url?: string | null;
+  parent_id?: string | null;
+  depth?: number;
+  isLastInThread?: boolean;
   created_at: string;
   upvotes: number;
   downvotes: number;

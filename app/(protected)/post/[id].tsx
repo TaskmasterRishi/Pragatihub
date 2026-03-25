@@ -5,23 +5,26 @@ import { Comment, Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
 import { useUser } from "@clerk/clerk-expo";
+import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
+import { Gem, Grid, X } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  Text,
-  View,
   Modal,
+  Platform,
   Pressable,
-  TextInput,
+  SafeAreaView,
   StyleSheet,
+  Text,
+  TextInput,
+  useColorScheme,
+  View,
 } from "react-native";
-import { Image } from "expo-image";
-import { Gem, Grid, Image as ImageIcon, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SPACING = {
@@ -85,6 +88,7 @@ type PickerItem = {
   previewUrl: string;
   mediaUrl: string;
 };
+type CommentMediaType = "text" | "image" | "gif" | "sticker" | "video";
 
 export default function DetailedPost() {
   const { id } = useLocalSearchParams();
@@ -92,13 +96,17 @@ export default function DetailedPost() {
   const textColor = useThemeColor({}, "text");
   const background = useThemeColor({}, "background");
   const border = useThemeColor({}, "border");
+  const primaryColor = useThemeColor({}, "primary");
   const { user } = useUser();
   const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
 
   const [detailedPost, setDetailedPost] = useState<Post | null>(null);
   const [allComments, setAllComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
 
   // Input & Reply States
   const [commentContent, setCommentContent] = useState("");
@@ -124,7 +132,9 @@ export default function DetailedPost() {
             ? "https://api.giphy.com/v1/stickers"
             : "https://api.giphy.com/v1/gifs";
         const endpoint =
-          trimmed.length > 0 ? `${endpointBase}/search` : `${endpointBase}/trending`;
+          trimmed.length > 0
+            ? `${endpointBase}/search`
+            : `${endpointBase}/trending`;
         const params = new URLSearchParams({
           api_key: GIPHY_API_KEY,
           limit: String(GIF_PAGE_SIZE),
@@ -148,7 +158,9 @@ export default function DetailedPost() {
               item?.images?.fixed_width?.url ??
               "",
           }))
-          .filter((item: PickerItem) => item.id && item.previewUrl && item.mediaUrl);
+          .filter(
+            (item: PickerItem) => item.id && item.previewUrl && item.mediaUrl,
+          );
         setPickerItems(mapped);
       } catch (error: any) {
         setPickerItems([]);
@@ -168,12 +180,8 @@ export default function DetailedPost() {
     return () => clearTimeout(timer);
   }, [fetchPickerItems, pickerMode, pickerQuery, pickerVisible]);
 
-  useEffect(() => {
+  const fetchPostAndComments = useCallback(async () => {
     if (!postId) return;
-    fetchPostAndComments();
-  }, [postId]);
-
-  const fetchPostAndComments = async () => {
     setLoading(true);
 
     // Fetch post with aggregated counts
@@ -230,6 +238,8 @@ export default function DetailedPost() {
           post_id: comment.post_id,
           parent_id: comment.parent_id,
           content: comment.comment,
+          media_type: (comment.media_type as CommentMediaType | null) ?? null,
+          media_url: comment.media_url ?? null,
           created_at: comment.created_at,
           upvotes: comment.upvotes?.[0]?.count || 0,
           downvotes: comment.downvotes?.[0]?.count || 0,
@@ -261,7 +271,35 @@ export default function DetailedPost() {
     }
 
     setLoading(false);
-  };
+  }, [postId]);
+
+  useEffect(() => {
+    void fetchPostAndComments();
+  }, [fetchPostAndComments]);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const showSub = Keyboard.addListener("keyboardDidShow", (event) => {
+      const nextHeight = Math.max(
+        0,
+        (event.endCoordinates?.height ?? 0) - insets.bottom,
+      );
+      setAndroidKeyboardHeight(nextHeight);
+    });
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setAndroidKeyboardHeight(0);
+    });
+    const appStateSub = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active") setAndroidKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      appStateSub.remove();
+    };
+  }, [insets.bottom]);
 
   const topLevelComments = addDepthToComments(allComments);
 
@@ -328,10 +366,19 @@ export default function DetailedPost() {
   const generateCommentId = () =>
     `comment_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-  const handleAddComment = async (overrideContent?: string) => {
-    const finalContent = overrideContent || commentContent.trim();
-    if (!postId || !user?.id || submittingComment || !finalContent) return;
-    
+  const handleAddComment = async (payload?: {
+    content?: string;
+    mediaType?: CommentMediaType | null;
+    mediaUrl?: string | null;
+  }) => {
+    const rawContent = payload?.content ?? commentContent;
+    const finalContent = rawContent.trim();
+    const finalMediaType = payload?.mediaType ?? null;
+    const finalMediaUrl = payload?.mediaUrl ?? null;
+
+    if (!postId || !user?.id || submittingComment) return;
+    if (!finalContent && !finalMediaUrl) return;
+
     setSubmittingComment(true);
     setPickerVisible(false);
 
@@ -342,6 +389,8 @@ export default function DetailedPost() {
         post_id: postId,
         user_id: user.id,
         comment: finalContent,
+        media_type: finalMediaType,
+        media_url: finalMediaUrl,
         parent_id: replyingTo?.id || null,
         created_at: new Date().toISOString(),
       })
@@ -364,7 +413,10 @@ export default function DetailedPost() {
     const newComment: Comment = {
       id: data.id,
       post_id: data.post_id,
+      parent_id: data.parent_id,
       content: data.comment,
+      media_type: (data.media_type as CommentMediaType | null) ?? null,
+      media_url: data.media_url ?? null,
       created_at: data.created_at,
       upvotes: data.upvotes?.[0]?.count || 0,
       downvotes: data.downvotes?.[0]?.count || 0,
@@ -372,7 +424,18 @@ export default function DetailedPost() {
       replies: [],
     };
 
-    setAllComments((prev) => [newComment, ...prev]);
+    setAllComments((prev) => {
+      if (!replyingTo?.id) return [...prev, newComment];
+      const attachReply = (items: Comment[]): Comment[] =>
+        items.map((item) => {
+          if (item.id === replyingTo.id) {
+            return { ...item, replies: [...(item.replies ?? []), newComment] };
+          }
+          if (!item.replies?.length) return item;
+          return { ...item, replies: attachReply(item.replies) };
+        });
+      return attachReply(prev);
+    });
     setDetailedPost((prev) =>
       prev
         ? {
@@ -387,16 +450,18 @@ export default function DetailedPost() {
   };
 
   const handlePickGifOrSticker = (item: PickerItem) => {
-    const text = commentContent.trim();
-    const newContent = text ? `${text}\n${item.mediaUrl}` : item.mediaUrl;
-    handleAddComment(newContent);
+    void handleAddComment({
+      content: commentContent,
+      mediaType: pickerMode === "sticker" ? "sticker" : "gif",
+      mediaUrl: item.mediaUrl,
+    });
   };
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 16}
       >
         <FlatList
@@ -481,18 +546,41 @@ export default function DetailedPost() {
 
         <View
           style={{
-            paddingBottom: insets.bottom,
+            marginBottom: Platform.OS === "android" ? androidKeyboardHeight : 0,
+            paddingBottom: insets.bottom + 20,
             borderTopWidth: 1,
             borderColor: `${border}33`,
             backgroundColor: background,
           }}
         >
           {replyingTo && (
-            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4, justifyContent: "space-between" }}>
-              <Text style={{ color: textColor, fontSize: 13, fontWeight: "600", opacity: 0.8 }}>
-                Replying to <Text style={{ color: useThemeColor({}, "primary") }}>@{replyingTo.user.name}</Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 16,
+                paddingTop: 10,
+                paddingBottom: 4,
+                justifyContent: "space-between",
+              }}
+            >
+              <Text
+                style={{
+                  color: textColor,
+                  fontSize: 13,
+                  fontWeight: "600",
+                  opacity: 0.8,
+                }}
+              >
+                Replying to{" "}
+                <Text style={{ color: primaryColor }}>
+                  @{replyingTo.user.name}
+                </Text>
               </Text>
-              <Pressable onPress={() => setReplyingTo(null)} style={{ padding: 4 }}>
+              <Pressable
+                onPress={() => setReplyingTo(null)}
+                style={{ padding: 4 }}
+              >
                 <X size={16} color={textColor} opacity={0.6} />
               </Pressable>
             </View>
@@ -507,6 +595,7 @@ export default function DetailedPost() {
             }}
             isAuthed={!!user?.id}
             sending={submittingComment}
+            isDark={isDark}
           />
         </View>
 
@@ -524,19 +613,24 @@ export default function DetailedPost() {
                   <Pressable
                     style={[
                       styles.pickerModeBtn,
-                      pickerMode === "gif" && { backgroundColor: `${useThemeColor({}, "primary")}22` },
+                      pickerMode === "gif" && {
+                        backgroundColor: `${primaryColor}22`,
+                      },
                     ]}
                     onPress={() => setPickerMode("gif")}
                   >
                     <Grid
                       size={14}
-                      color={pickerMode === "gif" ? useThemeColor({}, "primary") : textColor}
+                      color={pickerMode === "gif" ? primaryColor : textColor}
                       strokeWidth={2.2}
                     />
                     <Text
                       style={[
                         styles.pickerModeText,
-                        { color: pickerMode === "gif" ? useThemeColor({}, "primary") : textColor },
+                        {
+                          color:
+                            pickerMode === "gif" ? primaryColor : textColor,
+                        },
                       ]}
                     >
                       GIF
@@ -545,19 +639,26 @@ export default function DetailedPost() {
                   <Pressable
                     style={[
                       styles.pickerModeBtn,
-                      pickerMode === "sticker" && { backgroundColor: `${useThemeColor({}, "primary")}22` },
+                      pickerMode === "sticker" && {
+                        backgroundColor: `${primaryColor}22`,
+                      },
                     ]}
                     onPress={() => setPickerMode("sticker")}
                   >
                     <Gem
                       size={14}
-                      color={pickerMode === "sticker" ? useThemeColor({}, "primary") : textColor}
+                      color={
+                        pickerMode === "sticker" ? primaryColor : textColor
+                      }
                       strokeWidth={2.2}
                     />
                     <Text
                       style={[
                         styles.pickerModeText,
-                        { color: pickerMode === "sticker" ? useThemeColor({}, "primary") : textColor },
+                        {
+                          color:
+                            pickerMode === "sticker" ? primaryColor : textColor,
+                        },
                       ]}
                     >
                       Sticker
@@ -565,7 +666,10 @@ export default function DetailedPost() {
                   </Pressable>
                 </View>
                 <Pressable
-                  style={[styles.pickerCloseBtn, { backgroundColor: `${textColor}1A` }]}
+                  style={[
+                    styles.pickerCloseBtn,
+                    { backgroundColor: `${textColor}1A` },
+                  ]}
                   onPress={() => setPickerVisible(false)}
                 >
                   <X size={16} color={textColor} strokeWidth={2.4} />
@@ -587,7 +691,7 @@ export default function DetailedPost() {
 
               {pickerLoading ? (
                 <View style={styles.pickerState}>
-                  <ActivityIndicator size="small" color={useThemeColor({}, "primary")} />
+                  <ActivityIndicator size="small" color={primaryColor} />
                 </View>
               ) : pickerError ? (
                 <View style={styles.pickerState}>

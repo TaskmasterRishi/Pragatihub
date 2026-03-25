@@ -5,7 +5,7 @@ import {
     CornerDownRight,
     MessageCircle,
 } from "lucide-react-native";
-import React from "react";
+import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
 import VoteButtons from "@/components/VoteButtons";
@@ -30,20 +30,48 @@ function CommentContent({ comment, isReply = false, onReply }: CommentDisplayPro
   const card = useThemeColor({}, "card");
   const border = useThemeColor({}, "border");
   const primary = useThemeColor({}, "primary");
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const avatarUri = (comment.user.image ?? "").trim();
+  const showAvatar = avatarUri.length > 0 && !avatarFailed;
 
   return (
     <View style={{ paddingVertical: isReply ? 10 : 0 }}>
       {/* Comment Header */}
       <View className="flex-row items-start mb-2">
-        <Image
-          source={{ uri: comment.user.image || undefined }}
-          className={isReply ? "w-6 h-6" : "w-7 h-7"}
-          style={{
-            borderRadius: 999,
-            borderWidth: isReply ? 1 : 1.5,
-            borderColor: border,
-          }}
-        />
+        {showAvatar ? (
+          <Image
+            source={{ uri: avatarUri }}
+            className={isReply ? "w-6 h-6" : "w-7 h-7"}
+            style={{
+              borderRadius: 999,
+              borderWidth: isReply ? 1 : 1.5,
+              borderColor: border,
+            }}
+            onError={() => setAvatarFailed(true)}
+          />
+        ) : (
+          <View
+            className={isReply ? "w-6 h-6" : "w-7 h-7"}
+            style={{
+              borderRadius: 999,
+              borderWidth: isReply ? 1 : 1.5,
+              borderColor: border,
+              backgroundColor: `${primary}20`,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text
+              style={{
+                color: primary,
+                fontSize: isReply ? 10 : 11,
+                fontWeight: "700",
+              }}
+            >
+              {(comment.user.name?.[0] ?? "?").toUpperCase()}
+            </Text>
+          </View>
+        )}
         <View className="ml-2 flex-1">
           <View className="flex-row items-center">
             <Text
@@ -86,10 +114,10 @@ function CommentContent({ comment, isReply = false, onReply }: CommentDisplayPro
       {(() => {
         const urlRegex = /(https?:\/\/[^\s]+)/gi;
         const urls = comment.content.match(urlRegex) ?? [];
-        let mediaUrl: string | undefined;
+        let mediaUrl: string | undefined = comment.media_url ?? undefined;
         let content = comment.content;
-        
-        if (urls.length > 0) {
+
+        if (!mediaUrl && urls.length > 0) {
           const lastUrl = urls[urls.length - 1];
           const lower = lastUrl.toLowerCase();
           const isGifOrSticker = lower.includes(".gif") || lower.includes("giphy.com") || lower.includes("tenor.com") || lower.includes(".webp") || lower.includes("sticker");
