@@ -1,6 +1,6 @@
 import { useUser } from "@clerk/clerk-expo";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
   Check,
@@ -379,7 +379,10 @@ const PostVideo = memo(
         >
           <Animated.View
             pointerEvents="none"
-            style={{ ...StyleSheet.absoluteFillObject, opacity: loadingOpacity }}
+            style={{
+              ...StyleSheet.absoluteFillObject,
+              opacity: loadingOpacity,
+            }}
           >
             <ShimmerBar height="100%" borderRadius={16} />
           </Animated.View>
@@ -411,7 +414,10 @@ const PostVideo = memo(
         {!isReady && (
           <Animated.View
             pointerEvents="none"
-            style={{ ...StyleSheet.absoluteFillObject, opacity: loadingOpacity }}
+            style={{
+              ...StyleSheet.absoluteFillObject,
+              opacity: loadingOpacity,
+            }}
           >
             <ShimmerBar height="100%" borderRadius={16} />
           </Animated.View>
@@ -497,7 +503,14 @@ export const PostSkeletonCard = memo(({ index = 0 }: { index?: number }) => {
           borderColor: border,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14, gap: 12 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginBottom: 14,
+            gap: 12,
+          }}
+        >
           <SkeletonCircle />
           <View style={{ flex: 1, gap: 8 }}>
             <SkeletonLine width="52%" height={12} />
@@ -889,7 +902,9 @@ function AnimatedIconButton({
   style?: any;
   pressedScale?: number;
   enableOpacity?: boolean;
-  hitSlop?: number | { top?: number; left?: number; bottom?: number; right?: number };
+  hitSlop?:
+    | number
+    | { top?: number; left?: number; bottom?: number; right?: number };
 }) {
   const { scale, onPressIn, onPressOut } = usePressScale(1, pressedScale);
   const opacity = useRef(new Animated.Value(1)).current;
@@ -991,6 +1006,7 @@ function PostListItem({
   onDeletePost?: (post: Post) => void;
   onSharePost?: (post: Post) => void;
 }) {
+  const router = useRouter();
   const { user } = useUser();
   const text = useThemeColor({}, "text");
   const muted = useThemeColor({}, "textMuted");
@@ -998,6 +1014,8 @@ function PostListItem({
   const border = useThemeColor({}, "border");
   const cardBorder = useThemeColor({ light: "#cbd5e1" }, "border");
   const background = useThemeColor({}, "background");
+  const userBadgeAccent = useThemeColor({}, "userBadgeAccent");
+  const communityBadgeAccent = useThemeColor({}, "communityBadgeAccent");
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 0);
   const shouldShowJoinButton = showJoinButton && !hideJoinButton;
@@ -1015,7 +1033,9 @@ function PostListItem({
   const canReportPost = user?.id !== post.user.id;
   const [ownerSheetVisible, setOwnerSheetVisible] = useState(false);
   const [reportSheetVisible, setReportSheetVisible] = useState(false);
-  const [selectedReason, setSelectedReason] = useState<ReportReason | null>(null);
+  const [selectedReason, setSelectedReason] = useState<ReportReason | null>(
+    null,
+  );
   const [reportDetails, setReportDetails] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportSubmitted, setReportSubmitted] = useState(false);
@@ -1109,7 +1129,11 @@ function PostListItem({
         setReportDetails("");
       }, 2000);
     } else {
-      Alert.alert("Error", (error as Error)?.message || "Failed to submit report. Please try again.");
+      Alert.alert(
+        "Error",
+        (error as Error)?.message ||
+          "Failed to submit report. Please try again.",
+      );
     }
   };
 
@@ -1117,16 +1141,14 @@ function PostListItem({
     if (!user?.id || isSubmittingModeratorSupport) return;
     setIsSubmittingModeratorSupport(true);
     try {
-      await supabase
-        .from("group_moderator_votes")
-        .upsert(
-          {
-            group_id: post.group.id,
-            candidate_user_id: post.user.id,
-            voter_user_id: user.id,
-          },
-          { onConflict: "group_id,candidate_user_id,voter_user_id" },
-        );
+      await supabase.from("group_moderator_votes").upsert(
+        {
+          group_id: post.group.id,
+          candidate_user_id: post.user.id,
+          voter_user_id: user.id,
+        },
+        { onConflict: "group_id,candidate_user_id,voter_user_id" },
+      );
     } catch (e) {
       console.log("Support moderator error:", e);
     } finally {
@@ -1160,6 +1182,96 @@ function PostListItem({
 
   const entranceDelay = Math.min(index * 40, 200);
   const isOnDetail = isDetailedPost;
+  const postAgeLabel = `${formatDistanceToNowStrict(new Date(post.created_at))} ago`;
+  const MetaBadge = ({
+    prefix,
+    value,
+    variant,
+    trailing,
+    onPress,
+  }: {
+    prefix: string;
+    value: string;
+    variant: "user" | "community";
+    trailing?: string;
+    onPress?: () => void;
+  }) => {
+    const isCommunity = variant === "community";
+    const badgeAccent = isCommunity ? communityBadgeAccent : userBadgeAccent;
+    const content = (
+      <>
+        {prefix ? (
+          <View
+            style={{
+              width: variant === "user" ? 22 : 18,
+              height: variant === "user" ? 22 : 18,
+              borderRadius: 999,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: `${badgeAccent}22`,
+            }}
+          >
+            <Text
+              style={{
+                color: badgeAccent,
+                fontSize: variant === "user" ? 16 : 10,
+                fontWeight: "800",
+              }}
+            >
+              {prefix}
+            </Text>
+          </View>
+        ) : null}
+        <Text
+          style={{
+            color: text,
+            fontSize: variant === "user" ? 16 : 11,
+            fontWeight: variant === "user" ? "800" : "700",
+            flexShrink: 1,
+          }}
+          numberOfLines={1}
+        >
+          {value}
+        </Text>
+        {trailing ? (
+          <Text style={{ color: badgeAccent, fontSize: 12, fontWeight: "900" }}>
+            {trailing}
+          </Text>
+        ) : null}
+      </>
+    );
+
+    if (onPress) {
+      return (
+        <Pressable
+          onPress={onPress}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+            paddingVertical: 0,
+            maxWidth: "100%",
+          }}
+        >
+          {content}
+        </Pressable>
+      );
+    }
+
+    return (
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+          paddingVertical: 0,
+          maxWidth: "100%",
+        }}
+      >
+        {content}
+      </View>
+    );
+  };
 
   return (
     <FadeInView delay={entranceDelay} fromTranslateY={24} fromScale={0.96}>
@@ -1196,29 +1308,22 @@ function PostListItem({
             />
 
             <View className="ml-3 flex-1">
-              <View className="flex-row items-center gap-1">
+              <View style={{ gap: 2, maxWidth: "100%" }}>
+                <MetaBadge prefix="U" value={post.user.name} variant="user" />
+                <MetaBadge
+                  prefix=""
+                  value={`Posted under ${post.group.name}`}
+                  variant="community"
+                  trailing=">"
+                  onPress={() => router.push(`/community/${post.group.id}`)}
+                />
                 <Text
-                  style={{ color: text, fontWeight: "700", fontSize: 13 }}
+                  style={{ color: muted, fontSize: 10.5, fontWeight: "600" }}
                   numberOfLines={1}
                 >
-                  {post.group.name}
-                </Text>
-                <Text style={{ color: muted }} className="text-xs">
-                  •
-                </Text>
-                <Text
-                  style={{ color: muted, fontSize: 11, fontWeight: "500" }}
-                  numberOfLines={1}
-                >
-                  {formatDistanceToNowStrict(new Date(post.created_at))} ago
+                  {postAgeLabel}
                 </Text>
               </View>
-              <Text
-                style={{ color: muted, fontSize: 12, marginTop: 2 }}
-                numberOfLines={1}
-              >
-                Posted by {post.user.name}
-              </Text>
             </View>
 
             {showOwnerActions ? (
@@ -1236,23 +1341,22 @@ function PostListItem({
                 <EllipsisVertical size={18} color={muted} />
               </Pressable>
             ) : (
-              shouldShowJoinButton && (
-                isMembershipLoading ? (
-                  <View
-                    style={{
-                      width: 74,
-                      height: 28,
-                      borderRadius: 999,
-                      backgroundColor: `${muted}25`,
-                    }}
-                  />
-                ) : (
-                  <JoinCommunityButton
-                    communityId={post.group.id}
-                    initialJoined={initialJoined}
-                  />
-                )
-              )
+              shouldShowJoinButton &&
+              (isMembershipLoading ? (
+                <View
+                  style={{
+                    width: 74,
+                    height: 28,
+                    borderRadius: 999,
+                    backgroundColor: `${muted}25`,
+                  }}
+                />
+              ) : (
+                <JoinCommunityButton
+                  communityId={post.group.id}
+                  initialJoined={initialJoined}
+                />
+              ))
             )}
           </View>
 
@@ -1432,9 +1536,7 @@ function PostListItem({
               <Animated.View
                 style={{
                   ...StyleSheet.absoluteFillObject,
-                  opacity: refreshing
-                    ? loadingPulseAnim
-                    : 0,
+                  opacity: refreshing ? loadingPulseAnim : 0,
                 }}
               >
                 <ShimmerBar height="100%" borderRadius={18} />
@@ -1605,7 +1707,13 @@ function PostListItem({
                 }}
               >
                 {/* Handle */}
-                <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
+                <View
+                  style={{
+                    alignItems: "center",
+                    paddingTop: 12,
+                    paddingBottom: 4,
+                  }}
+                >
                   <View
                     style={{
                       width: 52,
@@ -1625,269 +1733,392 @@ function PostListItem({
                     paddingBottom: 20,
                   }}
                 >
-                    {reportSubmitted ? (
-                      /* ── Success State ── */
-                      <Animated.View
+                  {reportSubmitted ? (
+                    /* ── Success State ── */
+                    <Animated.View
+                      style={{
+                        alignItems: "center",
+                        paddingVertical: 34,
+                        gap: 14,
+                        opacity: reportSuccessAnim,
+                        transform: [{ translateY: reportSuccessTranslateY }],
+                      }}
+                    >
+                      <View
                         style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: 36,
+                          backgroundColor: "#22c55e18",
+                          borderWidth: 1.5,
+                          borderColor: "#22c55e44",
                           alignItems: "center",
-                          paddingVertical: 34,
-                          gap: 14,
-                          opacity: reportSuccessAnim,
-                          transform: [{ translateY: reportSuccessTranslateY }],
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Check size={32} color="#22c55e" />
+                      </View>
+                      <View style={{ alignItems: "center", gap: 6 }}>
+                        <Text
+                          style={{
+                            color: text,
+                            fontSize: 20,
+                            fontWeight: "800",
+                            letterSpacing: -0.3,
+                          }}
+                        >
+                          Report Submitted
+                        </Text>
+                        <Text
+                          style={{
+                            color: muted,
+                            fontSize: 14,
+                            textAlign: "center",
+                            lineHeight: 22,
+                            maxWidth: 260,
+                          }}
+                        >
+                          Moderators will review your report and take
+                          appropriate action.
+                        </Text>
+                      </View>
+                      <ScalePressable
+                        onPress={() => setReportSheetVisible(false)}
+                        pressedScale={0.96}
+                        style={{
+                          marginTop: 4,
+                          overflow: "hidden",
+                          borderRadius: 16,
+                          backgroundColor: "#22c55e",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontSize: 15,
+                            fontWeight: "700",
+                            paddingVertical: 13,
+                            paddingHorizontal: 40,
+                          }}
+                        >
+                          Done
+                        </Text>
+                      </ScalePressable>
+                    </Animated.View>
+                  ) : (
+                    /* ── Report Form ── */
+                    <>
+                      {/* Header */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 12,
+                          marginBottom: 6,
+                          paddingHorizontal: 12,
+                          paddingVertical: 12,
+                          borderRadius: 16,
+                          backgroundColor: `${muted}10`,
+                          borderWidth: 1,
+                          borderColor: `${muted}20`,
                         }}
                       >
                         <View
                           style={{
-                            width: 72,
-                            height: 72,
-                            borderRadius: 36,
-                            backgroundColor: "#22c55e18",
-                            borderWidth: 1.5,
-                            borderColor: "#22c55e44",
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            backgroundColor: "#EF444418",
+                            borderWidth: 1,
+                            borderColor: "#EF444433",
                             alignItems: "center",
                             justifyContent: "center",
                           }}
                         >
-                          <Check size={32} color="#22c55e" />
+                          <Flag size={18} color="#EF4444" />
                         </View>
-                        <View style={{ alignItems: "center", gap: 6 }}>
-                          <Text style={{ color: text, fontSize: 20, fontWeight: "800", letterSpacing: -0.3 }}>
-                            Report Submitted
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              color: text,
+                              fontSize: 18,
+                              fontWeight: "800",
+                              letterSpacing: -0.3,
+                            }}
+                          >
+                            Report Post
                           </Text>
-                          <Text style={{ color: muted, fontSize: 14, textAlign: "center", lineHeight: 22, maxWidth: 260 }}>
-                            Moderators will review your report and take appropriate action.
+                          <Text
+                            style={{
+                              color: muted,
+                              fontSize: 12.5,
+                              marginTop: 2,
+                              lineHeight: 18,
+                            }}
+                          >
+                            Pick the issue that best matches this post.
                           </Text>
                         </View>
-                        <ScalePressable
-                          onPress={() => setReportSheetVisible(false)}
-                          pressedScale={0.96}
+                      </View>
+
+                      {/* Divider */}
+                      <View
+                        style={{
+                          height: 1,
+                          backgroundColor: border,
+                          marginVertical: 18,
+                        }}
+                      />
+
+                      <Text
+                        style={{
+                          color: text,
+                          fontSize: 13,
+                          fontWeight: "700",
+                          marginBottom: 12,
+                          opacity: 0.8,
+                        }}
+                      >
+                        Why are you reporting this?
+                      </Text>
+
+                      {/* Reason Grid — 2 columns */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          flexWrap: "wrap",
+                          gap: 8,
+                          marginBottom: 22,
+                        }}
+                      >
+                        {REPORT_REASONS.map((reason) => {
+                          const isSelected = selectedReason === reason.value;
+                          return (
+                            <ScalePressable
+                              key={reason.value}
+                              onPress={() => setSelectedReason(reason.value)}
+                              pressedScale={0.975}
+                              style={{
+                                width: "48%",
+                                borderRadius: 16,
+                                borderWidth: 1.5,
+                                borderColor: isSelected
+                                  ? reason.color
+                                  : `${border}`,
+                                backgroundColor: isSelected
+                                  ? `${reason.color}16`
+                                  : `${muted}10`,
+                                overflow: "hidden",
+                              }}
+                            >
+                              <View
+                                style={{
+                                  paddingVertical: 13,
+                                  paddingHorizontal: 14,
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  minHeight: 48,
+                                }}
+                              >
+                                {/* Color dot */}
+                                <View
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: 5,
+                                    backgroundColor: isSelected
+                                      ? reason.color
+                                      : `${muted}60`,
+                                  }}
+                                />
+                                <Text
+                                  style={{
+                                    color: isSelected ? reason.color : text,
+                                    fontSize: 13.5,
+                                    fontWeight: isSelected ? "700" : "500",
+                                    flex: 1,
+                                  }}
+                                  numberOfLines={2}
+                                >
+                                  {reason.label}
+                                </Text>
+                                {isSelected && (
+                                  <View
+                                    style={{
+                                      width: 16,
+                                      height: 16,
+                                      borderRadius: 8,
+                                      backgroundColor: reason.color,
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <Check
+                                      size={10}
+                                      color="#fff"
+                                      strokeWidth={3}
+                                    />
+                                  </View>
+                                )}
+                              </View>
+                            </ScalePressable>
+                          );
+                        })}
+                      </View>
+
+                      {/* Details input wrapped in KeyboardAvoidingView */}
+                      <KeyboardAvoidingView
+                        behavior={
+                          Platform.OS === "ios" ? "position" : "padding"
+                        }
+                        keyboardVerticalOffset={
+                          Platform.OS === "ios" ? 140 : 80
+                        }
+                      >
+                        <Text
                           style={{
-                            marginTop: 4,
-                            overflow: "hidden",
-                            borderRadius: 16,
-                            backgroundColor: "#22c55e",
+                            color: text,
+                            fontSize: 13,
+                            fontWeight: "700",
+                            marginBottom: 10,
+                            opacity: 0.8,
                           }}
                         >
-                          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700", paddingVertical: 13, paddingHorizontal: 40 }}>Done</Text>
-                        </ScalePressable>
-                      </Animated.View>
-                    ) : (
-                      /* ── Report Form ── */
-                      <>
-                        {/* Header */}
+                          Additional details (optional)
+                        </Text>
+                        <View
+                          style={{
+                            borderWidth: 1.5,
+                            borderColor:
+                              reportDetails.length > 0 ? `${muted}60` : border,
+                            borderRadius: 16,
+                            overflow: "hidden",
+                            marginBottom: 6,
+                            backgroundColor: `${muted}08`,
+                          }}
+                        >
+                          <TextInput
+                            value={reportDetails}
+                            onChangeText={setReportDetails}
+                            placeholder="Describe what's wrong with this post… (optional)"
+                            placeholderTextColor={`${muted}60`}
+                            multiline
+                            maxLength={500}
+                            style={{
+                              paddingHorizontal: 14,
+                              paddingVertical: 12,
+                              color: text,
+                              fontSize: 14,
+                              minHeight: 94,
+                              textAlignVertical: "top",
+                              lineHeight: 20,
+                            }}
+                          />
+                        </View>
                         <View
                           style={{
                             flexDirection: "row",
+                            justifyContent: "space-between",
                             alignItems: "center",
-                            gap: 12,
-                            marginBottom: 6,
-                            paddingHorizontal: 12,
-                            paddingVertical: 12,
-                            borderRadius: 16,
-                            backgroundColor: `${muted}10`,
-                            borderWidth: 1,
-                            borderColor: `${muted}20`,
+                            marginBottom: 20,
+                          }}
+                        >
+                          <Text style={{ color: muted, fontSize: 11.5 }}>
+                            Include context to help moderators review faster.
+                          </Text>
+                          <Text style={{ color: muted, fontSize: 11.5 }}>
+                            {reportDetails.length}/500
+                          </Text>
+                        </View>
+
+                        {/* Submit button */}
+                        <ScalePressable
+                          disabled={!selectedReason || reportSubmitting}
+                          onPress={() => {
+                            void handleSubmitReport();
+                          }}
+                          pressedScale={0.965}
+                          style={{
+                            borderRadius: 18,
+                            backgroundColor:
+                              selectedReason && !reportSubmitting
+                                ? "#EF4444"
+                                : `${muted}25`,
+                            overflow: "hidden",
+                            marginBottom: 12,
+                            shadowColor: selectedReason
+                              ? "#EF4444"
+                              : "transparent",
+                            shadowOpacity: 0.35,
+                            shadowRadius: 10,
+                            shadowOffset: { width: 0, height: 4 },
+                            elevation: selectedReason ? 4 : 0,
                           }}
                         >
                           <View
                             style={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 20,
-                              backgroundColor: "#EF444418",
-                              borderWidth: 1,
-                              borderColor: "#EF444433",
                               alignItems: "center",
-                              justifyContent: "center",
+                              paddingVertical: 15,
                             }}
                           >
-                            <Flag size={18} color="#EF4444" />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={{ color: text, fontSize: 18, fontWeight: "800", letterSpacing: -0.3 }}>
-                              Report Post
+                            <Text
+                              style={{
+                                color:
+                                  selectedReason && !reportSubmitting
+                                    ? "#fff"
+                                    : muted,
+                                fontSize: 15.5,
+                                fontWeight: "800",
+                                letterSpacing: 0.2,
+                              }}
+                            >
+                              {reportSubmitting
+                                ? "Submitting…"
+                                : "Submit Report"}
                             </Text>
-                            <Text style={{ color: muted, fontSize: 12.5, marginTop: 2, lineHeight: 18 }}>
-                              Pick the issue that best matches this post.
-                            </Text>
                           </View>
-                        </View>
+                        </ScalePressable>
 
-                        {/* Divider */}
-                        <View style={{ height: 1, backgroundColor: border, marginVertical: 18 }} />
-
-                        <Text style={{ color: text, fontSize: 13, fontWeight: "700", marginBottom: 12, opacity: 0.8 }}>
-                          Why are you reporting this?
-                        </Text>
-
-                        {/* Reason Grid — 2 columns */}
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 22 }}>
-                          {REPORT_REASONS.map((reason) => {
-                            const isSelected = selectedReason === reason.value;
-                            return (
-                              <ScalePressable
-                                key={reason.value}
-                                onPress={() => setSelectedReason(reason.value)}
-                                pressedScale={0.975}
-                                style={{
-                                  width: "48%",
-                                  borderRadius: 16,
-                                  borderWidth: 1.5,
-                                  borderColor: isSelected ? reason.color : `${border}`,
-                                  backgroundColor: isSelected ? `${reason.color}16` : `${muted}10`,
-                                  overflow: "hidden",
-                                }}
-                              >
-                                <View
-                                  style={{
-                                    paddingVertical: 13,
-                                    paddingHorizontal: 14,
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    gap: 8,
-                                    minHeight: 48,
-                                  }}
-                                >
-                                  {/* Color dot */}
-                                  <View
-                                    style={{
-                                      width: 10,
-                                      height: 10,
-                                      borderRadius: 5,
-                                      backgroundColor: isSelected ? reason.color : `${muted}60`,
-                                    }}
-                                  />
-                                  <Text
-                                    style={{
-                                      color: isSelected ? reason.color : text,
-                                      fontSize: 13.5,
-                                      fontWeight: isSelected ? "700" : "500",
-                                      flex: 1,
-                                    }}
-                                    numberOfLines={2}
-                                  >
-                                    {reason.label}
-                                  </Text>
-                                  {isSelected && (
-                                    <View
-                                      style={{
-                                        width: 16,
-                                        height: 16,
-                                        borderRadius: 8,
-                                        backgroundColor: reason.color,
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      <Check size={10} color="#fff" strokeWidth={3} />
-                                    </View>
-                                  )}
-                                </View>
-                              </ScalePressable>
-                            );
-                          })}
-                        </View>
-
-                        {/* Details input wrapped in KeyboardAvoidingView */}
-                        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "position" : "padding"} keyboardVerticalOffset={Platform.OS === "ios" ? 140 : 80}>
-                          <Text style={{ color: text, fontSize: 13, fontWeight: "700", marginBottom: 10, opacity: 0.8 }}>
-                            Additional details (optional)
-                          </Text>
+                        <ScalePressable
+                          onPress={() => setReportSheetVisible(false)}
+                          pressedScale={0.975}
+                          style={{
+                            borderRadius: 14,
+                            borderWidth: 1,
+                            borderColor: `${muted}25`,
+                            backgroundColor: `${muted}08`,
+                            overflow: "hidden",
+                          }}
+                        >
                           <View
                             style={{
-                              borderWidth: 1.5,
-                              borderColor: reportDetails.length > 0 ? `${muted}60` : border,
-                              borderRadius: 16,
-                              overflow: "hidden",
-                              marginBottom: 6,
-                              backgroundColor: `${muted}08`,
+                              paddingVertical: 12,
+                              alignItems: "center",
                             }}
                           >
-                            <TextInput
-                              value={reportDetails}
-                              onChangeText={setReportDetails}
-                              placeholder="Describe what's wrong with this post… (optional)"
-                              placeholderTextColor={`${muted}60`}
-                              multiline
-                              maxLength={500}
+                            <Text
                               style={{
-                                paddingHorizontal: 14,
-                                paddingVertical: 12,
                                 color: text,
-                                fontSize: 14,
-                                minHeight: 94,
-                                textAlignVertical: "top",
-                                lineHeight: 20,
+                                fontSize: 14.5,
+                                fontWeight: "600",
                               }}
-                            />
-                          </View>
-                          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                            <Text style={{ color: muted, fontSize: 11.5 }}>
-                              Include context to help moderators review faster.
-                            </Text>
-                            <Text style={{ color: muted, fontSize: 11.5 }}>
-                              {reportDetails.length}/500
+                            >
+                              Cancel
                             </Text>
                           </View>
-  
-                          {/* Submit button */}
-                          <ScalePressable
-                            disabled={!selectedReason || reportSubmitting}
-                            onPress={() => { void handleSubmitReport(); }}
-                            pressedScale={0.965}
-                            style={{
-                              borderRadius: 18,
-                              backgroundColor: selectedReason && !reportSubmitting ? "#EF4444" : `${muted}25`,
-                              overflow: "hidden",
-                              marginBottom: 12,
-                              shadowColor: selectedReason ? "#EF4444" : "transparent",
-                              shadowOpacity: 0.35,
-                              shadowRadius: 10,
-                              shadowOffset: { width: 0, height: 4 },
-                              elevation: selectedReason ? 4 : 0,
-                            }}
-                          >
-                            <View style={{ alignItems: "center", paddingVertical: 15 }}>
-                              <Text
-                                style={{
-                                  color: selectedReason && !reportSubmitting ? "#fff" : muted,
-                                  fontSize: 15.5,
-                                  fontWeight: "800",
-                                  letterSpacing: 0.2,
-                                }}
-                              >
-                                {reportSubmitting ? "Submitting…" : "Submit Report"}
-                              </Text>
-                            </View>
-                          </ScalePressable>
-  
-                          <ScalePressable
-                            onPress={() => setReportSheetVisible(false)}
-                            pressedScale={0.975}
-                            style={{
-                              borderRadius: 14,
-                              borderWidth: 1,
-                              borderColor: `${muted}25`,
-                              backgroundColor: `${muted}08`,
-                              overflow: "hidden",
-                            }}
-                          >
-                            <View style={{ paddingVertical: 12, alignItems: "center" }}>
-                              <Text style={{ color: text, fontSize: 14.5, fontWeight: "600" }}>Cancel</Text>
-                            </View>
-                          </ScalePressable>
-                        </KeyboardAvoidingView>
-                      </>
-                    )}
-                  </ScrollView>
+                        </ScalePressable>
+                      </KeyboardAvoidingView>
+                    </>
+                  )}
+                </ScrollView>
               </Animated.View>
             </Pressable>
-            </View>
-          </Modal>
+          </View>
+        </Modal>
+      </>
+    </FadeInView>
+  );
+}
 
-        </>
-      </FadeInView>
-    );
-  }
-  
-  export default memo(PostListItem);
+export default memo(PostListItem);

@@ -90,6 +90,12 @@ export const Colors = {
     input: neutralLight[100],
     inputBorder: neutralLight[300],
     placeholder: neutralLight[400],
+
+    // Post meta badges
+    userBadgeBackground: '#E8F1FF',
+    userBadgeAccent: '#0A66E8',
+    communityBadgeBackground: '#EAFBF2',
+    communityBadgeAccent: '#0F9D58',
   },
   dark: {
     // Primary colors
@@ -132,6 +138,12 @@ export const Colors = {
     input: neutralDark[200],
     inputBorder: neutralDark[300],
     placeholder: neutralDark[500],
+
+    // Post meta badges
+    userBadgeBackground: '#12233F',
+    userBadgeAccent: '#7FB3FF',
+    communityBadgeBackground: '#103126',
+    communityBadgeAccent: '#6BDFA9',
   },
 };
 
