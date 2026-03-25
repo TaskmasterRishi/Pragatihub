@@ -115,7 +115,10 @@ export default function AppLayout() {
     const isExpoGo =
       Constants.executionEnvironment === "storeClient" ||
       Constants.appOwnership === "expo";
-    if (isExpoGo) return;
+    if (isExpoGo) {
+      notificationListenerRef.current = null;
+      return;
+    }
 
     let notificationsModule: any = null;
     try {

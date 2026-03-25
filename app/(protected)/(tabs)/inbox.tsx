@@ -2,6 +2,7 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useUser } from "@clerk/clerk-expo";
+import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -71,6 +72,15 @@ function formatTime(iso: string) {
 let notificationsModule: any | null | undefined;
 function getNotificationsModule() {
   if (notificationsModule !== undefined) return notificationsModule;
+
+  const isExpoGo =
+    Constants.executionEnvironment === "storeClient" ||
+    Constants.appOwnership === "expo";
+  if (Platform.OS === "web" || isExpoGo) {
+    notificationsModule = null;
+    return notificationsModule;
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     notificationsModule = require("expo-notifications");
