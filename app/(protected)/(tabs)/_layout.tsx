@@ -15,7 +15,14 @@ import { useTabBarVisibility } from "@/utils/tabBarVisibility";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { Bell, Home, Plus, User, Users } from "lucide-react-native";
+import {
+  Bell,
+  Home,
+  MessageCircle,
+  Plus,
+  User,
+  Users,
+} from "lucide-react-native";
 
 const TAB_BAR_RADIUS = 28;
 
@@ -203,6 +210,13 @@ export default function TabLayout() {
         options={{
           title: "Inbox",
           tabBarIcon: ({ focused }) => renderIcon(Bell, focused, 24),
+        }}
+      />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: "Chat",
+          tabBarIcon: ({ focused }) => renderIcon(MessageCircle, focused, 24),
         }}
       />
       <Tabs.Screen

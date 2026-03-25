@@ -6,7 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import Constants from "expo-constants";
 import { BlurView } from "expo-blur";
-import { Redirect, Stack, useRouter } from "expo-router";
+import { Redirect, Stack, useRouter, useSegments } from "expo-router";
 import React, { useEffect, useRef } from "react";
 import {
   InteractionManager,
@@ -21,6 +21,7 @@ export default function AppLayout() {
   const { isSignedIn, getToken } = useAuth();
   const { isLoaded, user } = useUser();
   const router = useRouter();
+  const segments = useSegments();
   const notificationListenerRef = useRef<any>(null);
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -59,6 +60,9 @@ export default function AppLayout() {
     },
     "tabBarBackground",
   );
+  const screenBackground = useThemeColor({}, "background");
+  const shouldShowGlassBackdrop =
+    Platform.OS !== "web" && segments.includes("(tabs)");
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
@@ -200,7 +204,7 @@ export default function AppLayout() {
         {
           paddingTop: insets.top,
           backgroundColor:
-            Platform.OS === "web" ? appBackgroundColor : "transparent",
+            Platform.OS === "web" ? appBackgroundColor : screenBackground,
           ...(Platform.OS === "web"
             ? ({
                 backdropFilter: "saturate(140%) blur(18px)",
@@ -210,7 +214,7 @@ export default function AppLayout() {
         },
       ]}
     >
-      {Platform.OS !== "web" ? (
+      {shouldShowGlassBackdrop ? (
         <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
           {androidBlurReady ? (
             <BlurView
@@ -234,10 +238,14 @@ export default function AppLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: "transparent" },
+          contentStyle: { backgroundColor: screenBackground },
         }}
       >
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="dm/[id]"
+          options={{ animation: "slide_from_right" }}
+        />
         <Stack.Screen
           name="post/[id]"
           options={{ animation: "fade_from_bottom" }}

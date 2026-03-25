@@ -6,22 +6,25 @@ import {
     MessageCircle,
 } from "lucide-react-native";
 import React from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { Image } from "expo-image";
 import VoteButtons from "@/components/VoteButtons";
 
 type CommentItemProps = {
   comment: Comment;
   depth?: number;
   isLastInThread?: boolean;
+  onReply?: (comment: Comment) => void;
 };
 
 type CommentDisplayProps = {
   comment: Comment;
   isReply?: boolean;
+  onReply?: (comment: Comment) => void;
 };
 
 // Render individual comment content (used for both main and reply)
-function CommentContent({ comment, isReply = false }: CommentDisplayProps) {
+function CommentContent({ comment, isReply = false, onReply }: CommentDisplayProps) {
   const text = useThemeColor({}, "text");
   const muted = useThemeColor({}, "textMuted");
   const card = useThemeColor({}, "card");
@@ -79,18 +82,57 @@ function CommentContent({ comment, isReply = false }: CommentDisplayProps) {
         </View>
       </View>
 
-      {/* Comment Content */}
-      <Text
-        className={isReply ? "text-xs leading-4" : "text-sm leading-5"}
-        style={{
-          color: text,
-          lineHeight: isReply ? 16 : 20,
-          marginBottom: isReply ? 6 : 8,
-          marginLeft: 24,
-        }}
-      >
-        {comment.content}
-      </Text>
+      {/* Comment Content and parsed media */}
+      {(() => {
+        const urlRegex = /(https?:\/\/[^\s]+)/gi;
+        const urls = comment.content.match(urlRegex) ?? [];
+        let mediaUrl: string | undefined;
+        let content = comment.content;
+        
+        if (urls.length > 0) {
+          const lastUrl = urls[urls.length - 1];
+          const lower = lastUrl.toLowerCase();
+          const isGifOrSticker = lower.includes(".gif") || lower.includes("giphy.com") || lower.includes("tenor.com") || lower.includes(".webp") || lower.includes("sticker");
+          const isImage = lower.includes(".png") || lower.includes(".jpg") || lower.includes(".jpeg") || lower.includes(".heic");
+          
+          if (isGifOrSticker || isImage) {
+            mediaUrl = lastUrl;
+            content = content.replace(lastUrl, "").trim();
+          }
+        }
+
+        return (
+          <>
+            {mediaUrl && (
+              <Image
+                source={{ uri: mediaUrl }}
+                style={{
+                  width: Math.min(220, 220),
+                  height: 180,
+                  borderRadius: 12,
+                  marginLeft: 24,
+                  marginBottom: 8,
+                  backgroundColor: "rgba(0,0,0,0.06)",
+                }}
+                contentFit="contain"
+              />
+            )}
+            {content ? (
+              <Text
+                className={isReply ? "text-xs leading-4" : "text-sm leading-5"}
+                style={{
+                  color: text,
+                  lineHeight: isReply ? 16 : 20,
+                  marginBottom: isReply ? 6 : 8,
+                  marginLeft: 24,
+                }}
+              >
+                {content}
+              </Text>
+            ) : <View style={{ height: 4 }} />}
+          </>
+        );
+      })()}
 
       {/* Comment Footer */}
       <View
@@ -125,6 +167,7 @@ function CommentContent({ comment, isReply = false }: CommentDisplayProps) {
 
         {!isReply && (
           <Pressable
+            onPress={() => onReply && onReply(comment)}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -156,6 +199,7 @@ export default function CommentItem({
   comment,
   depth = 0,
   isLastInThread = false,
+  onReply,
 }: CommentItemProps) {
   const card = useThemeColor({}, "card");
   const border = useThemeColor({}, "border");
@@ -191,7 +235,7 @@ export default function CommentItem({
         }}
       >
         {/* Main Comment */}
-        <CommentContent comment={comment} isReply={false} />
+        <CommentContent comment={comment} isReply={false} onReply={onReply} />
 
         {/* Divider - only show if there are replies */}
         {comment.replies && comment.replies.length > 0 && (

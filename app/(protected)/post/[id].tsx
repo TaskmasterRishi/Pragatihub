@@ -6,15 +6,22 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
 import { useUser } from "@clerk/clerk-expo";
 import { useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
   Text,
   View,
+  Modal,
+  Pressable,
+  TextInput,
+  StyleSheet,
 } from "react-native";
+import { Image } from "expo-image";
+import { Gem, Grid, Image as ImageIcon, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SPACING = {
@@ -69,6 +76,16 @@ function CommentSkeleton() {
   );
 }
 
+const GIPHY_API_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY ?? "LIVDSRZULELA";
+const GIF_PAGE_SIZE = 24;
+
+type PickerMode = "gif" | "sticker";
+type PickerItem = {
+  id: string;
+  previewUrl: string;
+  mediaUrl: string;
+};
+
 export default function DetailedPost() {
   const { id } = useLocalSearchParams();
   const postId = Array.isArray(id) ? id[0] : id;
@@ -82,6 +99,74 @@ export default function DetailedPost() {
   const [allComments, setAllComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Input & Reply States
+  const [commentContent, setCommentContent] = useState("");
+  const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
+
+  // Picker States
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerMode, setPickerMode] = useState<PickerMode>("gif");
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  const [pickerItems, setPickerItems] = useState<PickerItem[]>([]);
+
+  const fetchPickerItems = useCallback(
+    async (mode: PickerMode, query: string) => {
+      if (!GIPHY_API_KEY) return;
+      setPickerLoading(true);
+      setPickerError(null);
+      try {
+        const trimmed = query.trim();
+        const endpointBase =
+          mode === "sticker"
+            ? "https://api.giphy.com/v1/stickers"
+            : "https://api.giphy.com/v1/gifs";
+        const endpoint =
+          trimmed.length > 0 ? `${endpointBase}/search` : `${endpointBase}/trending`;
+        const params = new URLSearchParams({
+          api_key: GIPHY_API_KEY,
+          limit: String(GIF_PAGE_SIZE),
+          rating: "pg-13",
+        });
+        if (trimmed.length > 0) params.append("q", trimmed);
+        const response = await fetch(`${endpoint}?${params.toString()}`);
+        if (!response.ok) throw new Error(`Failed (${response.status})`);
+        const payload = await response.json();
+        const mapped: PickerItem[] = (payload?.data ?? [])
+          .map((item: any) => ({
+            id: String(item?.id ?? ""),
+            previewUrl:
+              item?.images?.fixed_width_downsampled?.url ??
+              item?.images?.fixed_width?.url ??
+              item?.images?.original?.url ??
+              "",
+            mediaUrl:
+              item?.images?.original?.url ??
+              item?.images?.downsized_large?.url ??
+              item?.images?.fixed_width?.url ??
+              "",
+          }))
+          .filter((item: PickerItem) => item.id && item.previewUrl && item.mediaUrl);
+        setPickerItems(mapped);
+      } catch (error: any) {
+        setPickerItems([]);
+        setPickerError(error?.message ?? "Failed to load GIFs.");
+      } finally {
+        setPickerLoading(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!pickerVisible) return;
+    const timer = setTimeout(() => {
+      void fetchPickerItems(pickerMode, pickerQuery);
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [fetchPickerItems, pickerMode, pickerQuery, pickerVisible]);
 
   useEffect(() => {
     if (!postId) return;
@@ -182,7 +267,7 @@ export default function DetailedPost() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: background }}>
+      <SafeAreaView style={{ flex: 1 }}>
         <FlatList
           data={[0, 1, 2, 3]}
           keyExtractor={(item) => `skeleton-${item}`}
@@ -231,7 +316,6 @@ export default function DetailedPost() {
       <SafeAreaView
         style={{
           flex: 1,
-          backgroundColor: background,
           justifyContent: "center",
           alignItems: "center",
         }}
@@ -244,9 +328,12 @@ export default function DetailedPost() {
   const generateCommentId = () =>
     `comment_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-  const handleAddComment = async (content: string) => {
-    if (!postId || !user?.id || submittingComment) return;
+  const handleAddComment = async (overrideContent?: string) => {
+    const finalContent = overrideContent || commentContent.trim();
+    if (!postId || !user?.id || submittingComment || !finalContent) return;
+    
     setSubmittingComment(true);
+    setPickerVisible(false);
 
     const { data, error } = await supabase
       .from("comments")
@@ -254,8 +341,8 @@ export default function DetailedPost() {
         id: generateCommentId(),
         post_id: postId,
         user_id: user.id,
-        comment: content,
-        parent_id: null,
+        comment: finalContent,
+        parent_id: replyingTo?.id || null,
         created_at: new Date().toISOString(),
       })
       .select(
@@ -294,11 +381,19 @@ export default function DetailedPost() {
           }
         : prev,
     );
+    setCommentContent("");
+    setReplyingTo(null);
     setSubmittingComment(false);
   };
 
+  const handlePickGifOrSticker = (item: PickerItem) => {
+    const text = commentContent.trim();
+    const newContent = text ? `${text}\n${item.mediaUrl}` : item.mediaUrl;
+    handleAddComment(newContent);
+  };
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: background }}>
+    <SafeAreaView style={{ flex: 1 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -321,17 +416,48 @@ export default function DetailedPost() {
                 index={0}
               />
               <View style={{ height: SPACING.md }} />
-              <Text
+              <View
                 style={{
-                  color: textColor,
-                  fontSize: 14,
-                  fontWeight: "600",
-                  opacity: 0.72,
-                  letterSpacing: 0.1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginTop: SPACING.sm,
+                  marginBottom: SPACING.xs,
+                  paddingVertical: SPACING.sm,
+                  borderBottomWidth: 1,
+                  borderBottomColor: `${border}30`,
                 }}
               >
-                Comments ({allComments.length})
-              </Text>
+                <Text
+                  style={{
+                    color: textColor,
+                    fontSize: 18,
+                    fontWeight: "700",
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  Comments
+                </Text>
+                <View
+                  style={{
+                    backgroundColor: `${textColor}10`,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: textColor,
+                      fontSize: 13,
+                      fontWeight: "600",
+                      opacity: 0.8,
+                    }}
+                  >
+                    {allComments.length}
+                  </Text>
+                </View>
+              </View>
             </View>
           }
           renderItem={({ item }) => (
@@ -340,6 +466,7 @@ export default function DetailedPost() {
                 comment={item}
                 depth={item.depth}
                 isLastInThread={item.isLastInThread}
+                onReply={(comment) => setReplyingTo(comment)}
               />
             </View>
           )}
@@ -354,20 +481,227 @@ export default function DetailedPost() {
 
         <View
           style={{
-            paddingHorizontal: SPACING.lg,
-            paddingTop: SPACING.sm,
-            paddingBottom: insets.bottom + SPACING.xs,
+            paddingBottom: insets.bottom,
             borderTopWidth: 1,
             borderColor: `${border}33`,
             backgroundColor: background,
           }}
         >
+          {replyingTo && (
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4, justifyContent: "space-between" }}>
+              <Text style={{ color: textColor, fontSize: 13, fontWeight: "600", opacity: 0.8 }}>
+                Replying to <Text style={{ color: useThemeColor({}, "primary") }}>@{replyingTo.user.name}</Text>
+              </Text>
+              <Pressable onPress={() => setReplyingTo(null)} style={{ padding: 4 }}>
+                <X size={16} color={textColor} opacity={0.6} />
+              </Pressable>
+            </View>
+          )}
           <CommentInput
-            onSubmit={handleAddComment}
-            containerStyle={{ marginBottom: 0 }}
+            value={commentContent}
+            onChangeText={setCommentContent}
+            onSubmit={() => handleAddComment()}
+            onPickMedia={() => {
+              setPickerMode("gif");
+              setPickerVisible(true);
+            }}
+            isAuthed={!!user?.id}
+            sending={submittingComment}
           />
         </View>
+
+        {/* Media Picker Modal */}
+        <Modal
+          visible={pickerVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setPickerVisible(false)}
+        >
+          <View style={styles.pickerBackdrop}>
+            <View style={[styles.pickerSheet, { backgroundColor: background }]}>
+              <View style={styles.pickerHeader}>
+                <View style={styles.pickerHeaderLeft}>
+                  <Pressable
+                    style={[
+                      styles.pickerModeBtn,
+                      pickerMode === "gif" && { backgroundColor: `${useThemeColor({}, "primary")}22` },
+                    ]}
+                    onPress={() => setPickerMode("gif")}
+                  >
+                    <Grid
+                      size={14}
+                      color={pickerMode === "gif" ? useThemeColor({}, "primary") : textColor}
+                      strokeWidth={2.2}
+                    />
+                    <Text
+                      style={[
+                        styles.pickerModeText,
+                        { color: pickerMode === "gif" ? useThemeColor({}, "primary") : textColor },
+                      ]}
+                    >
+                      GIF
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.pickerModeBtn,
+                      pickerMode === "sticker" && { backgroundColor: `${useThemeColor({}, "primary")}22` },
+                    ]}
+                    onPress={() => setPickerMode("sticker")}
+                  >
+                    <Gem
+                      size={14}
+                      color={pickerMode === "sticker" ? useThemeColor({}, "primary") : textColor}
+                      strokeWidth={2.2}
+                    />
+                    <Text
+                      style={[
+                        styles.pickerModeText,
+                        { color: pickerMode === "sticker" ? useThemeColor({}, "primary") : textColor },
+                      ]}
+                    >
+                      Sticker
+                    </Text>
+                  </Pressable>
+                </View>
+                <Pressable
+                  style={[styles.pickerCloseBtn, { backgroundColor: `${textColor}1A` }]}
+                  onPress={() => setPickerVisible(false)}
+                >
+                  <X size={16} color={textColor} strokeWidth={2.4} />
+                </Pressable>
+              </View>
+
+              <TextInput
+                value={pickerQuery}
+                onChangeText={setPickerQuery}
+                placeholder={
+                  pickerMode === "sticker" ? "Search stickers" : "Search GIFs"
+                }
+                placeholderTextColor={`${textColor}80`}
+                style={[
+                  styles.pickerSearch,
+                  { color: textColor, borderColor: border },
+                ]}
+              />
+
+              {pickerLoading ? (
+                <View style={styles.pickerState}>
+                  <ActivityIndicator size="small" color={useThemeColor({}, "primary")} />
+                </View>
+              ) : pickerError ? (
+                <View style={styles.pickerState}>
+                  <Text style={[styles.pickerError, { color: "#FF3B30" }]}>
+                    {pickerError}
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={pickerItems}
+                  keyExtractor={(item) => item.id}
+                  numColumns={3}
+                  columnWrapperStyle={styles.pickerRow}
+                  contentContainerStyle={styles.pickerGrid}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      onPress={() => handlePickGifOrSticker(item)}
+                      style={styles.pickerCard}
+                    >
+                      <Image
+                        source={{ uri: item.previewUrl }}
+                        style={styles.pickerImage}
+                        contentFit="cover"
+                      />
+                    </Pressable>
+                  )}
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  pickerSheet: {
+    height: "60%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  pickerHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pickerModeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  pickerModeText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  pickerCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerSearch: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+    marginBottom: 16,
+  },
+  pickerState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerError: {
+    fontSize: 14,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  pickerGrid: {
+    paddingBottom: 24,
+    gap: 8,
+  },
+  pickerRow: {
+    justifyContent: "space-between",
+  },
+  pickerCard: {
+    width: "32%",
+    aspectRatio: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "rgba(0,0,0,0.05)",
+  },
+  pickerImage: {
+    width: "100%",
+    height: "100%",
+  },
+});
