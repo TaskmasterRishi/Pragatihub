@@ -2,15 +2,16 @@ import { BlurView } from "expo-blur";
 import { Search } from "lucide-react-native";
 import React from "react";
 import {
+  Animated,
+  Easing,
   Image,
   InteractionManager,
   Platform,
   StyleSheet,
   Text,
   TextInput,
-  View,
-  Animated,
   useColorScheme,
+  View,
 } from "react-native";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -20,6 +21,9 @@ type HomeTopBarProps = {
   searchQuery: string;
   onChangeSearchQuery: (value: string) => void;
 };
+
+const TOP_BAR_HIDDEN_TRANSLATE_Y = -85;
+const HIDE_SHOW_EASING = Easing.bezier(0.22, 0.61, 0.36, 1);
 
 export default function HomeTopBar({
   searchQuery,
@@ -68,18 +72,32 @@ export default function HomeTopBar({
 
   const visible = useTabBarVisibility();
   const transY = React.useRef(new Animated.Value(0)).current;
+  const opacity = React.useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
-    Animated.spring(transY, {
-      toValue: visible ? 0 : -100, // slide up
-      useNativeDriver: true,
-      bounciness: 0,
-      speed: 15,
-    }).start();
-  }, [visible]);
+    transY.stopAnimation();
+    opacity.stopAnimation();
+    Animated.parallel([
+      Animated.timing(transY, {
+        toValue: visible ? 0 : TOP_BAR_HIDDEN_TRANSLATE_Y,
+        duration: visible ? 260 : 220,
+        easing: HIDE_SHOW_EASING,
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+      Animated.timing(opacity, {
+        toValue: visible ? 1 : 0.92,
+        duration: visible ? 240 : 200,
+        easing: HIDE_SHOW_EASING,
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+    ]).start();
+  }, [opacity, transY, visible]);
 
   return (
     <Animated.View
+      pointerEvents={visible ? "auto" : "none"}
       style={[
         styles.container,
         {
@@ -92,6 +110,7 @@ export default function HomeTopBar({
                 WebkitBackdropFilter: "saturate(140%) blur(18px)",
               } as any)
             : {}),
+          opacity,
           transform: [{ translateY: transY }],
         },
       ]}

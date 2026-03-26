@@ -3,6 +3,7 @@ import { Tabs } from "expo-router";
 import React from "react";
 import {
   Animated,
+  Easing,
   InteractionManager,
   Platform,
   StyleSheet,
@@ -25,6 +26,7 @@ import {
 } from "lucide-react-native";
 
 const TAB_BAR_RADIUS = 28;
+const HIDE_SHOW_EASING = Easing.bezier(0.22, 0.61, 0.36, 1);
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -76,15 +78,28 @@ export default function TabLayout() {
 
   const visible = useTabBarVisibility();
   const transY = React.useRef(new Animated.Value(0)).current;
+  const opacity = React.useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
-    Animated.spring(transY, {
-      toValue: visible ? 0 : 150, // slide down
-      useNativeDriver: true,
-      bounciness: 0,
-      speed: 15,
-    }).start();
-  }, [visible]);
+    transY.stopAnimation();
+    opacity.stopAnimation();
+    Animated.parallel([
+      Animated.timing(transY, {
+        toValue: visible ? 0 : 140,
+        duration: visible ? 260 : 220,
+        easing: HIDE_SHOW_EASING,
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+      Animated.timing(opacity, {
+        toValue: visible ? 1 : 0.9,
+        duration: visible ? 240 : 200,
+        easing: HIDE_SHOW_EASING,
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+    ]).start();
+  }, [opacity, transY, visible]);
 
   const renderIcon = (
     Icon: React.ComponentType<{ size?: number; color?: string }>,
@@ -156,6 +171,7 @@ export default function TabLayout() {
 
         tabBarStyle: {
           position: "absolute",
+          opacity,
           transform: [{ translateY: transY }],
           marginHorizontal: 12,
           bottom: Math.max(insets.bottom, 8),

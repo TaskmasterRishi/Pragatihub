@@ -23,11 +23,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PAGE_SIZE = 5;
 const USERS_PREVIEW_COUNT = 3;
+const SHOW_TOP_THRESHOLD = 24;
+const HIDE_OFFSET_THRESHOLD = 120;
+const SCROLL_DIRECTION_DEADZONE = 4;
+const VISIBILITY_TOGGLE_COOLDOWN_MS = 140;
 
 type SearchUser = {
   id: string;
   name: string;
   image: string | null;
+};
+
+type CountRow = {
+  post_id: string | null;
 };
 
 const EmptyState = () => {
@@ -100,12 +108,23 @@ export default function HomeScreen() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isMembershipLoading, setIsMembershipLoading] = useState(true);
   const [joinedGroupIds, setJoinedGroupIds] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
   const skeletonData = useMemo(
     () => Array.from({ length: 6 }).map((_, i) => ({ id: `skeleton-${i}` })),
     [],
   );
   const skeletonOpacity = useRef(new Animated.Value(1)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
+  const tabBarVisibleRef = useRef(true);
+  const lastOffsetYRef = useRef(0);
+  const lastVisibilityToggleAtRef = useRef(0);
+
+  const setTabBarVisibility = useCallback((visible: boolean) => {
+    if (tabBarVisibleRef.current === visible) return;
+    tabBarVisibleRef.current = visible;
+    setTabBarVisible(visible);
+  }, []);
+
   const loadMemberships = useCallback(async () => {
     if (!user?.id) {
       setJoinedGroupIds(new Set());
@@ -122,50 +141,129 @@ export default function HomeScreen() {
       } else {
         setJoinedGroupIds(new Set((data ?? []).map((g) => g.group_id)));
       }
-    } catch (e) {
+    } catch {
       setJoinedGroupIds(new Set());
     } finally {
       setIsMembershipLoading(false);
     }
   }, [user?.id]);
 
-  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const offsetY = event.nativeEvent.contentOffset.y;
-
-    // Clear existing timeout
-    if (scrollTimeout.current) {
-      clearTimeout(scrollTimeout.current);
+  const countRowsByPostId = useCallback((rows: CountRow[] | null) => {
+    const counts = new Map<string, number>();
+    for (const row of rows ?? []) {
+      if (!row.post_id) continue;
+      counts.set(row.post_id, (counts.get(row.post_id) ?? 0) + 1);
     }
+    return counts;
+  }, []);
 
-    if (offsetY <= 10) {
-      // At or very near the top: show immediately, no debounce
-      setTabBarVisible(true);
-    } else if (offsetY > 50) {
-      // Scrolled down: hide, then show after debounce
-      setTabBarVisible(false);
-      scrollTimeout.current = setTimeout(() => {
-        setTabBarVisible(true);
-      }, 500); // Reduced timing
-    } else {
-      // Between 10 and 50: show immediately
-      setTabBarVisible(true);
-    }
-  };
+  const fetchPosts = useCallback(
+    async ({ withRefreshIndicator = false }: { withRefreshIndicator?: boolean } = {}) => {
+      if (withRefreshIndicator) {
+        setRefreshing(true);
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("posts")
+          .select(
+            `
+            *,
+            post_media:post_media(*),
+            group:groups(*),
+            user:users!posts_user_id_fkey(*)
+          `,
+          )
+          .order("created_at", { ascending: false });
+
+        if (error || !data) {
+          setPosts([]);
+          return;
+        }
+
+        if (data.length === 0) {
+          setPosts([]);
+          return;
+        }
+
+        const postIds = data.map((post) => post.id);
+
+        const [upvotesRes, downvotesRes, commentsRes] = await Promise.all([
+          supabase.from("post_upvotes").select("post_id").in("post_id", postIds),
+          supabase.from("post_downvotes").select("post_id").in("post_id", postIds),
+          supabase.from("comments").select("post_id").in("post_id", postIds),
+        ]);
+
+        const upvoteCounts = countRowsByPostId((upvotesRes.data as CountRow[] | null) ?? null);
+        const downvoteCounts = countRowsByPostId(
+          (downvotesRes.data as CountRow[] | null) ?? null,
+        );
+        const commentCounts = countRowsByPostId((commentsRes.data as CountRow[] | null) ?? null);
+
+        const postsWithCounts = data.map((post) => ({
+          ...post,
+          upvotes: upvoteCounts.get(post.id) ?? 0,
+          downvotes: downvoteCounts.get(post.id) ?? 0,
+          nr_of_comments: commentCounts.get(post.id) ?? 0,
+        }));
+
+        setPosts(postsWithCounts as Post[]);
+      } finally {
+        setIsInitialLoading(false);
+        if (withRefreshIndicator) {
+          setRefreshing(false);
+        }
+      }
+    },
+    [countRowsByPostId],
+  );
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetY = Math.max(0, event.nativeEvent.contentOffset.y);
+      const deltaY = offsetY - lastOffsetYRef.current;
+      lastOffsetYRef.current = offsetY;
+
+      if (offsetY <= SHOW_TOP_THRESHOLD) {
+        setTabBarVisibility(true);
+        return;
+      }
+
+      if (Math.abs(deltaY) < SCROLL_DIRECTION_DEADZONE) {
+        return;
+      }
+
+      const now = Date.now();
+      if (
+        now - lastVisibilityToggleAtRef.current <
+        VISIBILITY_TOGGLE_COOLDOWN_MS
+      ) {
+        return;
+      }
+
+      if (deltaY > 0 && offsetY > HIDE_OFFSET_THRESHOLD) {
+        setTabBarVisibility(false);
+        lastVisibilityToggleAtRef.current = now;
+        return;
+      }
+
+      if (deltaY < 0) {
+        setTabBarVisibility(true);
+        lastVisibilityToggleAtRef.current = now;
+      }
+    },
+    [setTabBarVisibility],
+  );
 
   useEffect(() => {
     return () => {
-      if (scrollTimeout.current) {
-        clearTimeout(scrollTimeout.current);
-      }
-      setTabBarVisible(true);
+      setTabBarVisibility(true);
     };
-  }, []);
+  }, [setTabBarVisibility]);
 
   useEffect(() => {
     fetchPosts();
-  }, []);
+  }, [fetchPosts]);
 
   useEffect(() => {
     loadMemberships();
@@ -187,74 +285,6 @@ export default function HomeScreen() {
     ]).start();
   }, [isInitialLoading, skeletonOpacity, contentOpacity]);
 
-  const fetchPosts = async () => {
-    if (!isInitialLoading && !refreshing) {
-      setRefreshing(true);
-    }
-
-    const { data, error } = await supabase
-      .from("posts")
-      .select(
-        `
-        *,
-        post_media:post_media(*),
-        group:groups(*),
-        user:users!posts_user_id_fkey(*)
-      `,
-      )
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      setIsInitialLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    if (!data) {
-      setPosts([]);
-      setIsInitialLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    // For each post, get the upvotes and comments count
-    const postsWithCounts = await Promise.all(
-      data.map(async (post) => {
-        // Get upvotes count
-        const { count: upvotesCount } = await supabase
-          .from("post_upvotes")
-          .select("*", { count: "exact", head: true })
-          .eq("post_id", post.id);
-
-        // Get downvotes count
-        const { count: downvotesCount } = await supabase
-          .from("post_downvotes")
-          .select("*", { count: "exact", head: true })
-          .eq("post_id", post.id);
-
-        // Get comments count
-        const { count: commentsCount } = await supabase
-          .from("comments")
-          .select("*", { count: "exact", head: true })
-          .eq("post_id", post.id);
-
-        return {
-          ...post,
-          upvotes: upvotesCount || 0,
-          downvotes: downvotesCount || 0,
-          nr_of_comments: commentsCount || 0,
-        };
-      }),
-    );
-
-    setPosts(postsWithCounts);
-    setIsInitialLoading(false);
-    setRefreshing(false);
-  };
-
-  const [page, setPage] = useState(1);
-  const [visiblePosts, setVisiblePosts] = useState<Post[]>([]);
-
   const filteredPosts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return posts;
@@ -272,9 +302,10 @@ export default function HomeScreen() {
     });
   }, [posts, searchQuery]);
 
-  useEffect(() => {
-    setVisiblePosts(filteredPosts.slice(0, page * PAGE_SIZE));
-  }, [page, filteredPosts]);
+  const visiblePosts = useMemo(
+    () => filteredPosts.slice(0, page * PAGE_SIZE),
+    [filteredPosts, page],
+  );
 
   useEffect(() => {
     setPage(1);
@@ -284,7 +315,7 @@ export default function HomeScreen() {
     const q = searchQuery.trim();
     setShowAllUsers(false);
 
-    if (!q) {
+    if (!q || q.length < 2) {
       setSearchedUsers([]);
       setUsersLoading(false);
       return;
@@ -320,16 +351,11 @@ export default function HomeScreen() {
     };
   }, [searchQuery, user?.id]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     if (refreshing || isInitialLoading) return;
-    setRefreshing(true);
     setPage(1);
-    try {
-      await fetchPosts();
-    } finally {
-      setRefreshing(false);
-    }
-  };
+    await fetchPosts({ withRefreshIndicator: true });
+  }, [fetchPosts, isInitialLoading, refreshing]);
 
   const hasActiveSearch = searchQuery.trim().length > 0;
   const visibleUsers = useMemo(
@@ -340,26 +366,103 @@ export default function HomeScreen() {
     [searchedUsers, showAllUsers],
   );
   const hasMoreUsers = searchedUsers.length > USERS_PREVIEW_COUNT;
+  const hasMorePosts = visiblePosts.length < filteredPosts.length;
 
-  const renderItem = ({
-    item,
-    index: itemIndex,
-  }: {
-    item: Post;
-    index: number;
-  }) => (
-    <PostListItem
-      post={item}
-      index={itemIndex}
-      refreshing={refreshing}
-      isMembershipLoading={isMembershipLoading}
-      initialJoined={joinedGroupIds.has(item.group.id)}
-    />
+  const renderItem = useCallback(
+    ({ item, index: itemIndex }: { item: Post; index: number }) => (
+      <PostListItem
+        post={item}
+        index={itemIndex}
+        refreshing={refreshing}
+        isMembershipLoading={isMembershipLoading}
+        initialJoined={joinedGroupIds.has(item.group.id)}
+      />
+    ),
+    [refreshing, isMembershipLoading, joinedGroupIds],
   );
-  const memoizedRenderItem = useCallback(renderItem, [
-    refreshing,
-    isMembershipLoading,
-    joinedGroupIds,
+  const keyExtractor = useCallback((item: Post) => item.id, []);
+  const onEndReached = useCallback(() => {
+    if (!hasMorePosts) return;
+    setPage((previousPage) => previousPage + 1);
+  }, [hasMorePosts]);
+
+  const listHeader = useMemo(() => {
+    if (!hasActiveSearch) return null;
+
+    return (
+      <View style={styles.searchHeaderWrap}>
+        <View
+          style={[styles.usersCard, { backgroundColor: card, borderColor: border }]}
+        >
+          <View style={styles.usersHeaderRow}>
+            <Text style={[styles.usersTitle, { color: text }]}>Users</Text>
+            {usersLoading ? (
+              <ActivityIndicator size="small" color={primary} />
+            ) : null}
+          </View>
+
+          {!usersLoading && visibleUsers.length === 0 ? (
+            <Text style={[styles.usersEmpty, { color: secondary }]}>
+              No users found
+            </Text>
+          ) : (
+            visibleUsers.map((foundUser) => (
+              <Pressable
+                key={foundUser.id}
+                onPress={() => router.push(`/user/${foundUser.id}`)}
+                style={[styles.userRow, { borderColor: `${border}88` }]}
+              >
+                {foundUser.image ? (
+                  <Image source={{ uri: foundUser.image }} style={styles.avatar} />
+                ) : (
+                  <View
+                    style={[
+                      styles.avatarFallback,
+                      { backgroundColor: `${primary}20` },
+                    ]}
+                  >
+                    <Text style={[styles.avatarFallbackText, { color: primary }]}>
+                      {(foundUser.name[0] ?? "?").toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <Text
+                  numberOfLines={1}
+                  style={[styles.userName, { color: text }]}
+                >
+                  {foundUser.name}
+                </Text>
+              </Pressable>
+            ))
+          )}
+
+          {!usersLoading && hasMoreUsers ? (
+            <Pressable
+              onPress={() => setShowAllUsers((prev) => !prev)}
+              style={styles.showMoreButton}
+            >
+              <Text style={[styles.showMoreText, { color: primary }]}>
+                {showAllUsers ? "Show less" : "Show more users"}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <Text style={[styles.postsHeading, { color: secondary }]}>Posts</Text>
+      </View>
+    );
+  }, [
+    hasActiveSearch,
+    card,
+    border,
+    text,
+    usersLoading,
+    primary,
+    visibleUsers,
+    secondary,
+    router,
+    hasMoreUsers,
+    showAllUsers,
   ]);
 
   const showEmptyState = !isInitialLoading && !refreshing && posts.length === 0;
@@ -398,111 +501,25 @@ export default function HomeScreen() {
           <Animated.View style={{ flex: 1, opacity: contentOpacity }}>
             <FlatList
               data={visiblePosts}
-              keyExtractor={(item) => item.id}
-              renderItem={memoizedRenderItem}
+              keyExtractor={keyExtractor}
+              renderItem={renderItem}
               contentContainerStyle={{
                 paddingHorizontal: 20,
                 paddingTop: insets.top + 80,
                 paddingBottom: insets.bottom + 40,
               }}
-              ListHeaderComponent={
-                hasActiveSearch ? (
-                  <View style={styles.searchHeaderWrap}>
-                    <View
-                      style={[
-                        styles.usersCard,
-                        { backgroundColor: card, borderColor: border },
-                      ]}
-                    >
-                      <View style={styles.usersHeaderRow}>
-                        <Text style={[styles.usersTitle, { color: text }]}>
-                          Users
-                        </Text>
-                        {usersLoading ? (
-                          <ActivityIndicator size="small" color={primary} />
-                        ) : null}
-                      </View>
-
-                      {!usersLoading && visibleUsers.length === 0 ? (
-                        <Text style={[styles.usersEmpty, { color: secondary }]}>
-                          No users found
-                        </Text>
-                      ) : (
-                        visibleUsers.map((foundUser) => (
-                          <Pressable
-                            key={foundUser.id}
-                            onPress={() =>
-                              router.push(`/user/${foundUser.id}`)
-                            }
-                            style={[
-                              styles.userRow,
-                              { borderColor: `${border}88` },
-                            ]}
-                          >
-                            {foundUser.image ? (
-                              <Image
-                                source={{ uri: foundUser.image }}
-                                style={styles.avatar}
-                              />
-                            ) : (
-                              <View
-                                style={[
-                                  styles.avatarFallback,
-                                  { backgroundColor: `${primary}20` },
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.avatarFallbackText,
-                                    { color: primary },
-                                  ]}
-                                >
-                                  {(foundUser.name[0] ?? "?").toUpperCase()}
-                                </Text>
-                              </View>
-                            )}
-                            <Text
-                              numberOfLines={1}
-                              style={[styles.userName, { color: text }]}
-                            >
-                              {foundUser.name}
-                            </Text>
-                          </Pressable>
-                        ))
-                      )}
-
-                      {!usersLoading && hasMoreUsers ? (
-                        <Pressable
-                          onPress={() => setShowAllUsers((prev) => !prev)}
-                          style={styles.showMoreButton}
-                        >
-                          <Text style={[styles.showMoreText, { color: primary }]}>
-                            {showAllUsers ? "Show less" : "Show more users"}
-                          </Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
-
-                    <Text style={[styles.postsHeading, { color: secondary }]}>
-                      Posts
-                    </Text>
-                  </View>
-                ) : null
-              }
+              ListHeaderComponent={listHeader}
               removeClippedSubviews
               maxToRenderPerBatch={5}
               windowSize={7}
               initialNumToRender={5}
+              updateCellsBatchingPeriod={50}
               refreshing={refreshing}
               onRefresh={handleRefresh}
               onScroll={handleScroll}
               scrollEventThrottle={16}
               progressViewOffset={insets.top + 80}
-              onEndReached={() => {
-                if (page * PAGE_SIZE < filteredPosts.length) {
-                  setPage((p) => p + 1);
-                }
-              }}
+              onEndReached={onEndReached}
               onEndReachedThreshold={0.5}
               showsVerticalScrollIndicator={false}
             />
