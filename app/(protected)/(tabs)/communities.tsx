@@ -16,7 +16,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -83,6 +83,9 @@ type CommunityCardProps = {
 
 const RECENT_WINDOW_DAYS = 14;
 const FILTER_TABS: CommunityTab[] = ["Joined", "All"];
+const SKELETON_ROWS = Array.from({ length: 8 }, (_, i) => i);
+const POPULAR_SKELETON_ROWS = Array.from({ length: 6 }, (_, i) => i);
+const MAX_ANIMATED_STAGGER_INDEX = 5;
 
 // Enable layout animation on Android
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -145,7 +148,10 @@ const toRgba = (hex: string, alpha: number) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-function FilterBar({
+const getStaggerDelay = (index: number, step: number) =>
+  Math.min(index, MAX_ANIMATED_STAGGER_INDEX) * step;
+
+const FilterBar = memo(function FilterBar({
   selectedTab,
   sortMode,
   onChangeTab,
@@ -213,7 +219,7 @@ function FilterBar({
       </Pressable>
     </View>
   );
-}
+});
 
 // ─── Shimmer + Skeletons ──────────────────────────────────────────────────────
 type ShimmerProps = {
@@ -290,14 +296,16 @@ type SkeletonPalette = {
 
 type CommunitySkeletonProps = {
   palette: SkeletonPalette;
-  tintColor: string;
   index: number;
 };
 
-function CommunityCardSkeleton({ palette, tintColor, index }: CommunitySkeletonProps) {
+const CommunityCardSkeleton = memo(function CommunityCardSkeleton({
+  palette,
+  index,
+}: CommunitySkeletonProps) {
   return (
     <Animated.View
-      entering={FadeInUp.duration(220).delay(index * 35)}
+      entering={FadeInUp.duration(220).delay(getStaggerDelay(index, 35))}
       layout={Layout.springify().damping(18).mass(0.5)}
       style={[
         styles.card,
@@ -354,17 +362,20 @@ function CommunityCardSkeleton({ palette, tintColor, index }: CommunitySkeletonP
       </View>
     </Animated.View>
   );
-}
+});
 
 type PopularSkeletonProps = {
   palette: SkeletonPalette;
   index: number;
 };
 
-function PopularSkeleton({ palette, index }: PopularSkeletonProps) {
+const PopularSkeleton = memo(function PopularSkeleton({
+  palette,
+  index,
+}: PopularSkeletonProps) {
   return (
     <Animated.View
-      entering={FadeIn.duration(200).delay(index * 60)}
+      entering={FadeIn.duration(200).delay(getStaggerDelay(index, 60))}
       style={styles.popularCardOuter}
     >
       <View style={[styles.popularCard, { borderColor: palette.border }]}>
@@ -385,9 +396,9 @@ function PopularSkeleton({ palette, index }: PopularSkeletonProps) {
       />
     </Animated.View>
   );
-}
+});
 
-function CommunityCard({
+const CommunityCard = memo(function CommunityCard({
   item,
   isJoined,
   isNew,
@@ -518,7 +529,7 @@ function CommunityCard({
       </View>
     </Pressable>
   );
-}
+});
 
 // ─── Popular Rail Card ────────────────────────────────────────────────────────
 type PopularCardProps = {
@@ -533,7 +544,7 @@ type PopularCardProps = {
   onPress: () => void;
 };
 
-function PopularCard({
+const PopularCard = memo(function PopularCard({
   group,
   memberCount,
   cardColor,
@@ -619,7 +630,7 @@ function PopularCard({
       </View>
     </Pressable>
   );
-}
+});
 
 export default function CommunitiesScreen() {
   const insets = useSafeAreaInsets();
@@ -669,12 +680,15 @@ export default function CommunitiesScreen() {
   const segmentBorder = toRgba(borderColor, isDark ? 0.48 : 0.24);
   const segmentSelectedBg = toRgba(tintColor, isDark ? 0.32 : 0.18);
   const segmentSelectedBorder = toRgba(tintColor, isDark ? 0.58 : 0.38);
-  const skeletonPalette: SkeletonPalette = {
-    base: toRgba(textColor, isDark ? 0.08 : 0.06),
-    highlight: toRgba(textColor, isDark ? 0.18 : 0.12),
-    card: raisedSurfaceColor,
-    border: softBorderColor,
-  };
+  const skeletonPalette = useMemo<SkeletonPalette>(
+    () => ({
+      base: toRgba(textColor, isDark ? 0.08 : 0.06),
+      highlight: toRgba(textColor, isDark ? 0.18 : 0.12),
+      card: raisedSurfaceColor,
+      border: softBorderColor,
+    }),
+    [textColor, isDark, raisedSurfaceColor, softBorderColor],
+  );
   const tabBarBackgroundColor = useThemeColor(
     {
       light: "rgba(255, 255, 255, 0.68)",
@@ -783,9 +797,9 @@ export default function CommunitiesScreen() {
     void loadCommunities("initial");
   }, [loadCommunities]);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     void loadCommunities("refresh");
-  };
+  }, [loadCommunities]);
 
   const [debouncedQuery, setDebouncedQuery] = useState("");
   useEffect(() => {
@@ -802,6 +816,24 @@ export default function CommunitiesScreen() {
     () => normalizeText(debouncedQuery),
     [debouncedQuery],
   );
+  const recentlyCreatedGroupIds = useMemo(
+    () => new Set(groups.filter(isRecentlyCreated).map((group) => group.id)),
+    [groups],
+  );
+  const handleOpenCommunity = useCallback(
+    (groupId: string) => {
+      router.push(`/community/${groupId}`);
+    },
+    [router],
+  );
+  const handleChangeFilterTab = useCallback((tab: CommunityTab) => {
+    setVisibilityFilter(tab === "Joined" ? "joined" : "all");
+  }, []);
+  const handleToggleSort = useCallback(() => {
+    setSortMode((current) =>
+      current === "relevance" ? "popular" : "relevance",
+    );
+  }, []);
 
   const visibleGroups = useMemo(() => {
     let scopedGroups = groups;
@@ -850,7 +882,8 @@ export default function CommunitiesScreen() {
       if (joinedDiff !== 0) return joinedDiff;
 
       const recentDiff =
-        Number(isRecentlyCreated(b)) - Number(isRecentlyCreated(a));
+        Number(recentlyCreatedGroupIds.has(b.id)) -
+        Number(recentlyCreatedGroupIds.has(a.id));
       if (recentDiff !== 0) return recentDiff;
 
       return a.name.localeCompare(b.name);
@@ -860,6 +893,7 @@ export default function CommunitiesScreen() {
     joinedSet,
     memberCountByGroup,
     normalizedQuery,
+    recentlyCreatedGroupIds,
     searchTokens,
     sortMode,
     visibilityFilter,
@@ -887,10 +921,272 @@ export default function CommunitiesScreen() {
   const joinedCount = joinedGroupIds.length;
   const totalCount = groups.length;
   const isSkeleton = isLoading && !loadError;
-  const listData = isSkeleton ? Array.from({ length: 8 }, (_, i) => i) : visibleGroups;
+  const listData = useMemo(
+    () => (isSkeleton ? SKELETON_ROWS : visibleGroups),
+    [isSkeleton, visibleGroups],
+  );
 
   // Approximate header height for padding
   const headerPaddingTop = 148;
+  const keyExtractor = useCallback(
+    (item: Group | number) => (isSkeleton ? `skeleton-${item}` : item.id),
+    [isSkeleton],
+  );
+  const itemSeparator = useCallback(
+    () => <View style={styles.itemSeparator} />,
+    [],
+  );
+  const renderItem = useCallback(
+    ({ item, index }: { item: Group | number; index: number }) => {
+      if (isSkeleton) {
+        return <CommunityCardSkeleton palette={skeletonPalette} index={index} />;
+      }
+
+      const group = item as Group;
+      return (
+        <Animated.View
+          entering={FadeInUp.duration(220).delay(getStaggerDelay(index, 35))}
+          exiting={FadeOut.duration(160)}
+          layout={Layout.springify().damping(18).mass(0.5)}
+        >
+          <View style={{ opacity: refreshing ? 0.96 : 1 }}>
+            <CommunityCard
+              item={group}
+              isJoined={joinedSet.has(group.id)}
+              isNew={recentlyCreatedGroupIds.has(group.id)}
+              memberCount={memberCountByGroup[group.id] ?? 0}
+              cardColor={raisedSurfaceColor}
+              textColor={textColor}
+              textSecondaryColor={textSecondaryColor}
+              borderColor={softBorderColor}
+              avatarBgColor={avatarTintColor}
+              shadowColor={shadowColor}
+              successColor={successColor}
+              infoColor={infoColor}
+              tintColor={tintColor}
+              isDark={isDark}
+              onPress={() => handleOpenCommunity(group.id)}
+            />
+          </View>
+        </Animated.View>
+      );
+    },
+    [
+      isSkeleton,
+      skeletonPalette,
+      refreshing,
+      joinedSet,
+      recentlyCreatedGroupIds,
+      memberCountByGroup,
+      raisedSurfaceColor,
+      textColor,
+      textSecondaryColor,
+      softBorderColor,
+      avatarTintColor,
+      shadowColor,
+      successColor,
+      infoColor,
+      tintColor,
+      isDark,
+      handleOpenCommunity,
+    ],
+  );
+  const listHeaderComponent = useMemo(
+    () => (
+      <>
+        {isSkeleton ? (
+          <View
+            style={[
+              styles.discoverySection,
+              { backgroundColor: headerBg, borderColor: softBorderColor },
+            ]}
+          >
+            <View style={styles.discoveryHeader}>
+              <View
+                style={[
+                  styles.discoverIconWrap,
+                  {
+                    backgroundColor: toRgba(tintColor, isDark ? 0.2 : 0.1),
+                    borderColor: toRgba(tintColor, isDark ? 0.38 : 0.2),
+                  },
+                ]}
+              >
+                <TrendingUp size={11} color={tintColor} />
+              </View>
+              <Text style={[styles.discoveryTitle, { color: textColor }]}>
+                Trending
+              </Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.discoveryRail}
+            >
+              {POPULAR_SKELETON_ROWS.map((i) => (
+                <PopularSkeleton
+                  key={`pop-skeleton-${i}`}
+                  palette={skeletonPalette}
+                  index={i}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        ) : showPopularRail ? (
+          <View
+            style={[
+              styles.discoverySection,
+              { backgroundColor: headerBg, borderColor: softBorderColor },
+            ]}
+          >
+            <View style={styles.discoveryHeader}>
+              <View
+                style={[
+                  styles.discoverIconWrap,
+                  {
+                    backgroundColor: toRgba(tintColor, isDark ? 0.2 : 0.1),
+                    borderColor: toRgba(tintColor, isDark ? 0.38 : 0.2),
+                  },
+                ]}
+              >
+                <TrendingUp size={11} color={tintColor} />
+              </View>
+              <Text style={[styles.discoveryTitle, { color: textColor }]}>
+                Trending
+              </Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.discoveryRail}
+            >
+              {popularGroups.map((group) => (
+                <Animated.View
+                  key={group.id}
+                  entering={FadeIn.duration(200).delay(60)}
+                >
+                  <View style={{ transform: [{ scale: refreshing ? 0.99 : 1 }] }}>
+                    <PopularCard
+                      group={group}
+                      memberCount={memberCountByGroup[group.id] ?? 0}
+                      cardColor={raisedSurfaceColor}
+                      textColor={textColor}
+                      textSecondaryColor={textSecondaryColor}
+                      borderColor={softBorderColor}
+                      tintColor={tintColor}
+                      isDark={isDark}
+                      onPress={() => handleOpenCommunity(group.id)}
+                    />
+                  </View>
+                </Animated.View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        <View style={styles.sectionLabelRow}>
+          <Text style={[styles.sectionLabel, { color: textSecondaryColor }]}>
+            {visibilityFilter === "joined"
+              ? "Your communities"
+              : "All communities"}
+          </Text>
+          <Text style={[styles.sectionCount, { color: textSecondaryColor }]}>
+            {visibleGroups.length}
+          </Text>
+        </View>
+
+        <FilterBar
+          selectedTab={visibilityFilter === "joined" ? "Joined" : "All"}
+          sortMode={sortMode}
+          onChangeTab={handleChangeFilterTab}
+          onToggleSort={handleToggleSort}
+          segmentBase={segmentBase}
+          segmentBorder={segmentBorder}
+          segmentSelectedBg={segmentSelectedBg}
+          segmentSelectedBorder={segmentSelectedBorder}
+          textColor={textColor}
+          tintColor={tintColor}
+        />
+      </>
+    ),
+    [
+      isSkeleton,
+      headerBg,
+      softBorderColor,
+      tintColor,
+      isDark,
+      textColor,
+      skeletonPalette,
+      showPopularRail,
+      popularGroups,
+      refreshing,
+      memberCountByGroup,
+      raisedSurfaceColor,
+      textSecondaryColor,
+      handleOpenCommunity,
+      visibilityFilter,
+      visibleGroups.length,
+      sortMode,
+      handleChangeFilterTab,
+      handleToggleSort,
+      segmentBase,
+      segmentBorder,
+      segmentSelectedBg,
+      segmentSelectedBorder,
+    ],
+  );
+  const listEmptyComponent = useMemo(
+    () => (
+      <View style={styles.empty}>
+        <View
+          style={[
+            styles.emptyCard,
+            { backgroundColor: headerBg, borderColor: softBorderColor },
+          ]}
+        >
+          {isLoading ? (
+            <ActivityIndicator color={tintColor} size="large" />
+          ) : loadError ? (
+            <Users size={40} color={textSecondaryColor} />
+          ) : normalizedQuery ? (
+            <Search size={40} color={textSecondaryColor} />
+          ) : (
+            <Compass size={40} color={textSecondaryColor} />
+          )}
+          <Text style={[styles.emptyText, { color: textSecondaryColor }]}>
+            {isLoading
+              ? "Finding communities…"
+              : loadError
+                ? loadError
+                : normalizedQuery
+                  ? "No communities match this search"
+                  : visibilityFilter === "joined"
+                    ? "You haven't joined any communities yet"
+                    : "No communities yet"}
+          </Text>
+          {!isLoading &&
+          !loadError &&
+          visibilityFilter === "joined" &&
+          !normalizedQuery ? (
+            <Text style={[styles.emptyHint, { color: toRgba(tintColor, 0.7) }]}>
+              Switch to All to discover communities
+            </Text>
+          ) : null}
+        </View>
+      </View>
+    ),
+    [
+      headerBg,
+      softBorderColor,
+      isLoading,
+      tintColor,
+      loadError,
+      textSecondaryColor,
+      normalizedQuery,
+      visibilityFilter,
+    ],
+  );
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
@@ -1013,221 +1309,23 @@ export default function CommunitiesScreen() {
       {/* ── Main list ── */}
       <FlatList
         data={listData}
-        keyExtractor={(item) => (isSkeleton ? `skeleton-${item}` : (item as Group).id)}
-        renderItem={({ item, index }) =>
-          isSkeleton ? (
-            <CommunityCardSkeleton
-              palette={skeletonPalette}
-              tintColor={tintColor}
-              index={index}
-            />
-          ) : (
-            <Animated.View
-              entering={FadeInUp.duration(220).delay(index * 40)}
-              exiting={FadeOut.duration(160)}
-              layout={Layout.springify().damping(18).mass(0.5)}
-            >
-              <View style={{ opacity: refreshing ? 0.96 : 1 }}>
-                <CommunityCard
-                  item={item as Group}
-                  isJoined={joinedSet.has((item as Group).id)}
-                  isNew={isRecentlyCreated(item as Group)}
-                  memberCount={memberCountByGroup[(item as Group).id] ?? 0}
-                  cardColor={raisedSurfaceColor}
-                  textColor={textColor}
-                  textSecondaryColor={textSecondaryColor}
-                  borderColor={softBorderColor}
-                  avatarBgColor={avatarTintColor}
-                  shadowColor={shadowColor}
-                  successColor={successColor}
-                  infoColor={infoColor}
-                  tintColor={tintColor}
-                  isDark={isDark}
-                  onPress={() => router.push(`/community/${(item as Group).id}`)}
-                />
-              </View>
-            </Animated.View>
-          )
-        }
-        ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ItemSeparatorComponent={itemSeparator}
         contentContainerStyle={[
           styles.listContent,
           { paddingTop: headerPaddingTop, paddingBottom: 100 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews
+        initialNumToRender={8}
+        maxToRenderPerBatch={6}
+        windowSize={9}
+        updateCellsBatchingPeriod={50}
         refreshing={refreshing}
         onRefresh={handleRefresh}
-        ListHeaderComponent={
-          <>
-            {/* Popular discover rail */}
-            {isSkeleton ? (
-              <View
-                style={[
-                  styles.discoverySection,
-                  { backgroundColor: headerBg, borderColor: softBorderColor },
-                ]}
-              >
-                <View style={styles.discoveryHeader}>
-                  <View
-                    style={[
-                      styles.discoverIconWrap,
-                      {
-                        backgroundColor: toRgba(tintColor, isDark ? 0.2 : 0.1),
-                        borderColor: toRgba(tintColor, isDark ? 0.38 : 0.2),
-                      },
-                    ]}
-                  >
-                    <TrendingUp size={11} color={tintColor} />
-                  </View>
-                  <Text style={[styles.discoveryTitle, { color: textColor }]}>
-                    Trending
-                  </Text>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.discoveryRail}
-                >
-                  {Array.from({ length: 6 }, (_, i) => (
-                    <PopularSkeleton
-                      key={`pop-skeleton-${i}`}
-                      palette={skeletonPalette}
-                      index={i}
-                    />
-                  ))}
-                </ScrollView>
-              </View>
-            ) : showPopularRail ? (
-              <View
-                style={[
-                  styles.discoverySection,
-                  { backgroundColor: headerBg, borderColor: softBorderColor },
-                ]}
-              >
-                <View style={styles.discoveryHeader}>
-                  <View
-                    style={[
-                      styles.discoverIconWrap,
-                      {
-                        backgroundColor: toRgba(tintColor, isDark ? 0.2 : 0.1),
-                        borderColor: toRgba(tintColor, isDark ? 0.38 : 0.2),
-                      },
-                    ]}
-                  >
-                    <TrendingUp size={11} color={tintColor} />
-                  </View>
-                  <Text style={[styles.discoveryTitle, { color: textColor }]}>
-                    Trending
-                  </Text>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.discoveryRail}
-                >
-                  {popularGroups.map((group) => (
-                    <Animated.View
-                      key={group.id}
-                      entering={FadeIn.duration(200).delay(60)}
-                    >
-                      <View style={{ transform: [{ scale: refreshing ? 0.99 : 1 }] }}>
-                        <PopularCard
-                          group={group}
-                          memberCount={memberCountByGroup[group.id] ?? 0}
-                          cardColor={raisedSurfaceColor}
-                          textColor={textColor}
-                          textSecondaryColor={textSecondaryColor}
-                          borderColor={softBorderColor}
-                          tintColor={tintColor}
-                          isDark={isDark}
-                          onPress={() => router.push(`/community/${group.id}`)}
-                        />
-                      </View>
-                    </Animated.View>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-
-            {/* Section label + filter bar */}
-            <View style={styles.sectionLabelRow}>
-              <Text
-                style={[styles.sectionLabel, { color: textSecondaryColor }]}
-              >
-                {visibilityFilter === "joined"
-                  ? "Your communities"
-                  : "All communities"}
-              </Text>
-              <Text
-                style={[styles.sectionCount, { color: textSecondaryColor }]}
-              >
-                {visibleGroups.length}
-              </Text>
-            </View>
-
-            <FilterBar
-              selectedTab={visibilityFilter === "joined" ? "Joined" : "All"}
-              sortMode={sortMode}
-              onChangeTab={(tab) =>
-                setVisibilityFilter(tab === "Joined" ? "joined" : "all")
-              }
-              onToggleSort={() =>
-                setSortMode((current) =>
-                  current === "relevance" ? "popular" : "relevance",
-                )
-              }
-              segmentBase={segmentBase}
-              segmentBorder={segmentBorder}
-              segmentSelectedBg={segmentSelectedBg}
-              segmentSelectedBorder={segmentSelectedBorder}
-              textColor={textColor}
-              tintColor={tintColor}
-            />
-          </>
-        }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <View
-              style={[
-                styles.emptyCard,
-                { backgroundColor: headerBg, borderColor: softBorderColor },
-              ]}
-            >
-              {isLoading ? (
-                <ActivityIndicator color={tintColor} size="large" />
-              ) : loadError ? (
-                <Users size={40} color={textSecondaryColor} />
-              ) : normalizedQuery ? (
-                <Search size={40} color={textSecondaryColor} />
-              ) : (
-                <Compass size={40} color={textSecondaryColor} />
-              )}
-              <Text style={[styles.emptyText, { color: textSecondaryColor }]}>
-                {isLoading
-                  ? "Finding communities…"
-                  : loadError
-                    ? loadError
-                    : normalizedQuery
-                      ? "No communities match this search"
-                      : visibilityFilter === "joined"
-                        ? "You haven't joined any communities yet"
-                        : "No communities yet"}
-              </Text>
-              {!isLoading &&
-              !loadError &&
-              visibilityFilter === "joined" &&
-              !normalizedQuery ? (
-                <Text
-                  style={[styles.emptyHint, { color: toRgba(tintColor, 0.7) }]}
-                >
-                  Switch to All to discover communities
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        }
+        ListHeaderComponent={listHeaderComponent}
+        ListEmptyComponent={listEmptyComponent}
       />
     </View>
   );
