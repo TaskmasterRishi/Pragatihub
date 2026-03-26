@@ -32,8 +32,8 @@ import {
   View,
 } from "react-native";
 
-import JoinCommunityButton from "@/components/JoinCommunityButton";
 import EntityBadge from "@/components/EntityBadge";
+import JoinCommunityButton from "@/components/JoinCommunityButton";
 import VoteButtons from "@/components/VoteButtons";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -1070,8 +1070,9 @@ function PostListItem({
   const [awardUsersSheetTitle, setAwardUsersSheetTitle] = useState("");
   const [awardUsersLoading, setAwardUsersLoading] = useState(false);
   const [awardUsers, setAwardUsers] = useState<AwardListUser[]>([]);
-  const [achievementCounts, setAchievementCounts] =
-    useState<Record<AchievementId, number>>(emptyAchievementCounts);
+  const [achievementCounts, setAchievementCounts] = useState<
+    Record<AchievementId, number>
+  >(emptyAchievementCounts);
   const [awardedByMe, setAwardedByMe] = useState<Record<string, true>>({});
   const loadingPulseAnim = useRef(new Animated.Value(0.85)).current;
   const reportSheetAnim = useRef(new Animated.Value(0)).current;
@@ -1229,7 +1230,10 @@ function PostListItem({
       const badgeKey = String((row as any).badge_key ?? "");
       if (!isAchievementId(badgeKey)) continue;
       nextCounts[badgeKey] = (nextCounts[badgeKey] ?? 0) + 1;
-      if (user?.id && String((row as any).awarded_by_user_id ?? "") === user.id) {
+      if (
+        user?.id &&
+        String((row as any).awarded_by_user_id ?? "") === user.id
+      ) {
         nextAwardedByMe[badgeKey] = true;
       }
     }
@@ -1270,13 +1274,14 @@ function PostListItem({
   );
   const visibleAchievements = isOnDetail
     ? ACHIEVEMENTS
-    : ACHIEVEMENTS.filter((item) => (achievementCounts[item.id] ?? 0) > 0).slice(
-        0,
-        4,
-      );
+    : ACHIEVEMENTS.filter(
+        (item) => (achievementCounts[item.id] ?? 0) > 0,
+      ).slice(0, 4);
   const compactAchievements = ACHIEVEMENTS.filter(
     (item) => (achievementCounts[item.id] ?? 0) > 0,
   ).slice(0, 6);
+  const showFloatingCompactAchievements =
+    !isOnDetail && compactAchievements.length > 0;
   const awardAchievement = async (id: AchievementId) => {
     if (!canAwardPost) {
       Alert.alert("Not available", "You cannot award your own post.");
@@ -1304,7 +1309,10 @@ function PostListItem({
       delete next[id];
       return next;
     });
-    setAchievementCounts((prev) => ({ ...prev, [id]: Math.max((prev[id] ?? 1) - 1, 0) }));
+    setAchievementCounts((prev) => ({
+      ...prev,
+      [id]: Math.max((prev[id] ?? 1) - 1, 0),
+    }));
 
     if ((error as any)?.code === "23505") {
       Alert.alert("Already awarded", "You already gave this badge.");
@@ -1313,7 +1321,9 @@ function PostListItem({
 
     Alert.alert("Could not award", error.message ?? "Please try again.");
   };
-  const openAwardUsersSheet = async (achievement: (typeof ACHIEVEMENTS)[number]) => {
+  const openAwardUsersSheet = async (
+    achievement: (typeof ACHIEVEMENTS)[number],
+  ) => {
     setAwardUsersSheetTitle(`${achievement.emoji} ${achievement.label}`);
     setAwardUsers([]);
     setAwardUsersLoading(true);
@@ -1445,7 +1455,11 @@ function PostListItem({
             borderRadius: 18,
             padding: 14,
             borderWidth: 1,
-            marginBottom: isOnDetail ? 10 : 14,
+            marginBottom: isOnDetail
+              ? 10
+              : showFloatingCompactAchievements
+                ? 40
+                : 14,
             borderColor: cardBorder,
             shadowColor: "#0b1220",
             shadowOpacity: isOnDetail ? 0.04 : 0.06,
@@ -1653,7 +1667,11 @@ function PostListItem({
                 <>
                   <AnimatedIconButton>
                     <View
-                      style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
                     >
                       <Pressable onPress={() => setAwardSheetVisible(true)}>
                         <Trophy size={17} color={muted} />
@@ -1708,7 +1726,7 @@ function PostListItem({
             </View>
           </View>
 
-          {(isOnDetail || compactAchievements.length > 0) && (
+          {isOnDetail && (
             <View
               style={{
                 marginTop: 10,
@@ -1717,97 +1735,108 @@ function PostListItem({
                 paddingTop: 8,
               }}
             >
-              {isOnDetail ? (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    flexWrap: "wrap",
-                    justifyContent: "space-between",
-                    rowGap: 8,
-                  }}
-                >
-                  {visibleAchievements.map((item) => {
-                    const count = achievementCounts[item.id] ?? 0;
-                    const dim = count === 0;
-                    return (
-                      <Pressable
-                        key={item.id}
-                        onLongPress={() => void openAwardUsersSheet(item)}
-                        delayLongPress={220}
-                        style={{
-                          width: "48.5%",
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
-                          borderWidth: 1,
-                          borderRadius: 12,
-                          paddingHorizontal: 10,
-                          paddingVertical: 8,
-                          backgroundColor: dim ? `${muted}10` : `${item.color}16`,
-                          borderColor: dim ? `${border}` : `${item.color}4A`,
-                        }}
-                      >
-                        <Text style={{ fontSize: 16 }}>{item.emoji}</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text
-                            style={{
-                              color: dim ? muted : item.color,
-                              fontSize: 11.5,
-                              fontWeight: "700",
-                            }}
-                            numberOfLines={1}
-                          >
-                            {item.label}
-                          </Text>
-                        </View>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  justifyContent: "space-between",
+                  rowGap: 8,
+                }}
+              >
+                {visibleAchievements.map((item) => {
+                  const count = achievementCounts[item.id] ?? 0;
+                  const dim = count === 0;
+                  return (
+                    <Pressable
+                      key={item.id}
+                      onLongPress={() => void openAwardUsersSheet(item)}
+                      delayLongPress={220}
+                      style={{
+                        width: "48.5%",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                        borderWidth: 1,
+                        borderRadius: 12,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                        backgroundColor: dim ? `${muted}10` : `${item.color}16`,
+                        borderColor: dim ? `${border}` : `${item.color}4A`,
+                      }}
+                    >
+                      <Text style={{ fontSize: 16 }}>{item.emoji}</Text>
+                      <View style={{ flex: 1 }}>
                         <Text
                           style={{
                             color: dim ? muted : item.color,
-                            fontSize: 12,
-                            fontWeight: "800",
+                            fontSize: 11.5,
+                            fontWeight: "700",
                           }}
+                          numberOfLines={1}
                         >
-                          {count}
+                          {item.label}
                         </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  {compactAchievements.map((item) => {
-                    const count = achievementCounts[item.id] ?? 0;
-                    return (
-                      <View key={item.id}>
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 4,
-                            borderWidth: 1,
-                            borderRadius: 999,
-                            paddingHorizontal: 8,
-                            paddingVertical: 5,
-                            backgroundColor: `${item.color}14`,
-                            borderColor: `${item.color}4A`,
-                          }}
-                        >
-                          <Text style={{ fontSize: 14 }}>{item.emoji}</Text>
-                          <Text
-                            style={{
-                              color: item.color,
-                              fontSize: 11,
-                              fontWeight: "800",
-                            }}
-                          >
-                            {count}
-                          </Text>
-                        </View>
                       </View>
-                    );
-                  })}
-                </View>
-              )}
+                      <Text
+                        style={{
+                          color: dim ? muted : item.color,
+                          fontSize: 12,
+                          fontWeight: "800",
+                        }}
+                      >
+                        {count}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          {showFloatingCompactAchievements && (
+            <View
+              style={{
+                position: "absolute",
+                left: 14,
+                right: 14,
+                bottom: -22,
+                flexDirection: "row",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              {compactAchievements.map((item) => {
+                const count = achievementCounts[item.id] ?? 0;
+                return (
+                  <View key={item.id}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 4,
+                        borderWidth: 1,
+                        borderRadius: 999,
+                        paddingHorizontal: 8,
+                        paddingVertical: 5,
+                        backgroundColor: card,
+                        borderColor: `${item.color}66`,
+                      }}
+                    >
+                      <Text style={{ fontSize: 14 }}>{item.emoji}</Text>
+                      <Text
+                        style={{
+                          color: item.color,
+                          fontSize: 11,
+                          fontWeight: "800",
+                        }}
+                      >
+                        {count}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
           )}
 
@@ -2472,12 +2501,22 @@ function PostListItem({
                         borderRadius: 14,
                         paddingHorizontal: 10,
                         paddingVertical: 10,
-                        backgroundColor: already ? `${item.color}20` : `${item.color}12`,
-                        borderColor: already ? `${item.color}70` : `${item.color}48`,
+                        backgroundColor: already
+                          ? `${item.color}20`
+                          : `${item.color}12`,
+                        borderColor: already
+                          ? `${item.color}70`
+                          : `${item.color}48`,
                         opacity: !canAwardPost ? 0.55 : 1,
                       }}
                     >
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
                         <Text style={{ fontSize: 18 }}>{item.emoji}</Text>
                         <View style={{ flex: 1 }}>
                           <Text
@@ -2580,9 +2619,13 @@ function PostListItem({
                 contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
               >
                 {awardUsersLoading ? (
-                  <Text style={{ color: muted, fontSize: 13 }}>Loading users...</Text>
+                  <Text style={{ color: muted, fontSize: 13 }}>
+                    Loading users...
+                  </Text>
                 ) : awardUsers.length === 0 ? (
-                  <Text style={{ color: muted, fontSize: 13 }}>No users yet</Text>
+                  <Text style={{ color: muted, fontSize: 13 }}>
+                    No users yet
+                  </Text>
                 ) : (
                   awardUsers.map((item) => (
                     <View
@@ -2612,7 +2655,12 @@ function PostListItem({
                       />
                       <EntityBadge kind="user" size={12} />
                       <Text
-                        style={{ color: text, fontSize: 14, fontWeight: "700", flex: 1 }}
+                        style={{
+                          color: text,
+                          fontSize: 14,
+                          fontWeight: "700",
+                          flex: 1,
+                        }}
                         numberOfLines={1}
                       >
                         {item.name}
