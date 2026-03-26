@@ -5,12 +5,16 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
 import { setTabBarVisible } from "@/utils/tabBarVisibility";
 import { useUser } from "@clerk/clerk-expo";
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -18,6 +22,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PAGE_SIZE = 5;
+const USERS_PREVIEW_COUNT = 3;
+
+type SearchUser = {
+  id: string;
+  name: string;
+  image: string | null;
+};
 
 const EmptyState = () => {
   const text = useThemeColor({}, "text");
@@ -71,12 +82,21 @@ const EmptyState = () => {
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const backgroundColor = useThemeColor({}, "background");
+  const card = useThemeColor({}, "card");
+  const border = useThemeColor({}, "border");
+  const primary = useThemeColor({}, "primary");
+  const text = useThemeColor({}, "text");
+  const secondary = useThemeColor({}, "textSecondary");
   const { user } = useUser();
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchedUsers, setSearchedUsers] = useState<SearchUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [showAllUsers, setShowAllUsers] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isMembershipLoading, setIsMembershipLoading] = useState(true);
   const [joinedGroupIds, setJoinedGroupIds] = useState<Set<string>>(new Set());
@@ -260,6 +280,46 @@ export default function HomeScreen() {
     setPage(1);
   }, [searchQuery]);
 
+  useEffect(() => {
+    const q = searchQuery.trim();
+    setShowAllUsers(false);
+
+    if (!q) {
+      setSearchedUsers([]);
+      setUsersLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setUsersLoading(true);
+      let query = supabase
+        .from("users")
+        .select("id, name, image")
+        .ilike("name", `%${q}%`)
+        .limit(12);
+
+      if (user?.id) {
+        query = query.neq("id", user.id);
+      }
+
+      const { data, error } = await query;
+
+      if (cancelled) return;
+      if (error) {
+        setSearchedUsers([]);
+      } else {
+        setSearchedUsers((data ?? []) as SearchUser[]);
+      }
+      setUsersLoading(false);
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, user?.id]);
+
   const handleRefresh = async () => {
     if (refreshing || isInitialLoading) return;
     setRefreshing(true);
@@ -270,6 +330,16 @@ export default function HomeScreen() {
       setRefreshing(false);
     }
   };
+
+  const hasActiveSearch = searchQuery.trim().length > 0;
+  const visibleUsers = useMemo(
+    () =>
+      showAllUsers
+        ? searchedUsers
+        : searchedUsers.slice(0, USERS_PREVIEW_COUNT),
+    [searchedUsers, showAllUsers],
+  );
+  const hasMoreUsers = searchedUsers.length > USERS_PREVIEW_COUNT;
 
   const renderItem = ({
     item,
@@ -335,6 +405,96 @@ export default function HomeScreen() {
                 paddingTop: insets.top + 80,
                 paddingBottom: insets.bottom + 40,
               }}
+              ListHeaderComponent={
+                hasActiveSearch ? (
+                  <View style={styles.searchHeaderWrap}>
+                    <View
+                      style={[
+                        styles.usersCard,
+                        { backgroundColor: card, borderColor: border },
+                      ]}
+                    >
+                      <View style={styles.usersHeaderRow}>
+                        <Text style={[styles.usersTitle, { color: text }]}>
+                          Users
+                        </Text>
+                        {usersLoading ? (
+                          <ActivityIndicator size="small" color={primary} />
+                        ) : null}
+                      </View>
+
+                      {!usersLoading && visibleUsers.length === 0 ? (
+                        <Text style={[styles.usersEmpty, { color: secondary }]}>
+                          No users found
+                        </Text>
+                      ) : (
+                        visibleUsers.map((foundUser) => (
+                          <Pressable
+                            key={foundUser.id}
+                            onPress={() =>
+                              router.push({
+                                pathname: "/(protected)/dm/[id]",
+                                params: {
+                                  id: foundUser.id,
+                                  name: foundUser.name,
+                                },
+                              })
+                            }
+                            style={[
+                              styles.userRow,
+                              { borderColor: `${border}88` },
+                            ]}
+                          >
+                            {foundUser.image ? (
+                              <Image
+                                source={{ uri: foundUser.image }}
+                                style={styles.avatar}
+                              />
+                            ) : (
+                              <View
+                                style={[
+                                  styles.avatarFallback,
+                                  { backgroundColor: `${primary}20` },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.avatarFallbackText,
+                                    { color: primary },
+                                  ]}
+                                >
+                                  {(foundUser.name[0] ?? "?").toUpperCase()}
+                                </Text>
+                              </View>
+                            )}
+                            <Text
+                              numberOfLines={1}
+                              style={[styles.userName, { color: text }]}
+                            >
+                              {foundUser.name}
+                            </Text>
+                          </Pressable>
+                        ))
+                      )}
+
+                      {!usersLoading && hasMoreUsers ? (
+                        <Pressable
+                          onPress={() => setShowAllUsers((prev) => !prev)}
+                          style={styles.showMoreButton}
+                        >
+                          <Text style={[styles.showMoreText, { color: primary }]}>
+                            {showAllUsers ? "Show less" : "Show more users"}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+
+                    <Text style={[styles.postsHeading, { color: secondary }]}>
+                      Posts
+                    </Text>
+                  </View>
+                ) : null
+              }
               removeClippedSubviews
               maxToRenderPerBatch={5}
               windowSize={7}
@@ -358,3 +518,71 @@ export default function HomeScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  searchHeaderWrap: {
+    marginBottom: 12,
+    gap: 10,
+  },
+  usersCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+  },
+  usersHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  usersTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  usersEmpty: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderBottomWidth: 1,
+    paddingBottom: 8,
+  },
+  avatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+  avatarFallback: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarFallbackText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  userName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  showMoreButton: {
+    alignSelf: "flex-start",
+    paddingTop: 2,
+  },
+  showMoreText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  postsHeading: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+});
