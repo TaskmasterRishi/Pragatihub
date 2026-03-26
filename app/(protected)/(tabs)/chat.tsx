@@ -1,3 +1,4 @@
+import EntityBadge from "@/components/EntityBadge";
 import { useGlobalPresence } from "@/hooks/use-global-presence";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import {
@@ -191,9 +192,12 @@ export default function ChatHomeTab() {
                   )}
                   <View style={[styles.onlineDot, { backgroundColor: "#22C55E", borderColor: card }]} />
                 </View>
-                <Text style={[styles.onlineName, { color: text }]} numberOfLines={1}>
-                  {target.name}
-                </Text>
+                <View style={styles.onlineNameRow}>
+                  <EntityBadge kind="user" size={12} />
+                  <Text style={[styles.onlineName, { color: text }]} numberOfLines={1}>
+                    {target.name}
+                  </Text>
+                </View>
               </Pressable>
             ))}
           </ScrollView>
@@ -245,9 +249,12 @@ export default function ChatHomeTab() {
                     ) : null}
                   </View>
                   <View style={styles.rowMeta}>
-                    <Text style={[styles.rowTitle, { color: text }]} numberOfLines={1}>
-                      {target.name}
-                    </Text>
+                    <View style={styles.rowTitleWrap}>
+                      <EntityBadge kind="user" size={12} />
+                      <Text style={[styles.rowTitle, { color: text }]} numberOfLines={1}>
+                        {target.name}
+                      </Text>
+                    </View>
                     <Text
                       style={[
                         styles.rowSubtitle,
@@ -283,9 +290,12 @@ export default function ChatHomeTab() {
                   ) : null}
                 </View>
                 <View style={styles.rowMeta}>
-                  <Text style={[styles.rowTitle, { color: text }]} numberOfLines={1}>
-                    {target.name}
-                  </Text>
+                  <View style={styles.rowTitleWrap}>
+                    <EntityBadge kind="user" size={12} />
+                    <Text style={[styles.rowTitle, { color: text }]} numberOfLines={1}>
+                      {target.name}
+                    </Text>
+                  </View>
                   <Text
                     style={[
                       styles.rowSubtitle,
@@ -396,6 +406,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     textAlign: "center",
+    flex: 1,
+  },
+  onlineNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    width: "100%",
   },
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
   listContent: { paddingBottom: 24, gap: 8 },
@@ -441,6 +458,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   rowMeta: { flex: 1 },
+  rowTitleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   rowTitle: {
     fontSize: 15,
     fontWeight: "700",

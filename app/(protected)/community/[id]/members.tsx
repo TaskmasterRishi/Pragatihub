@@ -1,4 +1,5 @@
 import AppLoader from "@/components/AppLoader";
+import EntityBadge from "@/components/EntityBadge";
 import { useCommunityPresence } from "@/hooks/use-community-presence";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroupById, type Group } from "@/lib/actions/groups";
@@ -411,12 +412,15 @@ export default function CommunityMembersTab() {
 
               {/* Info */}
               <View style={styles.memberInfo}>
-                <Text
-                  style={[styles.memberName, { color: text }]}
-                  numberOfLines={1}
-                >
-                  {member.name}
-                </Text>
+                <View style={styles.memberNameRow}>
+                  <EntityBadge kind="user" size={12} />
+                  <Text
+                    style={[styles.memberName, { color: text }]}
+                    numberOfLines={1}
+                  >
+                    {member.name}
+                  </Text>
+                </View>
                 {member.joined_at && (
                   <Text
                     style={[styles.memberMeta, { color: secondary }]}
@@ -672,6 +676,11 @@ const styles = StyleSheet.create({
 
   memberInfo: { flex: 1, minWidth: 0 },
   memberName: { fontSize: 15, fontWeight: "700" },
+  memberNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   memberMeta: { fontSize: 12.5, marginTop: 2 },
   memberLiveMeta: { fontSize: 11.5, marginTop: 3, fontWeight: "700" },
 

@@ -1,4 +1,5 @@
 import { Comment } from "@/constants/types";
+import EntityBadge from "@/components/EntityBadge";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { formatDistanceToNowStrict } from "date-fns";
 import {
@@ -77,9 +78,10 @@ function CommentContent({ comment, isReply = false, onReply }: CommentDisplayPro
         )}
         <View className="ml-2 flex-1">
           <View className="flex-row items-center">
+            <EntityBadge kind="user" size={12} />
             <Text
               className={isReply ? "text-xs" : "text-sm"}
-              style={{ color: text, fontWeight: "600" }}
+              style={{ color: text, fontWeight: "600", marginLeft: 6 }}
               numberOfLines={1}
             >
               {comment.user.name}

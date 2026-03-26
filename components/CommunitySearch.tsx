@@ -1,3 +1,4 @@
+import EntityBadge from "@/components/EntityBadge";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { supabase } from "@/lib/Supabase";
 import { useUser } from "@clerk/clerk-expo";
@@ -122,12 +123,15 @@ export default function CommunitySearch({
                 <Text style={{ color: mutedColor }} className="text-xs">
                   Community
                 </Text>
-                <Text
-                  style={{ color: textColor }}
-                  className="text-sm font-medium"
-                >
-                  {selectedCommunity.name}
-                </Text>
+                <View className="flex-row items-center gap-1">
+                  <EntityBadge kind="community" size={12} />
+                  <Text
+                    style={{ color: textColor }}
+                    className="text-sm font-medium"
+                  >
+                    {selectedCommunity.name}
+                  </Text>
+                </View>
               </View>
             </>
           ) : (
@@ -225,12 +229,15 @@ export default function CommunitySearch({
                 >
                   {renderAvatar(item.image, 32)}
                   <View className="flex-1">
-                    <Text
-                      style={{ color: textColor }}
-                      className="font-medium text-sm"
-                    >
-                      {item.name}
-                    </Text>
+                    <View className="flex-row items-center gap-1">
+                      <EntityBadge kind="community" size={12} />
+                      <Text
+                        style={{ color: textColor }}
+                        className="font-medium text-sm"
+                      >
+                        {item.name}
+                      </Text>
+                    </View>
                   </View>
                   {selectedCommunity?.id === item.id && (
                     <View

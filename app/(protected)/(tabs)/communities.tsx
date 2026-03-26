@@ -1,3 +1,4 @@
+import EntityBadge from "@/components/EntityBadge";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { fetchGroups, type Group } from "@/lib/actions/groups";
 import { supabase } from "@/lib/Supabase";
@@ -452,13 +453,16 @@ function CommunityCard({
         {/* Content */}
         <View style={styles.cardText}>
           <View style={styles.cardTitleRow}>
-            <Text
-              style={[styles.name, { color: textColor }]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {item.name}
-            </Text>
+            <View style={styles.nameRow}>
+              <EntityBadge kind="community" size={12} />
+              <Text
+                style={[styles.name, { color: textColor }]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {item.name}
+              </Text>
+            </View>
             <View style={styles.badgeRow}>
               {isNew ? (
                 <View
@@ -603,13 +607,16 @@ function PopularCard({
       </View>
 
       {/* Name below circle */}
-      <Text
-        style={[styles.popularName, { color: textColor }]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {group.name}
-      </Text>
+      <View style={styles.popularNameRow}>
+        <EntityBadge kind="community" size={12} />
+        <Text
+          style={[styles.popularName, { color: textColor }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {group.name}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -1215,7 +1222,7 @@ export default function CommunitiesScreen() {
                 <Text
                   style={[styles.emptyHint, { color: toRgba(tintColor, 0.7) }]}
                 >
-                  Switch to "All" to discover communities
+                  Switch to All to discover communities
                 </Text>
               ) : null}
             </View>
@@ -1426,6 +1433,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
   badgeRow: {
     flexDirection: "row",
     gap: 4,
@@ -1554,6 +1568,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     textAlign: "center",
+    flexShrink: 1,
+  },
+  popularNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    maxWidth: "100%",
   },
   /* ── Empty state ── */
   empty: {
