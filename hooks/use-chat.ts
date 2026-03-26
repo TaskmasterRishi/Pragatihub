@@ -9,6 +9,7 @@ import {
 import { supabase } from "@/lib/Supabase";
 import type {
   AnyChatMessage,
+  ChatReplyRef,
   ChatMediaType,
   ChatUser,
   CommunityChatMessage,
@@ -35,6 +36,7 @@ type SendPayload = {
   mediaType?: ChatMediaType;
   mediaUrl?: string | null;
   replyToMessageId?: string | null;
+  replyTo?: ChatReplyRef | null;
   mentionUserIds?: string[];
   mentionHandles?: string[];
 };
@@ -56,11 +58,39 @@ type MessageDeletePayload = {
   messageId: string;
 };
 
+type MessageCreatePayload = {
+  id: string;
+  user_id: string;
+  content: string;
+  media_type?: ChatMediaType | null;
+  media_url?: string | null;
+  reply_to_message_id?: string | null;
+  edited_at?: string | null;
+  is_deleted?: boolean | null;
+  created_at: string;
+  user?: ChatUser | null;
+};
+
 function toTypingUser(row: any): TypingUser {
   return {
     id: String(row.user_id),
     name: String(row.user_name ?? "Someone"),
     image: (row.user_image as string | null) ?? null,
+  };
+}
+
+function mapReplyRefRow(row: any): ChatReplyRef {
+  return {
+    id: String(row.id),
+    content: String(row.content ?? ""),
+    user_id: String(row.user_id),
+    user: row.user
+      ? {
+          id: String(row.user.id),
+          name: String(row.user.name ?? "Unknown"),
+          image: (row.user.image as string | null) ?? null,
+        }
+      : null,
   };
 }
 
@@ -85,6 +115,14 @@ export function useChat({
   const [loading, setLoading] = useState(true);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const toReplyRef = useCallback((message: AnyChatMessage): ChatReplyRef => {
+    return {
+      id: message.id,
+      content: message.content ?? "",
+      user_id: message.user_id,
+      user: message.user ?? null,
+    };
+  }, []);
   const applyReactionChange = useCallback((payload: ReactionChangePayload) => {
     setMessages((prev) =>
       prev.map((message) => {
@@ -121,12 +159,101 @@ export function useChat({
           content: payload.content,
           edited_at: payload.editedAt,
         } as AnyChatMessage;
+      }).map((message) => {
+        if (message.reply_to?.id !== payload.messageId) return message;
+        return {
+          ...message,
+          reply_to: {
+            ...(message.reply_to ?? {
+              id: payload.messageId,
+              user_id: "",
+              user: null,
+            }),
+            content: payload.content,
+          },
+        } as AnyChatMessage;
       }),
     );
   }, []);
   const applyMessageDelete = useCallback((payload: MessageDeletePayload) => {
-    setMessages((prev) => prev.filter((message) => message.id !== payload.messageId));
+    setMessages((prev) =>
+      prev
+        .filter((message) => message.id !== payload.messageId)
+        .map((message) => {
+          if (message.reply_to?.id !== payload.messageId) return message;
+          return {
+            ...message,
+            reply_to: {
+              ...(message.reply_to ?? {
+                id: payload.messageId,
+                user_id: "",
+                user: null,
+              }),
+              content: "Message deleted",
+            },
+          } as AnyChatMessage;
+        }),
+    );
   }, []);
+  const applyIncomingMessage = useCallback(
+    (base: AnyChatMessage) => {
+      let shouldHydrateReplyRef = false;
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === base.id)) return prev;
+
+        const optimisticIndex = prev.findIndex(
+          (m) =>
+            m.clientStatus === "sending" &&
+            m.user_id === base.user_id &&
+            m.content === base.content &&
+            (m.media_url ?? null) === (base.media_url ?? null),
+        );
+
+        if (optimisticIndex >= 0) {
+          const next = [...prev];
+          const replyTo = base.reply_to_message_id
+            ? prev.find((message) => message.id === base.reply_to_message_id)
+            : null;
+          next[optimisticIndex] = base;
+          if (replyTo) {
+            next[optimisticIndex] = {
+              ...(next[optimisticIndex] as AnyChatMessage),
+              reply_to: toReplyRef(replyTo),
+            } as AnyChatMessage;
+          }
+          return next;
+        }
+
+        const replyTo = base.reply_to_message_id
+          ? prev.find((message) => message.id === base.reply_to_message_id)
+          : null;
+        if (base.reply_to_message_id && !replyTo) {
+          shouldHydrateReplyRef = true;
+        }
+        return [
+          ...prev,
+          {
+            ...base,
+            reply_to: replyTo ? toReplyRef(replyTo) : null,
+          } as AnyChatMessage,
+        ];
+      });
+
+      if (base.reply_to_message_id && shouldHydrateReplyRef) {
+        void hydrateReplyRef(base.reply_to_message_id).then((replyRef) => {
+          if (!replyRef) return;
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === base.id
+                ? ({ ...message, reply_to: replyRef } as AnyChatMessage)
+                : message,
+            ),
+          );
+        });
+      }
+    },
+    [hydrateReplyRef, toReplyRef],
+  );
 
   const activeContextId =
     chatType === "community" ? communityId : resolvedPrivateChatId ?? undefined;
@@ -176,6 +303,23 @@ export function useChat({
       image: data.image,
     };
   }, []);
+  const hydrateReplyRef = useCallback(
+    async (messageId: string): Promise<ChatReplyRef | null> => {
+      if (!messageId) return null;
+      const table =
+        chatType === "community"
+          ? "community_chat_messages"
+          : "private_chat_messages";
+      const { data } = await supabase
+        .from(table)
+        .select("id, content, user_id, user:users(id, name, image)")
+        .eq("id", messageId)
+        .maybeSingle();
+      if (!data) return null;
+      return mapReplyRefRow(data);
+    },
+    [chatType],
+  );
 
   const loadInitialData = useCallback(async () => {
     if (!isAuthed || !currentUserId || !activeContextId) return;
@@ -242,29 +386,11 @@ export function useChat({
             ...row,
             media_type: (row.media_type as ChatMediaType | null) ?? "text",
             media_url: (row.media_url as string | null) ?? null,
+            reply_to_message_id: (row.reply_to_message_id as string | null) ?? null,
             clientStatus: "sent" as const,
             user: sender,
-          };
-
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === base.id)) return prev;
-
-            const optimisticIndex = prev.findIndex(
-              (m) =>
-                m.clientStatus === "sending" &&
-                m.user_id === base.user_id &&
-                m.content === base.content &&
-                (m.media_url ?? null) === (base.media_url ?? null),
-            );
-
-            if (optimisticIndex >= 0) {
-              const next = [...prev];
-              next[optimisticIndex] = base;
-              return next;
-            }
-
-            return [...prev, base];
-          });
+          } as AnyChatMessage;
+          applyIncomingMessage(base);
         },
       )
       .on(
@@ -278,7 +404,8 @@ export function useChat({
         async (payload) => {
           const row = payload.new as any;
           setMessages((prev) =>
-            prev.map((message) => {
+            prev
+              .map((message) => {
               if (message.id !== String(row.id)) return message;
               return {
                 ...message,
@@ -296,25 +423,33 @@ export function useChat({
                   typeof row.created_at === "string"
                     ? row.created_at
                     : message.created_at,
-                ...(chatType === "community"
-                  ? {
-                      reply_to_message_id:
-                        (row.reply_to_message_id as string | null) ??
-                        (message as CommunityChatMessage).reply_to_message_id ??
-                        null,
-                      edited_at:
-                        (row.edited_at as string | null) ??
-                        (message as CommunityChatMessage).edited_at ??
-                        null,
-                      is_deleted:
-                        typeof row.is_deleted === "boolean"
-                          ? row.is_deleted
-                          : (message as CommunityChatMessage).is_deleted ?? false,
-                    }
-                  : {}),
+                reply_to_message_id:
+                  (row.reply_to_message_id as string | null) ??
+                  message.reply_to_message_id ??
+                  null,
+                edited_at:
+                  (row.edited_at as string | null) ?? message.edited_at ?? null,
+                is_deleted:
+                  typeof row.is_deleted === "boolean"
+                    ? row.is_deleted
+                    : message.is_deleted ?? false,
                 clientStatus: "sent" as const,
               } as AnyChatMessage;
-            }),
+            })
+              .map((message) => {
+                if (message.reply_to?.id !== String(row.id)) return message;
+                return {
+                  ...message,
+                  reply_to: {
+                    ...(message.reply_to ?? {
+                      id: String(row.id),
+                      user_id: String(row.user_id ?? ""),
+                      user: null,
+                    }),
+                    content: String(row.content ?? ""),
+                  },
+                } as AnyChatMessage;
+              }),
           );
         },
       )
@@ -412,6 +547,50 @@ export function useChat({
         if (!messageId) return;
         applyMessageDelete({ messageId });
       })
+      .on("broadcast", { event: "message_created" }, ({ payload }) => {
+        const data = payload as Partial<MessageCreatePayload> | null;
+        const id = String(data?.id ?? "");
+        const userId = String(data?.user_id ?? "");
+        const content =
+          typeof data?.content === "string" ? data.content : "";
+        const createdAt = String(data?.created_at ?? "");
+        if (!id || !userId || !createdAt) return;
+
+        const incoming: AnyChatMessage =
+          chatType === "community"
+            ? ({
+                id,
+                group_id: activeContextId,
+                user_id: userId,
+                content,
+                media_type: (data?.media_type as ChatMediaType | null) ?? "text",
+                media_url: (data?.media_url as string | null) ?? null,
+                reply_to_message_id:
+                  (data?.reply_to_message_id as string | null) ?? null,
+                edited_at: (data?.edited_at as string | null) ?? null,
+                is_deleted: Boolean(data?.is_deleted ?? false),
+                created_at: createdAt,
+                clientStatus: "sent",
+                user: data?.user ?? null,
+              } as CommunityChatMessage)
+            : ({
+                id,
+                chat_id: activeContextId,
+                user_id: userId,
+                content,
+                media_type: (data?.media_type as ChatMediaType | null) ?? "text",
+                media_url: (data?.media_url as string | null) ?? null,
+                reply_to_message_id:
+                  (data?.reply_to_message_id as string | null) ?? null,
+                edited_at: (data?.edited_at as string | null) ?? null,
+                is_deleted: Boolean(data?.is_deleted ?? false),
+                created_at: createdAt,
+                clientStatus: "sent",
+                user: data?.user ?? null,
+              } as PrivateChatMessage);
+
+        applyIncomingMessage(incoming);
+      })
       .on(
         "postgres_changes",
         {
@@ -422,7 +601,24 @@ export function useChat({
         },
         (payload) => {
           const row = payload.old as any;
-          setMessages((prev) => prev.filter((message) => message.id !== String(row.id)));
+          setMessages((prev) =>
+            prev
+              .filter((message) => message.id !== String(row.id))
+              .map((message) => {
+                if (message.reply_to?.id !== String(row.id)) return message;
+                return {
+                  ...message,
+                  reply_to: {
+                    ...(message.reply_to ?? {
+                      id: String(row.id),
+                      user_id: String(row.user_id ?? ""),
+                      user: null,
+                    }),
+                    content: "Message deleted",
+                  },
+                } as AnyChatMessage;
+              }),
+          );
         },
       )
       .on("presence", { event: "sync" }, () => {
@@ -460,11 +656,13 @@ export function useChat({
     activeContextId,
     applyMessageDelete,
     applyMessageUpdate,
+    applyIncomingMessage,
     applyReactionChange,
     chatType,
     currentUserId,
     hydrateSender,
     isAuthed,
+    toReplyRef,
     user,
   ]);
 
@@ -487,6 +685,7 @@ export function useChat({
       mediaType = "text",
       mediaUrl = null,
       replyToMessageId = null,
+      replyTo = null,
       mentionUserIds = [],
       mentionHandles = [],
     }: SendPayload) => {
@@ -504,6 +703,7 @@ export function useChat({
         media_type: mediaType,
         media_url: mediaUrl,
         reply_to_message_id: replyToMessageId,
+        reply_to: replyTo,
         edited_at: null,
         is_deleted: false,
         created_at: now,
@@ -600,6 +800,32 @@ export function useChat({
             return m;
           }),
         );
+
+        const createdPayload: MessageCreatePayload = {
+          id: data.id,
+          user_id: data.user_id,
+          content: data.content ?? normalized,
+          media_type: (data.media_type as ChatMediaType | null) ?? mediaType,
+          media_url: (data.media_url as string | null) ?? mediaUrl,
+          reply_to_message_id: data.reply_to_message_id ?? replyToMessageId ?? null,
+          edited_at: data.edited_at ?? null,
+          is_deleted: data.is_deleted ?? false,
+          created_at: data.created_at,
+          user: {
+            id: currentUserId,
+            name: user?.fullName || user?.firstName || "You",
+            image: user?.imageUrl ?? null,
+          },
+        };
+
+        const channel = channelRef.current;
+        if (channel) {
+          await channel.send({
+            type: "broadcast",
+            event: "message_created",
+            payload: createdPayload,
+          });
+        }
       }
 
       setSending(false);

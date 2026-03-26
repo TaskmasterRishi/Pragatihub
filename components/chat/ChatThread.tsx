@@ -26,6 +26,7 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
+  CornerUpLeft,
   ChevronDown,
   ChevronLeft,
   Gem,
@@ -490,6 +491,31 @@ function MessageGroupRow({
                       </Text>
                     </View>
                   ))}
+                </View>
+              ) : null}
+              {msg.reply_to_message_id ? (
+                <View
+                  style={[
+                    groupStyles.replyRefWrap,
+                    mine ? groupStyles.replyRefWrapMine : groupStyles.replyRefWrapOther,
+                    { borderColor: bubbleBorderColor, backgroundColor: `${primary}10` },
+                  ]}
+                >
+                  <View style={groupStyles.replyRefHeader}>
+                    <CornerUpLeft size={11} color={primary} />
+                    <Text
+                      style={[groupStyles.replyRefAuthor, { color: primary }]}
+                      numberOfLines={1}
+                    >
+                      {msg.reply_to?.user?.name ?? "Replied message"}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[groupStyles.replyRefText, { color: secondary }]}
+                    numberOfLines={1}
+                  >
+                    {msg.reply_to?.content?.trim() || "Original message"}
+                  </Text>
                 </View>
               ) : null}
               <Pressable
@@ -1080,6 +1106,14 @@ export default function ChatThread({
       mediaType: parsed.mediaType ?? "text",
       mediaUrl: parsed.mediaUrl ?? null,
       replyToMessageId: replyTarget?.id ?? null,
+      replyTo: replyTarget
+        ? {
+            id: replyTarget.id,
+            content: replyTarget.content?.trim() || "Media message",
+            user_id: replyTarget.user_id,
+            user: replyTarget.user ?? null,
+          }
+        : null,
       mentionUserIds,
       mentionHandles,
     });
@@ -1995,6 +2029,35 @@ const groupStyles = StyleSheet.create({
     marginBottom: 8,
   },
   messageText: { fontSize: 14.5, lineHeight: 21 },
+  replyRefWrap: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginBottom: 4,
+    maxWidth: "100%",
+  },
+  replyRefWrapMine: {
+    alignSelf: "flex-end",
+    alignItems: "flex-end",
+  },
+  replyRefWrapOther: {
+    alignSelf: "flex-start",
+    alignItems: "flex-start",
+  },
+  replyRefAuthor: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  replyRefHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  replyRefText: {
+    fontSize: 11.5,
+    marginTop: 1,
+  },
   reactionOverlay: {
     position: "absolute",
     bottom: -10,
