@@ -1,12 +1,14 @@
-import { Comment, Post } from "@/constants/types";
-import PostListItem from "@/components/PostListItem";
-import CommentItem from "@/components/CommentItem";
 import AppLoader from "@/components/AppLoader";
+import CommentItem from "@/components/CommentItem";
+import PostListItem from "@/components/PostListItem";
 import Settings from "@/components/Settings";
-import CustomDialog, { CustomDialogAction } from "@/components/ui/custom-dialog";
+import CustomDialog, {
+  CustomDialogAction,
+} from "@/components/ui/custom-dialog";
+import { Comment, Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { deletePost } from "@/lib/actions/posts";
 import { Group } from "@/lib/actions/groups";
+import { deletePost } from "@/lib/actions/posts";
 import { supabase } from "@/lib/Supabase";
 import { useRouter } from "expo-router";
 import {
@@ -15,8 +17,8 @@ import {
   MessageCircle,
   MessageSquare,
   Pen,
-  Users,
   Settings as SettingsIcon,
+  Users,
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -59,7 +61,9 @@ const PROFILE_AWARDS = [
   { id: "toxic", emoji: "🚫", label: "Toxic", color: "#DC2626" },
 ] as const;
 type ProfileAwardId = (typeof PROFILE_AWARDS)[number]["id"];
-const PROFILE_AWARD_IDS = new Set<string>(PROFILE_AWARDS.map((award) => award.id));
+const PROFILE_AWARD_IDS = new Set<string>(
+  PROFILE_AWARDS.map((award) => award.id),
+);
 const createEmptyProfileAwardCounts = () =>
   Object.fromEntries(PROFILE_AWARDS.map((award) => [award.id, 0])) as Record<
     ProfileAwardId,
@@ -89,9 +93,9 @@ export default function ProfileView({
   const [communitiesLoading, setCommunitiesLoading] = useState(false);
   const [karmaCount, setKarmaCount] = useState(0);
   const [postCount, setPostCount] = useState(0);
-  const [awardCounts, setAwardCounts] = useState<Record<ProfileAwardId, number>>(
-    createEmptyProfileAwardCounts,
-  );
+  const [awardCounts, setAwardCounts] = useState<
+    Record<ProfileAwardId, number>
+  >(createEmptyProfileAwardCounts);
   const [refreshing, setRefreshing] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -190,7 +194,9 @@ export default function ProfileView({
           downvotes: downvotesCount || 0,
           nr_of_comments: commentsCount || 0,
           is_edited:
+            //@ts-ignore
             typeof post.updated_at === "string" &&
+            //@ts-ignore
             new Date(post.updated_at).getTime() >
               new Date(post.created_at).getTime(),
         };
@@ -421,7 +427,10 @@ export default function ProfileView({
         label: "Delete",
         variant: "destructive",
         onPress: async () => {
-          const { error, storageWarning } = await deletePost(post.id, profileUserId);
+          const { error, storageWarning } = await deletePost(
+            post.id,
+            profileUserId,
+          );
 
           if (error) {
             Alert.alert("Could not delete post", error.message ?? "Try again.");
@@ -515,13 +524,19 @@ export default function ProfileView({
           <View className="w-full flex-row-reverse items-center justify-between mx-auto px-2">
             <View className="flex-row gap-6">
               <View className="items-center">
-                <Text className="text-base font-bold" style={{ color: primaryForeground }}>
+                <Text
+                  className="text-base font-bold"
+                  style={{ color: primaryForeground }}
+                >
                   {karmaCount}
                 </Text>
                 <Text className="text-xs text-white/70">Upvotes</Text>
               </View>
               <View className="items-center">
-                <Text className="text-base font-bold" style={{ color: primaryForeground }}>
+                <Text
+                  className="text-base font-bold"
+                  style={{ color: primaryForeground }}
+                >
                   {postCount}
                 </Text>
                 <Text className="text-xs text-white/70">Posts</Text>
@@ -535,7 +550,10 @@ export default function ProfileView({
               >
                 {displayName || "User"}
               </Text>
-              <Text className="mt-1 text-left text-sm text-white/80" numberOfLines={1}>
+              <Text
+                className="mt-1 text-left text-sm text-white/80"
+                numberOfLines={1}
+              >
                 {username?.trim()?.length ? username : "@user"}
               </Text>
             </View>
@@ -602,9 +620,16 @@ export default function ProfileView({
         <View className="px-4 pt-16">
           <View
             className="rounded-2xl p-3"
-            style={{ backgroundColor: cardColor, borderWidth: 1, borderColor: "#ffffff14" }}
+            style={{
+              backgroundColor: cardColor,
+              borderWidth: 1,
+              borderColor: "#ffffff14",
+            }}
           >
-            <Text className="text-sm font-semibold mb-3" style={{ color: textColor }}>
+            <Text
+              className="text-sm font-semibold mb-3"
+              style={{ color: textColor }}
+            >
               All Awards
             </Text>
             <View className="flex-row flex-wrap">
@@ -624,7 +649,10 @@ export default function ProfileView({
                         {award.label}
                       </Text>
                     </View>
-                    <Text className="text-sm font-bold" style={{ color: textColor }}>
+                    <Text
+                      className="text-sm font-bold"
+                      style={{ color: textColor }}
+                    >
                       {awardCounts[award.id] ?? 0}
                     </Text>
                   </View>
@@ -685,7 +713,9 @@ export default function ProfileView({
                     <FileText
                       size={18}
                       color={
-                        activeTab === tab ? primaryForeground : textSecondaryColor
+                        activeTab === tab
+                          ? primaryForeground
+                          : textSecondaryColor
                       }
                       className="mr-2"
                     />
@@ -693,7 +723,9 @@ export default function ProfileView({
                     <MessageSquare
                       size={18}
                       color={
-                        activeTab === tab ? primaryForeground : textSecondaryColor
+                        activeTab === tab
+                          ? primaryForeground
+                          : textSecondaryColor
                       }
                       className="mr-2"
                     />
@@ -701,7 +733,9 @@ export default function ProfileView({
                     <Users
                       size={18}
                       color={
-                        activeTab === tab ? primaryForeground : textSecondaryColor
+                        activeTab === tab
+                          ? primaryForeground
+                          : textSecondaryColor
                       }
                       className="mr-2"
                     />
@@ -709,7 +743,10 @@ export default function ProfileView({
                   <Text
                     className="font-semibold"
                     style={{
-                      color: activeTab === tab ? primaryForeground : textSecondaryColor,
+                      color:
+                        activeTab === tab
+                          ? primaryForeground
+                          : textSecondaryColor,
                     }}
                   >
                     {tab === "posts"
@@ -727,7 +764,11 @@ export default function ProfileView({
             {activeTab === "posts" ? (
               <View>
                 {postsLoading ? (
-                  <AppLoader size="small" color={textSecondaryColor} style={{ paddingVertical: 32 }} />
+                  <AppLoader
+                    size="small"
+                    color={textSecondaryColor}
+                    style={{ paddingVertical: 32 }}
+                  />
                 ) : userPosts.length > 0 ? (
                   <View className="gap-3">
                     {userPosts.map((post) => (
@@ -736,19 +777,33 @@ export default function ProfileView({
                         post={post}
                         hideJoinButton={true}
                         showOwnerActions={isOwnProfile}
-                        onEditPost={isOwnProfile ? handleOpenEditPost : undefined}
-                        onDeletePost={isOwnProfile ? handleDeletePost : undefined}
+                        onEditPost={
+                          isOwnProfile ? handleOpenEditPost : undefined
+                        }
+                        onDeletePost={
+                          isOwnProfile ? handleDeletePost : undefined
+                        }
                         onSharePost={handleSharePost}
                       />
                     ))}
                   </View>
                 ) : (
                   <View className="items-center justify-center py-8">
-                    <FileText size={48} color={textSecondaryColor} className="opacity-50" />
-                    <Text className="text-center font-medium" style={{ color: textColor }}>
+                    <FileText
+                      size={48}
+                      color={textSecondaryColor}
+                      className="opacity-50"
+                    />
+                    <Text
+                      className="text-center font-medium"
+                      style={{ color: textColor }}
+                    >
                       No posts yet
                     </Text>
-                    <Text className="mt-1 text-center text-sm" style={{ color: textSecondaryColor }}>
+                    <Text
+                      className="mt-1 text-center text-sm"
+                      style={{ color: textSecondaryColor }}
+                    >
                       {isOwnProfile
                         ? "Your posts will appear here"
                         : "Posts by this user will appear here"}
@@ -761,21 +816,33 @@ export default function ProfileView({
             {activeTab === "comments" ? (
               <View>
                 {commentsLoading ? (
-                  <AppLoader size="small" color={textSecondaryColor} style={{ paddingVertical: 32 }} />
+                  <AppLoader
+                    size="small"
+                    color={textSecondaryColor}
+                    style={{ paddingVertical: 32 }}
+                  />
                 ) : userComments.length > 0 ? (
                   <View className="gap-3">
                     {userComments.map((comment) => (
                       <View key={comment.id}>
                         {comment.post ? (
                           <TouchableOpacity
-                            onPress={() => router.push(`/post/${comment.post_id}`)}
+                            onPress={() =>
+                              router.push(`/post/${comment.post_id}`)
+                            }
                             className="mb-2 rounded-xl px-3 py-2"
                             style={{ backgroundColor: cardColor }}
                           >
-                            <Text className="text-xs font-semibold" style={{ color: textSecondaryColor }}>
+                            <Text
+                              className="text-xs font-semibold"
+                              style={{ color: textSecondaryColor }}
+                            >
                               Commented on
                             </Text>
-                            <Text className="text-sm font-semibold" style={{ color: textColor }}>
+                            <Text
+                              className="text-sm font-semibold"
+                              style={{ color: textColor }}
+                            >
                               {comment.post.title}
                             </Text>
                           </TouchableOpacity>
@@ -786,11 +853,21 @@ export default function ProfileView({
                   </View>
                 ) : (
                   <View className="items-center justify-center py-8">
-                    <MessageSquare size={48} color={textSecondaryColor} className="opacity-50" />
-                    <Text className="text-center font-medium" style={{ color: textColor }}>
+                    <MessageSquare
+                      size={48}
+                      color={textSecondaryColor}
+                      className="opacity-50"
+                    />
+                    <Text
+                      className="text-center font-medium"
+                      style={{ color: textColor }}
+                    >
                       No comments yet
                     </Text>
-                    <Text className="mt-1 text-center text-sm" style={{ color: textSecondaryColor }}>
+                    <Text
+                      className="mt-1 text-center text-sm"
+                      style={{ color: textSecondaryColor }}
+                    >
                       {isOwnProfile
                         ? "Your comments will appear here"
                         : "Comments by this user will appear here"}
@@ -803,7 +880,11 @@ export default function ProfileView({
             {activeTab === "communities" ? (
               <View>
                 {communitiesLoading ? (
-                  <AppLoader size="small" color={textSecondaryColor} style={{ paddingVertical: 32 }} />
+                  <AppLoader
+                    size="small"
+                    color={textSecondaryColor}
+                    style={{ paddingVertical: 32 }}
+                  />
                 ) : userCommunities.length > 0 ? (
                   <View className="gap-3">
                     {userCommunities.map((group) => (
@@ -818,10 +899,16 @@ export default function ProfileView({
                           className="h-12 w-12 rounded-xl bg-gray-200"
                         />
                         <View className="flex-1">
-                          <Text className="text-base font-semibold" style={{ color: textColor }}>
+                          <Text
+                            className="text-base font-semibold"
+                            style={{ color: textColor }}
+                          >
                             {group.name}
                           </Text>
-                          <Text className="text-sm" style={{ color: textSecondaryColor }}>
+                          <Text
+                            className="text-sm"
+                            style={{ color: textSecondaryColor }}
+                          >
                             Tap to view community
                           </Text>
                         </View>
@@ -830,11 +917,21 @@ export default function ProfileView({
                   </View>
                 ) : (
                   <View className="items-center justify-center py-8">
-                    <Users size={48} color={textSecondaryColor} className="opacity-50" />
-                    <Text className="text-center font-medium" style={{ color: textColor }}>
+                    <Users
+                      size={48}
+                      color={textSecondaryColor}
+                      className="opacity-50"
+                    />
+                    <Text
+                      className="text-center font-medium"
+                      style={{ color: textColor }}
+                    >
                       No communities yet
                     </Text>
-                    <Text className="mt-1 text-center text-sm" style={{ color: textSecondaryColor }}>
+                    <Text
+                      className="mt-1 text-center text-sm"
+                      style={{ color: textSecondaryColor }}
+                    >
                       {isOwnProfile
                         ? "Communities you join will appear here"
                         : "Communities joined by this user will appear here"}
@@ -868,8 +965,14 @@ export default function ProfileView({
             className="flex-1 items-center justify-center px-5"
             style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
           >
-            <View className="w-full rounded-2xl p-4" style={{ backgroundColor: cardColor }}>
-              <Text className="mb-3 text-lg font-semibold" style={{ color: textColor }}>
+            <View
+              className="w-full rounded-2xl p-4"
+              style={{ backgroundColor: cardColor }}
+            >
+              <Text
+                className="mb-3 text-lg font-semibold"
+                style={{ color: textColor }}
+              >
                 Edit post
               </Text>
 
@@ -917,7 +1020,9 @@ export default function ProfileView({
                   style={{ backgroundColor: primaryColor }}
                   disabled={savingEdit}
                 >
-                  <Text style={{ color: primaryForeground }}>{savingEdit ? "Saving..." : "Save"}</Text>
+                  <Text style={{ color: primaryForeground }}>
+                    {savingEdit ? "Saving..." : "Save"}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>

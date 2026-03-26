@@ -5,11 +5,11 @@ import { syncUserToSupabase } from "@/lib/actions/users";
 import { setSupabaseAccessTokenProvider } from "@/lib/Supabase";
 import { useWarmUpBrowser } from "@/hooks/useWarmUpBrowser";
 import { useAuth, useOAuth, useSignIn, useSignUp } from "@clerk/clerk-expo";
+import * as AuthSession from "expo-auth-session";
 import { LinearGradient } from "expo-linear-gradient";
 import { Redirect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -25,9 +25,10 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
 type AuthMode = "login" | "register" | "verify";
+type ClientTrustStrategy = "email_code" | "phone_code";
+const POST_AUTH_ROUTE = "/";
+const OAUTH_CALLBACK_PATH = "oauth-native-callback";
 
 /* -------------------- ERROR NORMALIZER -------------------- */
 const getClerkErrorMessage = (err: any): string => {
@@ -41,13 +42,25 @@ const getClerkErrorMessage = (err: any): string => {
   return err?.message || "Unexpected error occurred";
 };
 
-export default function AuthScreen() {
-  const { isSignedIn, getToken } = useAuth();
+const pickClientTrustStrategy = (
+  attempt: any,
+): ClientTrustStrategy | null => {
+  const factors = attempt?.supportedSecondFactors;
+  if (!Array.isArray(factors)) return null;
 
-  if (isSignedIn) {
-    return <Redirect href="../(protected)/(tabs)/index" />;
+  if (factors.some((factor) => factor?.strategy === "email_code")) {
+    return "email_code";
   }
 
+  if (factors.some((factor) => factor?.strategy === "phone_code")) {
+    return "phone_code";
+  }
+
+  return null;
+};
+
+export default function AuthScreen() {
+  const { isSignedIn, getToken } = useAuth();
   useWarmUpBrowser();
   const router = useRouter();
   const primaryColor = useThemeColor({}, "primary");
@@ -63,7 +76,9 @@ export default function AuthScreen() {
   } = useSignUp();
   const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
 
-  const [mode, setMode] = useState<AuthMode>("login");
+  const [mode, setMode] = useState<AuthMode | "clientTrust">("login");
+  const [clientTrustStrategy, setClientTrustStrategy] =
+    useState<ClientTrustStrategy | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [error, setError] = useState<string>("");
 
@@ -136,18 +151,56 @@ export default function AuthScreen() {
   const onSignInPress = async () => {
     try {
       if (!isSignInLoaded) throw new Error("Auth not ready");
+      const identifier = email.trim();
+      if (!identifier) throw new Error("Please enter your email");
+      if (!password) throw new Error("Please enter your password");
 
       const attempt = await signIn.create({
-        identifier: email,
+        identifier,
         password,
       });
 
-      if (attempt.status !== "complete") {
-        throw new Error("Login incomplete. Please try again.");
+      if (attempt.status === "complete" && attempt.createdSessionId) {
+        await setSignInActive({ session: attempt.createdSessionId });
+        router.replace(POST_AUTH_ROUTE);
+        return;
       }
 
-      await setSignInActive({ session: attempt.createdSessionId });
-      router.replace("/(protected)/(tabs)");
+      // Some Clerk flows return an intermediate state first, then require explicit first-factor completion.
+      if (attempt.status === "needs_first_factor") {
+        const firstFactorAttempt = await signIn.attemptFirstFactor({
+          strategy: "password",
+          password,
+        });
+
+        if (
+          firstFactorAttempt.status === "complete" &&
+          firstFactorAttempt.createdSessionId
+        ) {
+          await setSignInActive({ session: firstFactorAttempt.createdSessionId });
+          router.replace(POST_AUTH_ROUTE);
+          return;
+        }
+      }
+
+      if (attempt.status === "needs_client_trust") {
+        const strategy = pickClientTrustStrategy(attempt);
+        if (!strategy) {
+          throw new Error(
+            "This sign-in needs device verification, but no supported verification method is available.",
+          );
+        }
+
+        await signIn.prepareSecondFactor({ strategy } as any);
+        setClientTrustStrategy(strategy);
+        setCode("");
+        setMode("clientTrust");
+        return;
+      }
+
+      throw new Error(
+        `Login incomplete (${attempt.status}). Please try again.`,
+      );
     } catch (err) {
       throw new Error(getClerkErrorMessage(err));
     }
@@ -208,7 +261,36 @@ export default function AuthScreen() {
         }
       }
 
-      router.replace("/(protected)/(tabs)");
+      router.replace(POST_AUTH_ROUTE);
+    } catch (err) {
+      throw new Error(getClerkErrorMessage(err));
+    }
+  };
+
+  const onClientTrustVerifyPress = async () => {
+    try {
+      if (!isSignInLoaded) throw new Error("Auth not ready");
+      if (!clientTrustStrategy) {
+        throw new Error("Verification method unavailable. Please sign in again.");
+      }
+
+      const trimmedCode = code.trim();
+      if (!trimmedCode) {
+        throw new Error("Please enter the verification code.");
+      }
+
+      const attempt = await signIn.attemptSecondFactor({
+        strategy: clientTrustStrategy,
+        code: trimmedCode,
+      } as any);
+
+      if (attempt.status === "complete" && attempt.createdSessionId) {
+        await setSignInActive({ session: attempt.createdSessionId });
+        router.replace(POST_AUTH_ROUTE);
+        return;
+      }
+
+      throw new Error(`Verification incomplete (${attempt.status}).`);
     } catch (err) {
       throw new Error(getClerkErrorMessage(err));
     }
@@ -216,14 +298,20 @@ export default function AuthScreen() {
 
   const onGoogleSignInPress = useCallback(async () => {
     try {
-      const { createdSessionId, setActive } = await startOAuthFlow();
+      const redirectUrl = AuthSession.makeRedirectUri({
+        path: OAUTH_CALLBACK_PATH,
+      });
+      const { createdSessionId, setActive } = await startOAuthFlow({
+        redirectUrl,
+      });
       if (!createdSessionId) throw new Error("OAuth failed");
 
-      setActive?.({ session: createdSessionId });
+      await setActive?.({ session: createdSessionId });
+      router.replace(POST_AUTH_ROUTE);
     } catch (err) {
       throw new Error(getClerkErrorMessage(err));
     }
-  }, []);
+  }, [router, startOAuthFlow]);
 
   const handleSubmit = async () => {
     try {
@@ -231,6 +319,7 @@ export default function AuthScreen() {
       if (mode === "login") await onSignInPress();
       if (mode === "register") await onSignUpPress();
       if (mode === "verify") await onVerifyPress();
+      if (mode === "clientTrust") await onClientTrustVerifyPress();
     } catch (err: any) {
       setError(err?.message ?? "Something went wrong");
     }
@@ -262,6 +351,10 @@ export default function AuthScreen() {
     setCode(text);
     clearError();
   };
+
+  if (isSignedIn) {
+    return <Redirect href={POST_AUTH_ROUTE} />;
+  }
 
   return (
     <View style={{ flex: 1 }}>
@@ -313,7 +406,9 @@ export default function AuthScreen() {
                     ? "Welcome Back"
                     : mode === "register"
                       ? "Create Account"
-                      : "Verify Email"}
+                      : mode === "verify"
+                        ? "Verify Email"
+                        : "Verify Device"}
                 </Text>
                 <Text
                   style={{
@@ -327,7 +422,9 @@ export default function AuthScreen() {
                     ? "Sign in to continue to PragatiHub"
                     : mode === "register"
                       ? "Join PragatiHub and start your journey"
-                      : "Enter the code sent to your email"}
+                      : mode === "verify"
+                        ? "Enter the code sent to your email"
+                        : `Enter the ${clientTrustStrategy === "phone_code" ? "SMS" : "email"} code to trust this device`}
                 </Text>
               </Animated.View>
 
@@ -347,7 +444,7 @@ export default function AuthScreen() {
                   </View>
                 )}
 
-                {mode === "verify" ? (
+                {mode === "verify" || mode === "clientTrust" ? (
                   // VERIFY FORM
                   <View>
                     <InputField
@@ -481,14 +578,16 @@ export default function AuthScreen() {
                           ? "Sign In"
                           : mode === "register"
                             ? "Create Account"
-                            : "Verify"}
+                            : mode === "verify"
+                              ? "Verify"
+                              : "Verify Device"}
                       </Text>
                     </TouchableOpacity>
                   </View>
                 </Animated.View>
 
                 {/* Google Sign In - Only shown in Login/Register, not Verify */}
-                {mode !== "verify" && (
+                {mode !== "verify" && mode !== "clientTrust" && (
                   <TouchableOpacity
                     onPress={async () => {
                       setError("");
@@ -525,7 +624,7 @@ export default function AuthScreen() {
               </Animated.View>
 
               {/* Toggle Link */}
-              {mode !== "verify" && (
+              {mode !== "verify" && mode !== "clientTrust" && (
                 <Animated.View
                   style={[
                     {
@@ -563,9 +662,14 @@ export default function AuthScreen() {
               )}
 
               {/* Back to Login from Verify */}
-              {mode === "verify" && (
+              {(mode === "verify" || mode === "clientTrust") && (
                 <TouchableOpacity
-                  onPress={() => setMode("login")}
+                  onPress={() => {
+                    setMode("login");
+                    setClientTrustStrategy(null);
+                    setCode("");
+                    setError("");
+                  }}
                   style={{ marginTop: 20, alignItems: "center" }}
                 >
                   <Text style={{ color: "white", fontWeight: "600" }}>

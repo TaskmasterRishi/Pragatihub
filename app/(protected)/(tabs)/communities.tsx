@@ -37,8 +37,8 @@ import Animated, {
   FadeIn,
   FadeInUp,
   FadeOut,
-  Layout,
   interpolate,
+  Layout,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -88,7 +88,10 @@ const POPULAR_SKELETON_ROWS = Array.from({ length: 6 }, (_, i) => i);
 const MAX_ANIMATED_STAGGER_INDEX = 5;
 
 // Enable layout animation on Android
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -176,7 +179,9 @@ const FilterBar = memo(function FilterBar({
               key={tab}
               onPress={() => {
                 if (tab === selectedTab) return;
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                LayoutAnimation.configureNext(
+                  LayoutAnimation.Presets.easeInEaseOut,
+                );
                 onChangeTab(tab);
               }}
               style={({ pressed }) => [
@@ -929,6 +934,7 @@ export default function CommunitiesScreen() {
   // Approximate header height for padding
   const headerPaddingTop = 148;
   const keyExtractor = useCallback(
+    //@ts-ignore
     (item: Group | number) => (isSkeleton ? `skeleton-${item}` : item.id),
     [isSkeleton],
   );
@@ -939,7 +945,9 @@ export default function CommunitiesScreen() {
   const renderItem = useCallback(
     ({ item, index }: { item: Group | number; index: number }) => {
       if (isSkeleton) {
-        return <CommunityCardSkeleton palette={skeletonPalette} index={index} />;
+        return (
+          <CommunityCardSkeleton palette={skeletonPalette} index={index} />
+        );
       }
 
       const group = item as Group;
@@ -1066,7 +1074,9 @@ export default function CommunitiesScreen() {
                   key={group.id}
                   entering={FadeIn.duration(200).delay(60)}
                 >
-                  <View style={{ transform: [{ scale: refreshing ? 0.99 : 1 }] }}>
+                  <View
+                    style={{ transform: [{ scale: refreshing ? 0.99 : 1 }] }}
+                  >
                     <PopularCard
                       group={group}
                       memberCount={memberCountByGroup[group.id] ?? 0}

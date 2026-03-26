@@ -10,7 +10,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
 
 export const unstable_settings = {
-  anchor: "(tabs)",
+  anchor: "(protected)",
 };
 
 export default function RootLayout() {
@@ -57,6 +57,11 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider value={navigationTheme}>
           <Stack>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="oauth-native-callback"
+              options={{ headerShown: false }}
+            />
             <Stack.Screen
               name="(onboarding)"
               options={{ headerShown: false }}

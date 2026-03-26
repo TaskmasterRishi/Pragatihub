@@ -76,7 +76,9 @@ function AnimatedIconButton({
   extraScale?: Animated.Value;
 }) {
   const { scale, onPressIn, onPressOut } = usePressScale();
-  const combinedScale = extraScale ? Animated.multiply(scale, extraScale) : scale;
+  const combinedScale = extraScale
+    ? Animated.multiply(scale, extraScale)
+    : scale;
 
   return (
     <Animated.View style={{ transform: [{ scale: combinedScale }] }}>
@@ -144,32 +146,33 @@ export default function VoteButtons({
     const idField = up.idField;
 
     // Fetch current counts and (if logged in) user's vote state in parallel
-    const [upCountRes, downCountRes, upUserRes, downUserRes] = await Promise.all([
-      supabase
-        .from(up.table)
-        .select("*", { count: "exact", head: true })
-        .eq(idField, itemId),
-      supabase
-        .from(down.table)
-        .select("*", { count: "exact", head: true })
-        .eq(idField, itemId),
-      user?.id
-        ? supabase
-            .from(up.table)
-            .select("user_id")
-            .eq(idField, itemId)
-            .eq("user_id", user.id)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-      user?.id
-        ? supabase
-            .from(down.table)
-            .select("user_id")
-            .eq(idField, itemId)
-            .eq("user_id", user.id)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-    ]);
+    const [upCountRes, downCountRes, upUserRes, downUserRes] =
+      await Promise.all([
+        supabase
+          .from(up.table)
+          .select("*", { count: "exact", head: true })
+          .eq(idField, itemId),
+        supabase
+          .from(down.table)
+          .select("*", { count: "exact", head: true })
+          .eq(idField, itemId),
+        user?.id
+          ? supabase
+              .from(up.table)
+              .select("user_id")
+              .eq(idField, itemId)
+              .eq("user_id", user.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        user?.id
+          ? supabase
+              .from(down.table)
+              .select("user_id")
+              .eq(idField, itemId)
+              .eq("user_id", user.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
 
     // Always update counts from server so they stay in sync across screens
     setUpvotes(upCountRes.count ?? 0);
@@ -203,7 +206,7 @@ export default function VoteButtons({
   useFocusEffect(
     useCallback(() => {
       loadVoteState();
-    }, [loadVoteState])
+    }, [loadVoteState]),
   );
 
   const removeUpvote = async () => {
@@ -228,6 +231,7 @@ export default function VoteButtons({
   const addUpvote = async () => {
     if (!user?.id) return false;
     const { up } = VOTE_CONFIG[type];
+    //@ts-ignore
     const { error } = await supabase.from(up.table).insert({
       [up.idField]: itemId,
       user_id: user.id,
@@ -265,6 +269,7 @@ export default function VoteButtons({
   const addDownvote = async () => {
     if (!user?.id) return false;
     const { down } = VOTE_CONFIG[type];
+    //@ts-ignore
     const { error } = await supabase.from(down.table).insert({
       [down.idField]: itemId,
       user_id: user.id,

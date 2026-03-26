@@ -1,12 +1,12 @@
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { setSupabaseAccessTokenProvider } from "@/lib/Supabase";
+import { syncUserToSupabase } from "@/lib/actions/users";
 import { communityPresenceManager } from "@/lib/realtime/community-presence";
 import { globalPresenceManager } from "@/lib/realtime/global-presence";
-import { syncUserToSupabase } from "@/lib/actions/users";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth, useUser } from "@clerk/clerk-expo";
-import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BlurView } from "expo-blur";
+import Constants from "expo-constants";
 import { Redirect, Stack, useRouter, useSegments } from "expo-router";
 import React, { useEffect, useRef } from "react";
 import {
@@ -19,8 +19,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function AppLayout() {
-  const { isSignedIn, getToken } = useAuth();
-  const { isLoaded, user } = useUser();
+  const { isSignedIn, getToken, isLoaded: isAuthLoaded } = useAuth();
+  const { isLoaded: isUserLoaded, user } = useUser();
   const router = useRouter();
   const segments = useSegments();
   const notificationListenerRef = useRef<any>(null);
@@ -63,15 +63,17 @@ export default function AppLayout() {
   );
   const screenBackground = useThemeColor({}, "background");
   const shouldShowGlassBackdrop =
+    //@ts-ignore
     Platform.OS !== "web" && segments.includes("(tabs)");
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) {
+    if (!isAuthLoaded || !isSignedIn) {
       setSupabaseAccessTokenProvider(null);
       return;
     }
 
-    const template = process.env.EXPO_PUBLIC_CLERK_SUPABASE_TEMPLATE ?? "supabase";
+    const template =
+      process.env.EXPO_PUBLIC_CLERK_SUPABASE_TEMPLATE ?? "supabase";
     setSupabaseAccessTokenProvider(async () => {
       const token = await getToken({ template });
       return token ?? null;
@@ -80,10 +82,10 @@ export default function AppLayout() {
     return () => {
       setSupabaseAccessTokenProvider(null);
     };
-  }, [getToken, isLoaded, isSignedIn]);
+  }, [getToken, isAuthLoaded, isSignedIn]);
 
   useEffect(() => {
-    if (!isLoaded || !user) {
+    if (!isUserLoaded || !user) {
       return;
     }
 
@@ -101,20 +103,22 @@ export default function AppLayout() {
     }).catch((error) => {
       console.log("User sync error:", error);
     });
-  }, [isLoaded, user]);
+  }, [isUserLoaded, user]);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !user?.id) return;
+    if (!isAuthLoaded || !isSignedIn || !user?.id) return;
     communityPresenceManager.start(user.id);
     globalPresenceManager.start(user.id);
     return () => {
       communityPresenceManager.stop();
       globalPresenceManager.stop();
     };
-  }, [isLoaded, isSignedIn, user?.id]);
+  }, [isAuthLoaded, isSignedIn, user?.id]);
 
   useEffect(() => {
-    if (Platform.OS === "web" || !isLoaded || !isSignedIn || !user?.id) return;
+    if (Platform.OS === "web" || !isAuthLoaded || !isSignedIn || !user?.id) {
+      return;
+    }
     const isExpoGo =
       Constants.executionEnvironment === "storeClient" ||
       Constants.appOwnership === "expo";
@@ -197,7 +201,11 @@ export default function AppLayout() {
       }
       notificationListenerRef.current = null;
     };
-  }, [isLoaded, isSignedIn, router, user?.id]);
+  }, [isAuthLoaded, isSignedIn, router, user?.id]);
+
+  if (!isAuthLoaded) {
+    return null;
+  }
 
   if (!isSignedIn) {
     return <Redirect href="/(auth)" />;

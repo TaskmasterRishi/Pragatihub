@@ -9,8 +9,8 @@ import {
 import { supabase } from "@/lib/Supabase";
 import type {
   AnyChatMessage,
-  ChatReplyRef,
   ChatMediaType,
+  ChatReplyRef,
   ChatUser,
   CommunityChatMessage,
   ListItem,
@@ -104,9 +104,9 @@ export function useChat({
   const currentUserId = user?.id;
   const isAuthed = !!currentUserId;
 
-  const [resolvedPrivateChatId, setResolvedPrivateChatId] = useState<string | null>(
-    privateChatId ?? null,
-  );
+  const [resolvedPrivateChatId, setResolvedPrivateChatId] = useState<
+    string | null
+  >(privateChatId ?? null);
   const [messages, setMessages] = useState<AnyChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -133,46 +133,55 @@ export function useChat({
             ...message,
             reactions: reactions.filter(
               (reaction) =>
-                !(reaction.user_id === payload.userId && reaction.emoji === payload.emoji),
+                !(
+                  reaction.user_id === payload.userId &&
+                  reaction.emoji === payload.emoji
+                ),
             ),
           } as AnyChatMessage;
         }
 
         const exists = reactions.some(
           (reaction) =>
-            reaction.user_id === payload.userId && reaction.emoji === payload.emoji,
+            reaction.user_id === payload.userId &&
+            reaction.emoji === payload.emoji,
         );
         if (exists) return message;
         return {
           ...message,
-          reactions: [...reactions, { user_id: payload.userId, emoji: payload.emoji }],
+          reactions: [
+            ...reactions,
+            { user_id: payload.userId, emoji: payload.emoji },
+          ],
         } as AnyChatMessage;
       }),
     );
   }, []);
   const applyMessageUpdate = useCallback((payload: MessageUpdatePayload) => {
     setMessages((prev) =>
-      prev.map((message) => {
-        if (message.id !== payload.messageId) return message;
-        return {
-          ...message,
-          content: payload.content,
-          edited_at: payload.editedAt,
-        } as AnyChatMessage;
-      }).map((message) => {
-        if (message.reply_to?.id !== payload.messageId) return message;
-        return {
-          ...message,
-          reply_to: {
-            ...(message.reply_to ?? {
-              id: payload.messageId,
-              user_id: "",
-              user: null,
-            }),
+      prev
+        .map((message) => {
+          if (message.id !== payload.messageId) return message;
+          return {
+            ...message,
             content: payload.content,
-          },
-        } as AnyChatMessage;
-      }),
+            edited_at: payload.editedAt,
+          } as AnyChatMessage;
+        })
+        .map((message) => {
+          if (message.reply_to?.id !== payload.messageId) return message;
+          return {
+            ...message,
+            reply_to: {
+              ...(message.reply_to ?? {
+                id: payload.messageId,
+                user_id: "",
+                user: null,
+              }),
+              content: payload.content,
+            },
+          } as AnyChatMessage;
+        }),
     );
   }, []);
   const applyMessageDelete = useCallback((payload: MessageDeletePayload) => {
@@ -252,11 +261,14 @@ export function useChat({
         });
       }
     },
+    //@ts-ignore
     [hydrateReplyRef, toReplyRef],
   );
 
   const activeContextId =
-    chatType === "community" ? communityId : resolvedPrivateChatId ?? undefined;
+    chatType === "community"
+      ? communityId
+      : (resolvedPrivateChatId ?? undefined);
 
   useEffect(() => {
     if (chatType !== "private") return;
@@ -273,7 +285,10 @@ export function useChat({
 
     let cancelled = false;
     const run = async () => {
-      const { chatId, error } = await getOrCreatePrivateChat(currentUserId, otherUserId);
+      const { chatId, error } = await getOrCreatePrivateChat(
+        currentUserId,
+        otherUserId,
+      );
       if (cancelled) return;
       if (error || !chatId) {
         setErrorText(error ?? "Could not open this chat.");
@@ -289,20 +304,23 @@ export function useChat({
     };
   }, [chatType, currentUserId, otherUserId, privateChatId]);
 
-  const hydrateSender = useCallback(async (userId: string): Promise<ChatUser | null> => {
-    const { data } = await supabase
-      .from("users")
-      .select("id, name, image")
-      .eq("id", userId)
-      .maybeSingle();
+  const hydrateSender = useCallback(
+    async (userId: string): Promise<ChatUser | null> => {
+      const { data } = await supabase
+        .from("users")
+        .select("id, name, image")
+        .eq("id", userId)
+        .maybeSingle();
 
-    if (!data) return null;
-    return {
-      id: data.id,
-      name: data.name,
-      image: data.image,
-    };
-  }, []);
+      if (!data) return null;
+      return {
+        id: data.id,
+        name: data.name,
+        image: data.image,
+      };
+    },
+    [],
+  );
   const hydrateReplyRef = useCallback(
     async (messageId: string): Promise<ChatReplyRef | null> => {
       if (!messageId) return null;
@@ -355,8 +373,14 @@ export function useChat({
   useEffect(() => {
     if (!activeContextId || !isAuthed || !currentUserId || !user) return;
 
-    const topic = chatType === "community" ? `community-chat:${activeContextId}` : `private-chat:${activeContextId}`;
-    const table = chatType === "community" ? "community_chat_messages" : "private_chat_messages";
+    const topic =
+      chatType === "community"
+        ? `community-chat:${activeContextId}`
+        : `private-chat:${activeContextId}`;
+    const table =
+      chatType === "community"
+        ? "community_chat_messages"
+        : "private_chat_messages";
     const reactionsTable =
       chatType === "community"
         ? "community_chat_message_reactions"
@@ -386,7 +410,8 @@ export function useChat({
             ...row,
             media_type: (row.media_type as ChatMediaType | null) ?? "text",
             media_url: (row.media_url as string | null) ?? null,
-            reply_to_message_id: (row.reply_to_message_id as string | null) ?? null,
+            reply_to_message_id:
+              (row.reply_to_message_id as string | null) ?? null,
             clientStatus: "sent" as const,
             user: sender,
           } as AnyChatMessage;
@@ -406,36 +431,40 @@ export function useChat({
           setMessages((prev) =>
             prev
               .map((message) => {
-              if (message.id !== String(row.id)) return message;
-              return {
-                ...message,
-                content:
-                  typeof row.content === "string" ? row.content : message.content,
-                media_type:
-                  (row.media_type as ChatMediaType | null) ??
-                  message.media_type ??
-                  "text",
-                media_url:
-                  (row.media_url as string | null) ??
-                  message.media_url ??
-                  null,
-                created_at:
-                  typeof row.created_at === "string"
-                    ? row.created_at
-                    : message.created_at,
-                reply_to_message_id:
-                  (row.reply_to_message_id as string | null) ??
-                  message.reply_to_message_id ??
-                  null,
-                edited_at:
-                  (row.edited_at as string | null) ?? message.edited_at ?? null,
-                is_deleted:
-                  typeof row.is_deleted === "boolean"
-                    ? row.is_deleted
-                    : message.is_deleted ?? false,
-                clientStatus: "sent" as const,
-              } as AnyChatMessage;
-            })
+                if (message.id !== String(row.id)) return message;
+                return {
+                  ...message,
+                  content:
+                    typeof row.content === "string"
+                      ? row.content
+                      : message.content,
+                  media_type:
+                    (row.media_type as ChatMediaType | null) ??
+                    message.media_type ??
+                    "text",
+                  media_url:
+                    (row.media_url as string | null) ??
+                    message.media_url ??
+                    null,
+                  created_at:
+                    typeof row.created_at === "string"
+                      ? row.created_at
+                      : message.created_at,
+                  reply_to_message_id:
+                    (row.reply_to_message_id as string | null) ??
+                    message.reply_to_message_id ??
+                    null,
+                  edited_at:
+                    (row.edited_at as string | null) ??
+                    message.edited_at ??
+                    null,
+                  is_deleted:
+                    typeof row.is_deleted === "boolean"
+                      ? row.is_deleted
+                      : (message.is_deleted ?? false),
+                  clientStatus: "sent" as const,
+                } as AnyChatMessage;
+              })
               .map((message) => {
                 if (message.reply_to?.id !== String(row.id)) return message;
                 return {
@@ -532,8 +561,7 @@ export function useChat({
       .on("broadcast", { event: "message_updated" }, ({ payload }) => {
         const data = payload as Partial<MessageUpdatePayload> | null;
         const messageId = String(data?.messageId ?? "");
-        const content =
-          typeof data?.content === "string" ? data.content : "";
+        const content = typeof data?.content === "string" ? data.content : "";
         const editedAt =
           typeof data?.editedAt === "string" || data?.editedAt === null
             ? data.editedAt
@@ -551,8 +579,7 @@ export function useChat({
         const data = payload as Partial<MessageCreatePayload> | null;
         const id = String(data?.id ?? "");
         const userId = String(data?.user_id ?? "");
-        const content =
-          typeof data?.content === "string" ? data.content : "";
+        const content = typeof data?.content === "string" ? data.content : "";
         const createdAt = String(data?.created_at ?? "");
         if (!id || !userId || !createdAt) return;
 
@@ -563,7 +590,8 @@ export function useChat({
                 group_id: activeContextId,
                 user_id: userId,
                 content,
-                media_type: (data?.media_type as ChatMediaType | null) ?? "text",
+                media_type:
+                  (data?.media_type as ChatMediaType | null) ?? "text",
                 media_url: (data?.media_url as string | null) ?? null,
                 reply_to_message_id:
                   (data?.reply_to_message_id as string | null) ?? null,
@@ -578,7 +606,8 @@ export function useChat({
                 chat_id: activeContextId,
                 user_id: userId,
                 content,
-                media_type: (data?.media_type as ChatMediaType | null) ?? "text",
+                media_type:
+                  (data?.media_type as ChatMediaType | null) ?? "text",
                 media_url: (data?.media_url as string | null) ?? null,
                 reply_to_message_id:
                   (data?.reply_to_message_id as string | null) ?? null,
@@ -634,7 +663,9 @@ export function useChat({
           });
         });
 
-        setTypingUsers(Array.from(new Map(typers.map((t) => [t.id, t])).values()));
+        setTypingUsers(
+          Array.from(new Map(typers.map((t) => [t.id, t])).values()),
+        );
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -757,7 +788,9 @@ export function useChat({
       if (error || !data) {
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === optimisticId ? { ...m, clientStatus: "failed" as const } : m,
+            m.id === optimisticId
+              ? { ...m, clientStatus: "failed" as const }
+              : m,
           ),
         );
         setErrorText(error?.message ?? "Failed to send message.");
@@ -807,7 +840,8 @@ export function useChat({
           content: data.content ?? normalized,
           media_type: (data.media_type as ChatMediaType | null) ?? mediaType,
           media_url: (data.media_url as string | null) ?? mediaUrl,
-          reply_to_message_id: data.reply_to_message_id ?? replyToMessageId ?? null,
+          reply_to_message_id:
+            data.reply_to_message_id ?? replyToMessageId ?? null,
           edited_at: data.edited_at ?? null,
           is_deleted: data.is_deleted ?? false,
           created_at: data.created_at,
@@ -830,7 +864,16 @@ export function useChat({
 
       setSending(false);
     },
-    [activeContextId, chatType, currentUserId, isAuthed, isMember, sending, setTypingStatus, user],
+    [
+      activeContextId,
+      chatType,
+      currentUserId,
+      isAuthed,
+      isMember,
+      sending,
+      setTypingStatus,
+      user,
+    ],
   );
 
   const listItems = useMemo<ListItem[]>(() => {

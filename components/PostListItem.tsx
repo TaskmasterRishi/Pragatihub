@@ -484,6 +484,7 @@ const SkeletonLine = ({
   radius?: number;
 }) => (
   <View
+    //@ts-ignore
     style={{
       width,
       height,

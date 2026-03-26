@@ -12,7 +12,7 @@ export function ThemedText({
 }: ThemedTextProps) {
   const defaultColor = useThemeColor(
     { light: lightColor, dark: darkColor },
-    "text"
+    "text",
   );
   const primaryColor = useThemeColor({}, "primary");
   const color = type === "link" ? primaryColor : defaultColor;
@@ -26,6 +26,7 @@ export function ThemedText({
         type === "defaultSemiBold" ? styles.defaultSemiBold : undefined,
         type === "subtitle" ? styles.subtitle : undefined,
         type === "link" ? styles.link : undefined,
+        //@ts-ignore
         style,
       ]}
       {...rest}

@@ -6,7 +6,7 @@ export default function OnboardingIndex() {
   const { isSignedIn } = useAuth();
 
   if (isSignedIn) {
-    return <Redirect href={"/(protected)/(tabs)"} />;
+    return <Redirect href={"/"} />;
   } else if (!isSignedIn) {
     return <Redirect href={"../(auth)"} />;
   }

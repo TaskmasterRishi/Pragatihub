@@ -1,20 +1,20 @@
 import AppLoader from "@/components/AppLoader";
 import ChatInput from "@/components/ChatInput";
-import { useCommunityPresence } from "@/hooks/use-community-presence";
 import { useChat, type ListItem, type MessageGroup } from "@/hooks/use-chat";
+import { useCommunityPresence } from "@/hooks/use-community-presence";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import {
   deleteCommunityChatMessage,
   deletePrivateChatMessage,
   editCommunityChatMessage,
   editPrivateChatMessage,
-  togglePrivateChatReaction,
   toggleCommunityChatReaction,
+  togglePrivateChatReaction,
 } from "@/lib/actions/chat";
 import { supabase } from "@/lib/Supabase";
 import {
-  type AnyChatMessage,
   parseKeyboardMediaInput,
+  type AnyChatMessage,
   type ChatMediaType,
   type ChatMessageReaction,
   type PickerItem,
@@ -26,9 +26,9 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
-  CornerUpLeft,
   ChevronDown,
   ChevronLeft,
+  CornerUpLeft,
   Gem,
   Grid,
   Image as ImageIcon,
@@ -497,8 +497,13 @@ function MessageGroupRow({
                 <View
                   style={[
                     groupStyles.replyRefWrap,
-                    mine ? groupStyles.replyRefWrapMine : groupStyles.replyRefWrapOther,
-                    { borderColor: bubbleBorderColor, backgroundColor: `${primary}10` },
+                    mine
+                      ? groupStyles.replyRefWrapMine
+                      : groupStyles.replyRefWrapOther,
+                    {
+                      borderColor: bubbleBorderColor,
+                      backgroundColor: `${primary}10`,
+                    },
                   ]}
                 >
                   <View style={groupStyles.replyRefHeader}>
@@ -556,9 +561,14 @@ function MessageGroupRow({
                   {summarizeReactions(msg.reactions ?? []).map((reaction) => (
                     <Pressable
                       key={`${msg.id}-${reaction.emoji}`}
-                      onPress={() => onPressReaction?.(msg as AnyChatMessage, reaction.emoji)}
+                      onPress={() =>
+                        onPressReaction?.(msg as AnyChatMessage, reaction.emoji)
+                      }
                       onLongPress={() =>
-                        onLongPressReaction?.(msg as AnyChatMessage, reaction.emoji)
+                        onLongPressReaction?.(
+                          msg as AnyChatMessage,
+                          reaction.emoji,
+                        )
                       }
                       delayLongPress={220}
                       style={[
@@ -569,7 +579,9 @@ function MessageGroupRow({
                         },
                       ]}
                     >
-                      <Text style={[groupStyles.reactionChipText, { color: text }]}>
+                      <Text
+                        style={[groupStyles.reactionChipText, { color: text }]}
+                      >
                         {reaction.emoji} {reaction.count}
                       </Text>
                     </Pressable>
@@ -647,15 +659,19 @@ export default function ChatThread({
     MentionCandidate[]
   >([]);
   const [mentionQuery, setMentionQuery] = useState("");
-  const [activeMessage, setActiveMessage] = useState<AnyChatMessage | null>(null);
+  const [activeMessage, setActiveMessage] = useState<AnyChatMessage | null>(
+    null,
+  );
   const [actionsVisible, setActionsVisible] = useState(false);
-  const [editingMessage, setEditingMessage] = useState<AnyChatMessage | null>(null);
+  const [editingMessage, setEditingMessage] = useState<AnyChatMessage | null>(
+    null,
+  );
   const [replyTarget, setReplyTarget] = useState<AnyChatMessage | null>(null);
   const [reactionDetailsVisible, setReactionDetailsVisible] = useState(false);
   const [reactionDetailsEmoji, setReactionDetailsEmoji] = useState("");
-  const [reactionDetailsUsers, setReactionDetailsUsers] = useState<ReactionUser[]>(
-    [],
-  );
+  const [reactionDetailsUsers, setReactionDetailsUsers] = useState<
+    ReactionUser[]
+  >([]);
   const [onlineSheetVisible, setOnlineSheetVisible] = useState(false);
   const { onlineUserIds, onlineCount } = useCommunityPresence(
     chatType === "community" ? communityId : undefined,
@@ -992,6 +1008,7 @@ export default function ChatThread({
         uri: asset.uri,
         fileName: asset.fileName,
         mimeType: asset.mimeType,
+        //@ts-ignore
         assetType: asset.type,
       },
       user.id,
@@ -1135,13 +1152,10 @@ export default function ChatThread({
     [setMessages],
   );
 
-  const openActionsForMessage = useCallback(
-    (message: AnyChatMessage) => {
-      setActiveMessage(message);
-      setActionsVisible(true);
-    },
-    [],
-  );
+  const openActionsForMessage = useCallback((message: AnyChatMessage) => {
+    setActiveMessage(message);
+    setActionsVisible(true);
+  }, []);
 
   const toggleReactionForMessage = useCallback(
     async (message: AnyChatMessage, emoji: string, closeSheet = false) => {
@@ -1151,17 +1165,15 @@ export default function ChatThread({
 
       updateMessageLocally(snapshot.id, (current) => {
         const mineSameEmoji = (current.reactions ?? []).find(
-          (reaction) => reaction.user_id === user.id && reaction.emoji === emoji,
+          (reaction) =>
+            reaction.user_id === user.id && reaction.emoji === emoji,
         );
         if (mineSameEmoji) {
           return {
             ...current,
             reactions: (current.reactions ?? []).filter(
               (reaction) =>
-                !(
-                  reaction.user_id === user.id &&
-                  reaction.emoji === emoji
-                ),
+                !(reaction.user_id === user.id && reaction.emoji === emoji),
             ),
           };
         }
@@ -1366,7 +1378,10 @@ export default function ChatThread({
                     ]}
                   >
                     {member.image ? (
-                      <Image source={{ uri: member.image }} style={styles.onlineAvatar} />
+                      <Image
+                        source={{ uri: member.image }}
+                        style={styles.onlineAvatar}
+                      />
                     ) : (
                       <View
                         style={[
@@ -1374,7 +1389,9 @@ export default function ChatThread({
                           { backgroundColor: `${primary}22` },
                         ]}
                       >
-                        <Text style={[styles.onlineAvatarText, { color: primary }]}>
+                        <Text
+                          style={[styles.onlineAvatarText, { color: primary }]}
+                        >
                           {(member.name[0] ?? "?").toUpperCase()}
                         </Text>
                       </View>
@@ -1405,7 +1422,9 @@ export default function ChatThread({
                 ) : null}
               </View>
               <View style={styles.onlineMeta}>
-                <Text style={[styles.onlineLabel, { color: text }]}>Online</Text>
+                <Text style={[styles.onlineLabel, { color: text }]}>
+                  Online
+                </Text>
                 <Text style={[styles.onlineSubLabel, { color: secondary }]}>
                   {onlineCount} now
                 </Text>
@@ -1413,7 +1432,10 @@ export default function ChatThread({
               <View
                 style={[
                   styles.onlineExpandBtn,
-                  { backgroundColor: `${primary}18`, borderColor: `${primary}30` },
+                  {
+                    backgroundColor: `${primary}18`,
+                    borderColor: `${primary}30`,
+                  },
                 ]}
               >
                 <ChevronDown size={13} color={primary} />
@@ -1549,28 +1571,47 @@ export default function ChatThread({
         )}
 
         {replyTarget ? (
-          <View style={[styles.replyBar, { backgroundColor: card, borderColor: border }]}>
+          <View
+            style={[
+              styles.replyBar,
+              { backgroundColor: card, borderColor: border },
+            ]}
+          >
             <View style={styles.replyBarTextWrap}>
               <Text style={[styles.replyBarTitle, { color: primary }]}>
                 Replying to {replyTarget.user?.name ?? "message"}
               </Text>
-              <Text style={[styles.replyBarSnippet, { color: secondary }]} numberOfLines={1}>
+              <Text
+                style={[styles.replyBarSnippet, { color: secondary }]}
+                numberOfLines={1}
+              >
                 {replyTarget.content || "Media message"}
               </Text>
             </View>
-            <Pressable onPress={() => setReplyTarget(null)} style={styles.replyBarClose}>
+            <Pressable
+              onPress={() => setReplyTarget(null)}
+              style={styles.replyBarClose}
+            >
               <X size={14} color={secondary} />
             </Pressable>
           </View>
         ) : null}
 
         {editingMessage ? (
-          <View style={[styles.replyBar, { backgroundColor: card, borderColor: border }]}>
+          <View
+            style={[
+              styles.replyBar,
+              { backgroundColor: card, borderColor: border },
+            ]}
+          >
             <View style={styles.replyBarTextWrap}>
               <Text style={[styles.replyBarTitle, { color: primary }]}>
                 Editing message
               </Text>
-              <Text style={[styles.replyBarSnippet, { color: secondary }]} numberOfLines={1}>
+              <Text
+                style={[styles.replyBarSnippet, { color: secondary }]}
+                numberOfLines={1}
+              >
                 {editingMessage.content || "Message"}
               </Text>
             </View>
@@ -1679,8 +1720,15 @@ export default function ChatThread({
             ]}
             onPress={() => {}}
           >
-            <View style={[styles.sheetHandle, { backgroundColor: `${secondary}55` }]} />
-            <Text style={[styles.reactionDetailsTitle, { color: text }]}>Online now</Text>
+            <View
+              style={[
+                styles.sheetHandle,
+                { backgroundColor: `${secondary}55` },
+              ]}
+            />
+            <Text style={[styles.reactionDetailsTitle, { color: text }]}>
+              Online now
+            </Text>
             <Text style={[styles.onlineSheetSubtitle, { color: secondary }]}>
               {onlineCount} members currently active
             </Text>
@@ -1691,7 +1739,10 @@ export default function ChatThread({
               renderItem={({ item }) => (
                 <View style={styles.reactionUserRow}>
                   {item.image ? (
-                    <Image source={{ uri: item.image }} style={styles.reactionUserAvatar} />
+                    <Image
+                      source={{ uri: item.image }}
+                      style={styles.reactionUserAvatar}
+                    />
                   ) : (
                     <View
                       style={[
@@ -1699,18 +1750,28 @@ export default function ChatThread({
                         { backgroundColor: `${primary}22` },
                       ]}
                     >
-                      <Text style={[styles.reactionUserAvatarText, { color: primary }]}>
+                      <Text
+                        style={[
+                          styles.reactionUserAvatarText,
+                          { color: primary },
+                        ]}
+                      >
                         {(item.name[0] ?? "?").toUpperCase()}
                       </Text>
                     </View>
                   )}
-                  <Text style={[styles.reactionUserName, { color: text }]} numberOfLines={1}>
+                  <Text
+                    style={[styles.reactionUserName, { color: text }]}
+                    numberOfLines={1}
+                  >
                     {item.name}
                   </Text>
                 </View>
               )}
               ListEmptyComponent={
-                <Text style={[styles.reactionDetailsEmpty, { color: secondary }]}>
+                <Text
+                  style={[styles.reactionDetailsEmpty, { color: secondary }]}
+                >
                   No one online yet
                 </Text>
               }
@@ -1745,7 +1806,10 @@ export default function ChatThread({
               {["👍", "❤️", "😂", "🔥", "😮", "👏"].map((emoji) => (
                 <Pressable
                   key={emoji}
-                  style={[styles.emojiAction, { backgroundColor: `${primary}18` }]}
+                  style={[
+                    styles.emojiAction,
+                    { backgroundColor: `${primary}18` },
+                  ]}
                   onPress={() => {
                     if (!activeMessage) return;
                     void toggleReactionForMessage(activeMessage, emoji, true);
@@ -1762,19 +1826,33 @@ export default function ChatThread({
 
             {activeMessage?.user_id === user?.id ? (
               <>
-                <Pressable style={styles.actionBtn} onPress={handleStartEditMessage}>
-                  <Text style={[styles.actionBtnText, { color: text }]}>Edit</Text>
+                <Pressable
+                  style={styles.actionBtn}
+                  onPress={handleStartEditMessage}
+                >
+                  <Text style={[styles.actionBtnText, { color: text }]}>
+                    Edit
+                  </Text>
                 </Pressable>
                 <Pressable style={styles.actionBtn} onPress={handleDeleteForMe}>
-                  <Text style={[styles.actionBtnText, { color: text }]}>Delete for me</Text>
+                  <Text style={[styles.actionBtnText, { color: text }]}>
+                    Delete for me
+                  </Text>
                 </Pressable>
-                <Pressable style={styles.actionBtn} onPress={() => void handleDeleteForAll()}>
-                  <Text style={[styles.actionBtnText, { color: "#FF3B30" }]}>Delete for all</Text>
+                <Pressable
+                  style={styles.actionBtn}
+                  onPress={() => void handleDeleteForAll()}
+                >
+                  <Text style={[styles.actionBtnText, { color: "#FF3B30" }]}>
+                    Delete for all
+                  </Text>
                 </Pressable>
               </>
             ) : (
               <Pressable style={styles.actionBtn} onPress={handleDeleteForMe}>
-                <Text style={[styles.actionBtnText, { color: text }]}>Delete for me</Text>
+                <Text style={[styles.actionBtnText, { color: text }]}>
+                  Delete for me
+                </Text>
               </Pressable>
             )}
           </Pressable>
@@ -1813,7 +1891,10 @@ export default function ChatThread({
               renderItem={({ item }) => (
                 <View style={styles.reactionUserRow}>
                   {item.image ? (
-                    <Image source={{ uri: item.image }} style={styles.reactionUserAvatar} />
+                    <Image
+                      source={{ uri: item.image }}
+                      style={styles.reactionUserAvatar}
+                    />
                   ) : (
                     <View
                       style={[
@@ -1821,18 +1902,28 @@ export default function ChatThread({
                         { backgroundColor: `${primary}22` },
                       ]}
                     >
-                      <Text style={[styles.reactionUserAvatarText, { color: primary }]}>
+                      <Text
+                        style={[
+                          styles.reactionUserAvatarText,
+                          { color: primary },
+                        ]}
+                      >
                         {(item.name[0] ?? "?").toUpperCase()}
                       </Text>
                     </View>
                   )}
-                  <Text style={[styles.reactionUserName, { color: text }]} numberOfLines={1}>
+                  <Text
+                    style={[styles.reactionUserName, { color: text }]}
+                    numberOfLines={1}
+                  >
                     {item.name}
                   </Text>
                 </View>
               )}
               ListEmptyComponent={
-                <Text style={[styles.reactionDetailsEmpty, { color: secondary }]}>
+                <Text
+                  style={[styles.reactionDetailsEmpty, { color: secondary }]}
+                >
                   No reactions yet
                 </Text>
               }
