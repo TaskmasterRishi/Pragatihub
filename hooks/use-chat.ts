@@ -34,6 +34,7 @@ type SendPayload = {
   content: string;
   mediaType?: ChatMediaType;
   mediaUrl?: string | null;
+  replyToMessageId?: string | null;
   mentionUserIds?: string[];
   mentionHandles?: string[];
 };
@@ -203,6 +204,70 @@ export function useChat({
           });
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table,
+          filter: `${column}=eq.${activeContextId}`,
+        },
+        async (payload) => {
+          const row = payload.new as any;
+          setMessages((prev) =>
+            prev.map((message) => {
+              if (message.id !== String(row.id)) return message;
+              return {
+                ...message,
+                content:
+                  typeof row.content === "string" ? row.content : message.content,
+                media_type:
+                  (row.media_type as ChatMediaType | null) ??
+                  message.media_type ??
+                  "text",
+                media_url:
+                  (row.media_url as string | null) ??
+                  message.media_url ??
+                  null,
+                created_at:
+                  typeof row.created_at === "string"
+                    ? row.created_at
+                    : message.created_at,
+                ...(chatType === "community"
+                  ? {
+                      reply_to_message_id:
+                        (row.reply_to_message_id as string | null) ??
+                        (message as CommunityChatMessage).reply_to_message_id ??
+                        null,
+                      edited_at:
+                        (row.edited_at as string | null) ??
+                        (message as CommunityChatMessage).edited_at ??
+                        null,
+                      is_deleted:
+                        typeof row.is_deleted === "boolean"
+                          ? row.is_deleted
+                          : (message as CommunityChatMessage).is_deleted ?? false,
+                    }
+                  : {}),
+                clientStatus: "sent" as const,
+              } as AnyChatMessage;
+            }),
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table,
+          filter: `${column}=eq.${activeContextId}`,
+        },
+        (payload) => {
+          const row = payload.old as any;
+          setMessages((prev) => prev.filter((message) => message.id !== String(row.id)));
+        },
+      )
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState();
         const typers: TypingUser[] = [];
@@ -254,6 +319,7 @@ export function useChat({
       content,
       mediaType = "text",
       mediaUrl = null,
+      replyToMessageId = null,
       mentionUserIds = [],
       mentionHandles = [],
     }: SendPayload) => {
@@ -270,6 +336,9 @@ export function useChat({
         content: normalized,
         media_type: mediaType,
         media_url: mediaUrl,
+        reply_to_message_id: replyToMessageId,
+        edited_at: null,
+        is_deleted: false,
         created_at: now,
         user: {
           id: currentUserId,
@@ -303,6 +372,7 @@ export function useChat({
               content: normalized,
               mediaType,
               mediaUrl,
+              replyToMessageId,
               mentionUserIds,
               mentionHandles,
             })
@@ -312,6 +382,7 @@ export function useChat({
               content: normalized,
               mediaType,
               mediaUrl,
+              replyToMessageId,
             });
 
       const { data, error } = await submit;
@@ -336,6 +407,9 @@ export function useChat({
                 content: data.content,
                 media_type: data.media_type ?? "text",
                 media_url: data.media_url ?? null,
+                reply_to_message_id: data.reply_to_message_id ?? null,
+                edited_at: data.edited_at ?? null,
+                is_deleted: data.is_deleted ?? false,
                 created_at: data.created_at,
                 clientStatus: "sent" as const,
               } as CommunityChatMessage;
@@ -349,6 +423,9 @@ export function useChat({
                 content: data.content,
                 media_type: data.media_type ?? "text",
                 media_url: data.media_url ?? null,
+                reply_to_message_id: data.reply_to_message_id ?? null,
+                edited_at: data.edited_at ?? null,
+                is_deleted: data.is_deleted ?? false,
                 created_at: data.created_at,
                 clientStatus: "sent" as const,
               } as PrivateChatMessage;

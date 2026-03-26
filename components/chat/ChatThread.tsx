@@ -2,10 +2,20 @@ import AppLoader from "@/components/AppLoader";
 import ChatInput from "@/components/ChatInput";
 import { useChat, type ListItem, type MessageGroup } from "@/hooks/use-chat";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import {
+  deleteCommunityChatMessage,
+  deletePrivateChatMessage,
+  editCommunityChatMessage,
+  editPrivateChatMessage,
+  togglePrivateChatReaction,
+  toggleCommunityChatReaction,
+} from "@/lib/actions/chat";
 import { supabase } from "@/lib/Supabase";
 import {
+  type AnyChatMessage,
   parseKeyboardMediaInput,
   type ChatMediaType,
+  type ChatMessageReaction,
   type PickerItem,
   type PickerMode,
 } from "@/types/chat";
@@ -75,6 +85,12 @@ type MentionLookup = Record<
     handle: string;
   }
 >;
+
+type ReactionUser = {
+  id: string;
+  name: string;
+  image: string | null;
+};
 
 type ChatThreadProps = {
   chatType: "community" | "private";
@@ -314,14 +330,29 @@ function extractMentionHandles(content: string) {
   return handles;
 }
 
+function summarizeReactions(reactions: ChatMessageReaction[]) {
+  const map = new Map<string, number>();
+  for (const reaction of reactions) {
+    if (!reaction.emoji) continue;
+    map.set(reaction.emoji, (map.get(reaction.emoji) ?? 0) + 1);
+  }
+  return Array.from(map.entries()).map(([emoji, count]) => ({ emoji, count }));
+}
+
 function MessageGroupRow({
   group,
   theme,
   mentionLookup,
+  onLongPressMessage,
+  onPressReaction,
+  onLongPressReaction,
 }: {
   group: MessageGroup;
   theme: Theme;
   mentionLookup: MentionLookup;
+  onLongPressMessage?: (message: AnyChatMessage) => void;
+  onPressReaction?: (message: AnyChatMessage, emoji: string) => void;
+  onLongPressReaction?: (message: AnyChatMessage, emoji: string) => void;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(10)).current;
@@ -391,7 +422,13 @@ function MessageGroupRow({
             .filter(Boolean);
 
           return (
-            <View key={msg.id} style={{ marginBottom: isLast ? 0 : 2 }}>
+            <View
+              key={msg.id}
+              style={{
+                marginBottom: isLast ? 10 : 12,
+                position: "relative",
+              }}
+            >
               {mentionedUsers.length > 0 ? (
                 <View
                   style={[
@@ -446,7 +483,9 @@ function MessageGroupRow({
                   ))}
                 </View>
               ) : null}
-              <View
+              <Pressable
+                onLongPress={() => onLongPressMessage?.(msg as AnyChatMessage)}
+                delayLongPress={240}
                 style={[
                   groupStyles.bubble,
                   msg.media_url && !msg.content?.trim()
@@ -469,7 +508,39 @@ function MessageGroupRow({
                     {renderTextWithMentions(msg.content, text, primary)}
                   </Text>
                 ) : null}
-              </View>
+              </Pressable>
+              {(msg.reactions?.length ?? 0) > 0 ? (
+                <View
+                  style={[
+                    groupStyles.reactionOverlay,
+                    mine
+                      ? groupStyles.reactionOverlayMine
+                      : groupStyles.reactionOverlayOther,
+                  ]}
+                >
+                  {summarizeReactions(msg.reactions ?? []).map((reaction) => (
+                    <Pressable
+                      key={`${msg.id}-${reaction.emoji}`}
+                      onPress={() => onPressReaction?.(msg as AnyChatMessage, reaction.emoji)}
+                      onLongPress={() =>
+                        onLongPressReaction?.(msg as AnyChatMessage, reaction.emoji)
+                      }
+                      delayLongPress={220}
+                      style={[
+                        groupStyles.reactionChip,
+                        {
+                          backgroundColor: backgroundSecondary,
+                          borderColor: bubbleBorderColor,
+                        },
+                      ]}
+                    >
+                      <Text style={[groupStyles.reactionChipText, { color: text }]}>
+                        {reaction.emoji} {reaction.count}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
             </View>
           );
         })}
@@ -536,6 +607,16 @@ export default function ChatThread({
     MentionCandidate[]
   >([]);
   const [mentionQuery, setMentionQuery] = useState("");
+  const [activeMessage, setActiveMessage] = useState<AnyChatMessage | null>(null);
+  const [actionsVisible, setActionsVisible] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<AnyChatMessage | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [replyTarget, setReplyTarget] = useState<AnyChatMessage | null>(null);
+  const [reactionDetailsVisible, setReactionDetailsVisible] = useState(false);
+  const [reactionDetailsEmoji, setReactionDetailsEmoji] = useState("");
+  const [reactionDetailsUsers, setReactionDetailsUsers] = useState<ReactionUser[]>(
+    [],
+  );
 
   const {
     loading,
@@ -544,6 +625,7 @@ export default function ChatThread({
     typingUsers,
     isMember,
     listItems,
+    setMessages,
     setTypingStatus,
     sendMessage,
   } = useChat({
@@ -929,10 +1011,190 @@ export default function ChatThread({
       content: parsed.content,
       mediaType: parsed.mediaType ?? "text",
       mediaUrl: parsed.mediaUrl ?? null,
+      replyToMessageId: replyTarget?.id ?? null,
       mentionUserIds,
       mentionHandles,
     });
+    setReplyTarget(null);
   };
+
+  const updateMessageLocally = useCallback(
+    (
+      messageId: string,
+      updater: (message: AnyChatMessage) => AnyChatMessage,
+    ) => {
+      setMessages((prev) =>
+        prev.map((message) => {
+          if (message.id !== messageId) return message;
+          return updater(message);
+        }),
+      );
+    },
+    [setMessages],
+  );
+
+  const openActionsForMessage = useCallback(
+    (message: AnyChatMessage) => {
+      setActiveMessage(message);
+      setActionsVisible(true);
+    },
+    [],
+  );
+
+  const toggleReactionForMessage = useCallback(
+    async (message: AnyChatMessage, emoji: string, closeSheet = false) => {
+      if (!message?.id || !user?.id) return;
+      const snapshot = message;
+      const mineReaction = (snapshot.reactions ?? []).find(
+        (reaction) => reaction.user_id === user.id,
+      );
+
+      updateMessageLocally(snapshot.id, (current) => {
+        const others = (current.reactions ?? []).filter(
+          (reaction) => reaction.user_id !== user.id,
+        );
+        if (mineReaction?.emoji === emoji) {
+          return { ...current, reactions: others };
+        }
+        return {
+          ...current,
+          reactions: [...others, { user_id: user.id, emoji } as ChatMessageReaction],
+        };
+      });
+
+      const result =
+        chatType === "community"
+          ? await toggleCommunityChatReaction({
+              messageId: snapshot.id,
+              userId: user.id,
+              emoji,
+            })
+          : await togglePrivateChatReaction({
+              messageId: snapshot.id,
+              userId: user.id,
+              emoji,
+            });
+
+      if (result.error) {
+        updateMessageLocally(snapshot.id, () => snapshot);
+        Alert.alert("Could not react", result.error.message ?? "Try again.");
+      }
+      if (closeSheet) setActionsVisible(false);
+    },
+    [chatType, updateMessageLocally, user?.id],
+  );
+
+  const handleReplyToMessage = useCallback(() => {
+    if (!activeMessage) return;
+    setReplyTarget(activeMessage);
+    setActionsVisible(false);
+  }, [activeMessage]);
+
+  const handleStartEditMessage = useCallback(() => {
+    if (!activeMessage || activeMessage.user_id !== user?.id) return;
+    setEditingMessage(activeMessage);
+    setEditDraft(activeMessage.content ?? "");
+    setActionsVisible(false);
+  }, [activeMessage, user?.id]);
+
+  const handleSaveEditedMessage = useCallback(async () => {
+    if (!editingMessage?.id || !user?.id) return;
+    const content = editDraft.trim();
+    if (!content) {
+      Alert.alert("Message required", "Please enter message text.");
+      return;
+    }
+
+    const { data, error } =
+      chatType === "community"
+        ? await editCommunityChatMessage({
+            messageId: editingMessage.id,
+            userId: user.id,
+            content,
+          })
+        : await editPrivateChatMessage({
+            messageId: editingMessage.id,
+            userId: user.id,
+            content,
+          });
+
+    if (error || !data) {
+      Alert.alert("Could not edit message", error?.message ?? "Try again.");
+      return;
+    }
+
+    updateMessageLocally(editingMessage.id, (message) => ({
+      ...message,
+      content: data.content ?? content,
+      edited_at: data.edited_at ?? new Date().toISOString(),
+    }));
+    setEditingMessage(null);
+    setEditDraft("");
+  }, [chatType, editDraft, editingMessage, updateMessageLocally, user?.id]);
+
+  const handleDeleteMessage = useCallback(async () => {
+    if (!activeMessage?.id || !user?.id) return;
+    const messageId = activeMessage.id;
+    const { error } =
+      chatType === "community"
+        ? await deleteCommunityChatMessage({
+            messageId,
+            userId: user.id,
+          })
+        : await deletePrivateChatMessage({
+            messageId,
+            userId: user.id,
+          });
+    if (error) {
+      Alert.alert("Could not delete message", error.message ?? "Try again.");
+      return;
+    }
+    setMessages((prev) => prev.filter((message) => message.id !== messageId));
+    setActionsVisible(false);
+  }, [activeMessage, chatType, setMessages, user?.id]);
+
+  const handlePressReactionChip = useCallback(
+    async (message: AnyChatMessage, emoji: string) => {
+      await toggleReactionForMessage(message, emoji, false);
+    },
+    [toggleReactionForMessage],
+  );
+
+  const handleLongPressReactionChip = useCallback(
+    async (message: AnyChatMessage, emoji: string) => {
+      const reactionUserIds = (message.reactions ?? [])
+        .filter((reaction) => reaction.emoji === emoji)
+        .map((reaction) => reaction.user_id);
+      if (reactionUserIds.length === 0) return;
+
+      const uniqueIds = Array.from(new Set(reactionUserIds));
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name, image")
+        .in("id", uniqueIds);
+
+      if (error) {
+        Alert.alert("Could not load users", error.message ?? "Try again.");
+        return;
+      }
+
+      const users = ((data ?? []) as any[]).map((row) => ({
+        id: String(row.id),
+        name: String(row.name ?? "User"),
+        image: (row.image as string | null) ?? null,
+      }));
+
+      const byId = new Map(users.map((u) => [u.id, u]));
+      const ordered = uniqueIds
+        .map((id) => byId.get(id))
+        .filter(Boolean) as ReactionUser[];
+
+      setReactionDetailsEmoji(emoji);
+      setReactionDetailsUsers(ordered);
+      setReactionDetailsVisible(true);
+    },
+    [],
+  );
 
   if (loading) {
     return (
@@ -1020,6 +1282,9 @@ export default function ChatThread({
               group={item.data}
               theme={theme}
               mentionLookup={mentionLookup}
+              onLongPressMessage={openActionsForMessage}
+              onPressReaction={handlePressReactionChip}
+              onLongPressReaction={handleLongPressReactionChip}
             />
           );
         }}
@@ -1095,6 +1360,22 @@ export default function ChatThread({
           </View>
         )}
 
+        {replyTarget ? (
+          <View style={[styles.replyBar, { backgroundColor: card, borderColor: border }]}>
+            <View style={styles.replyBarTextWrap}>
+              <Text style={[styles.replyBarTitle, { color: primary }]}>
+                Replying to {replyTarget.user?.name ?? "message"}
+              </Text>
+              <Text style={[styles.replyBarSnippet, { color: secondary }]} numberOfLines={1}>
+                {replyTarget.content || "Media message"}
+              </Text>
+            </View>
+            <Pressable onPress={() => setReplyTarget(null)} style={styles.replyBarClose}>
+              <X size={14} color={secondary} />
+            </Pressable>
+          </View>
+        ) : null}
+
         {mentionVisible ? (
           <View
             style={[
@@ -1165,6 +1446,138 @@ export default function ChatThread({
           composerAnim={composerAnim}
         />
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={actionsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActionsVisible(false)}
+      >
+        <Pressable
+          style={styles.actionsBackdrop}
+          onPress={() => setActionsVisible(false)}
+        >
+          <Pressable
+            style={[styles.actionsSheet, { backgroundColor: card, borderColor: border }]}
+            onPress={() => {}}
+          >
+            <View style={styles.actionsEmojiRow}>
+              {["👍", "❤️", "😂", "🔥", "😮", "👏"].map((emoji) => (
+                <Pressable
+                  key={emoji}
+                  style={[styles.emojiAction, { backgroundColor: `${primary}18` }]}
+                  onPress={() => {
+                    if (!activeMessage) return;
+                    void toggleReactionForMessage(activeMessage, emoji, true);
+                  }}
+                >
+                  <Text style={styles.emojiActionText}>{emoji}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Pressable style={styles.actionBtn} onPress={handleReplyToMessage}>
+              <Text style={[styles.actionBtnText, { color: text }]}>Reply</Text>
+            </Pressable>
+
+            {activeMessage?.user_id === user?.id ? (
+              <>
+                <Pressable style={styles.actionBtn} onPress={handleStartEditMessage}>
+                  <Text style={[styles.actionBtnText, { color: text }]}>Edit</Text>
+                </Pressable>
+                <Pressable style={styles.actionBtn} onPress={() => void handleDeleteMessage()}>
+                  <Text style={[styles.actionBtnText, { color: "#FF3B30" }]}>Delete</Text>
+                </Pressable>
+              </>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={reactionDetailsVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReactionDetailsVisible(false)}
+      >
+        <Pressable
+          style={styles.actionsBackdrop}
+          onPress={() => setReactionDetailsVisible(false)}
+        >
+          <Pressable
+            style={[styles.reactionDetailsSheet, { backgroundColor: card, borderColor: border }]}
+            onPress={() => {}}
+          >
+            <Text style={[styles.reactionDetailsTitle, { color: text }]}>
+              {reactionDetailsEmoji} Reactions
+            </Text>
+            <FlatList
+              data={reactionDetailsUsers}
+              keyExtractor={(item) => item.id}
+              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+              renderItem={({ item }) => (
+                <View style={styles.reactionUserRow}>
+                  {item.image ? (
+                    <Image source={{ uri: item.image }} style={styles.reactionUserAvatar} />
+                  ) : (
+                    <View
+                      style={[
+                        styles.reactionUserAvatarFallback,
+                        { backgroundColor: `${primary}22` },
+                      ]}
+                    >
+                      <Text style={[styles.reactionUserAvatarText, { color: primary }]}>
+                        {(item.name[0] ?? "?").toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={[styles.reactionUserName, { color: text }]} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                </View>
+              )}
+              ListEmptyComponent={
+                <Text style={[styles.reactionDetailsEmpty, { color: secondary }]}>
+                  No reactions yet
+                </Text>
+              }
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={!!editingMessage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingMessage(null)}
+      >
+        <View style={styles.actionsBackdrop}>
+          <View style={[styles.editSheet, { backgroundColor: card, borderColor: border }]}>
+            <Text style={[styles.editTitle, { color: text }]}>Edit message</Text>
+            <TextInput
+              value={editDraft}
+              onChangeText={setEditDraft}
+              multiline
+              autoFocus
+              style={[styles.editInput, { color: text, borderColor: border }]}
+              placeholder="Update your message"
+              placeholderTextColor={`${secondary}99`}
+            />
+            <View style={styles.editActions}>
+              <Pressable style={styles.editActionBtn} onPress={() => setEditingMessage(null)}>
+                <Text style={[styles.actionBtnText, { color: secondary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.editActionBtn, { backgroundColor: `${primary}22` }]}
+                onPress={() => void handleSaveEditedMessage()}
+              >
+                <Text style={[styles.actionBtnText, { color: primary }]}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={pickerVisible}
@@ -1354,6 +1767,33 @@ const groupStyles = StyleSheet.create({
     marginBottom: 8,
   },
   messageText: { fontSize: 14.5, lineHeight: 21 },
+  reactionOverlay: {
+    position: "absolute",
+    bottom: -10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    maxWidth: "92%",
+    zIndex: 2,
+  },
+  reactionOverlayMine: {
+    right: 12,
+    justifyContent: "flex-end",
+  },
+  reactionOverlayOther: {
+    left: 12,
+    justifyContent: "flex-start",
+  },
+  reactionChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 11,
+    borderWidth: 1,
+  },
+  reactionChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
   mentionHeaderWrap: {
     gap: 4,
     marginBottom: 0,
@@ -1496,6 +1936,36 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginBottom: 8,
   },
+  replyBar: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  replyBarTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  replyBarTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  replyBarSnippet: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  replyBarClose: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   mentionSheet: {
     marginHorizontal: 12,
     marginBottom: 8,
@@ -1584,6 +2054,117 @@ const styles = StyleSheet.create({
     width: 3.5,
     height: 3.5,
     borderRadius: 1.75,
+  },
+  actionsBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+    padding: 14,
+  },
+  actionsSheet: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 10,
+    gap: 2,
+  },
+  actionsEmojiRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  emojiAction: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emojiActionText: {
+    fontSize: 18,
+  },
+  actionBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  actionBtnText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  editSheet: {
+    borderRadius: 16,
+    borderWidth: 1,
+    marginHorizontal: 14,
+    padding: 12,
+    marginBottom: 24,
+    marginTop: "auto",
+  },
+  editTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    minHeight: 90,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    textAlignVertical: "top",
+    fontSize: 14,
+  },
+  editActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 10,
+  },
+  editActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  reactionDetailsSheet: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+    maxHeight: "55%",
+  },
+  reactionDetailsTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  reactionDetailsEmpty: {
+    fontSize: 13,
+    textAlign: "center",
+    paddingVertical: 12,
+  },
+  reactionUserRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  reactionUserAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+  reactionUserAvatarFallback: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reactionUserAvatarText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  reactionUserName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
   },
   pickerBackdrop: {
     flex: 1,

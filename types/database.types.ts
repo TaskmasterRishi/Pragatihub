@@ -135,51 +135,6 @@ export type Database = {
           },
         ]
       }
-      community_chat_messages: {
-        Row: {
-          content: string
-          created_at: string
-          group_id: string
-          id: string
-          media_type: string | null
-          media_url: string | null
-          user_id: string
-        }
-        Insert: {
-          content: string
-          created_at?: string
-          group_id: string
-          id?: string
-          media_type?: string | null
-          media_url?: string | null
-          user_id: string
-        }
-        Update: {
-          content?: string
-          created_at?: string
-          group_id?: string
-          id?: string
-          media_type?: string | null
-          media_url?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "community_chat_messages_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "community_chat_messages_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       community_chat_message_mentions: {
         Row: {
           created_at: string
@@ -235,6 +190,106 @@ export type Database = {
             columns: ["message_id"]
             isOneToOne: false
             referencedRelation: "community_chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_chat_message_reactions: {
+        Row: {
+          created_at: string
+          emoji: string
+          id: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          id?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          id?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_chat_message_reactions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "community_chat_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_chat_message_reactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          edited_at: string | null
+          group_id: string
+          id: string
+          is_deleted: boolean
+          media_type: string | null
+          media_url: string | null
+          reply_to_message_id: string | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          edited_at?: string | null
+          group_id: string
+          id?: string
+          is_deleted?: boolean
+          media_type?: string | null
+          media_url?: string | null
+          reply_to_message_id?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          edited_at?: string | null
+          group_id?: string
+          id?: string
+          is_deleted?: boolean
+          media_type?: string | null
+          media_url?: string | null
+          reply_to_message_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_chat_messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_chat_messages_reply_to_message_id_fkey"
+            columns: ["reply_to_message_id"]
+            isOneToOne: false
+            referencedRelation: "community_chat_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_chat_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -735,32 +790,80 @@ export type Database = {
           },
         ]
       }
+      private_chat_message_reactions: {
+        Row: {
+          created_at: string
+          emoji: string
+          id: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          id?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          id?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "private_chat_message_reactions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "private_chat_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "private_chat_message_reactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       private_chat_messages: {
         Row: {
           chat_id: string
           content: string
           created_at: string
+          edited_at: string | null
           id: string
+          is_deleted: boolean
           media_type: string | null
           media_url: string | null
+          reply_to_message_id: string | null
           user_id: string
         }
         Insert: {
           chat_id: string
           content?: string
           created_at?: string
+          edited_at?: string | null
           id?: string
+          is_deleted?: boolean
           media_type?: string | null
           media_url?: string | null
+          reply_to_message_id?: string | null
           user_id: string
         }
         Update: {
           chat_id?: string
           content?: string
           created_at?: string
+          edited_at?: string | null
           id?: string
+          is_deleted?: boolean
           media_type?: string | null
           media_url?: string | null
+          reply_to_message_id?: string | null
           user_id?: string
         }
         Relationships: [
@@ -769,6 +872,13 @@ export type Database = {
             columns: ["chat_id"]
             isOneToOne: false
             referencedRelation: "private_chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "private_chat_messages_reply_to_message_id_fkey"
+            columns: ["reply_to_message_id"]
+            isOneToOne: false
+            referencedRelation: "private_chat_messages"
             referencedColumns: ["id"]
           },
           {

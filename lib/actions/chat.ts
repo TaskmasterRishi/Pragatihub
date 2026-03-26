@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/Supabase";
 import type {
+  ChatReplyRef,
   ChatMediaType,
   ChatUser,
   CommunityChatMessage,
@@ -17,6 +18,15 @@ function mapUser(row: any): ChatUser | null {
 }
 
 function mapCommunityMessage(row: any): CommunityChatMessage {
+  const replyTo = row.reply_to
+    ? ({
+        id: String(row.reply_to.id),
+        content: String(row.reply_to.content ?? ""),
+        user_id: String(row.reply_to.user_id),
+        user: mapUser(row.reply_to.user),
+      } as ChatReplyRef)
+    : null;
+
   return {
     id: String(row.id),
     group_id: String(row.group_id),
@@ -24,13 +34,32 @@ function mapCommunityMessage(row: any): CommunityChatMessage {
     content: String(row.content ?? ""),
     media_type: (row.media_type as ChatMediaType | null) ?? "text",
     media_url: (row.media_url as string | null) ?? null,
+    reply_to_message_id: (row.reply_to_message_id as string | null) ?? null,
+    edited_at: (row.edited_at as string | null) ?? null,
+    is_deleted: Boolean(row.is_deleted ?? false),
     created_at: String(row.created_at),
     clientStatus: "sent",
     user: mapUser(row.user),
+    reply_to: replyTo,
+    reactions: ((row.reactions ?? []) as any[])
+      .map((reaction) => ({
+        emoji: String(reaction.emoji ?? ""),
+        user_id: String(reaction.user_id ?? ""),
+      }))
+      .filter((reaction) => reaction.emoji && reaction.user_id),
   };
 }
 
 function mapPrivateMessage(row: any): PrivateChatMessage {
+  const replyTo = row.reply_to
+    ? ({
+        id: String(row.reply_to.id),
+        content: String(row.reply_to.content ?? ""),
+        user_id: String(row.reply_to.user_id),
+        user: mapUser(row.reply_to.user),
+      } as ChatReplyRef)
+    : null;
+
   return {
     id: String(row.id),
     chat_id: String(row.chat_id),
@@ -38,9 +67,19 @@ function mapPrivateMessage(row: any): PrivateChatMessage {
     content: String(row.content ?? ""),
     media_type: (row.media_type as ChatMediaType | null) ?? "text",
     media_url: (row.media_url as string | null) ?? null,
+    reply_to_message_id: (row.reply_to_message_id as string | null) ?? null,
+    edited_at: (row.edited_at as string | null) ?? null,
+    is_deleted: Boolean(row.is_deleted ?? false),
     created_at: String(row.created_at),
     clientStatus: "sent",
     user: mapUser(row.user),
+    reply_to: replyTo,
+    reactions: ((row.reactions ?? []) as any[])
+      .map((reaction) => ({
+        emoji: String(reaction.emoji ?? ""),
+        user_id: String(reaction.user_id ?? ""),
+      }))
+      .filter((reaction) => reaction.emoji && reaction.user_id),
   };
 }
 
@@ -62,7 +101,20 @@ export async function fetchCommunityMessages(communityId: string) {
   const { data, error } = await supabase
     .from("community_chat_messages")
     .select(
-      "id, group_id, user_id, content, media_type, media_url, created_at, user:users(id, name, image)",
+      `
+      id,
+      group_id,
+      user_id,
+      content,
+      media_type,
+      media_url,
+      reply_to_message_id,
+      edited_at,
+      is_deleted,
+      created_at,
+      user:users(id, name, image),
+      reactions:community_chat_message_reactions(emoji, user_id)
+      `,
     )
     .eq("group_id", communityId)
     .order("created_at", { ascending: true })
@@ -72,8 +124,25 @@ export async function fetchCommunityMessages(communityId: string) {
     return { data: [] as CommunityChatMessage[], error: error.message };
   }
 
+  const mapped = ((data ?? []) as any[]).map(mapCommunityMessage);
+  const byId = new Map(mapped.map((message) => [message.id, message]));
+
   return {
-    data: ((data ?? []) as any[]).map(mapCommunityMessage),
+    data: mapped.map((message) => ({
+      ...message,
+      reply_to: message.reply_to_message_id
+        ? (() => {
+            const ref = byId.get(message.reply_to_message_id);
+            if (!ref) return null;
+            return {
+              id: ref.id,
+              content: ref.content,
+              user_id: ref.user_id,
+              user: ref.user,
+            } as ChatReplyRef;
+          })()
+        : null,
+    })),
     error: null,
   };
 }
@@ -84,6 +153,7 @@ export async function sendCommunityChatMessage(input: {
   content: string;
   mediaType?: ChatMediaType;
   mediaUrl?: string | null;
+  replyToMessageId?: string | null;
   mentionUserIds?: string[];
   mentionHandles?: string[];
 }) {
@@ -95,8 +165,11 @@ export async function sendCommunityChatMessage(input: {
       content: input.content,
       media_type: input.mediaType ?? "text",
       media_url: input.mediaUrl ?? null,
+      reply_to_message_id: input.replyToMessageId ?? null,
     })
-    .select("id, group_id, user_id, content, media_type, media_url, created_at")
+    .select(
+      "id, group_id, user_id, content, media_type, media_url, reply_to_message_id, edited_at, is_deleted, created_at",
+    )
     .single();
 
   if (!error && data?.id && input.mentionUserIds?.length) {
@@ -126,6 +199,87 @@ export async function sendCommunityChatMessage(input: {
   }
 
   return { data, error };
+}
+
+export async function editCommunityChatMessage(input: {
+  messageId: string;
+  userId: string;
+  content: string;
+}) {
+  const { data, error } = await supabase
+    .from("community_chat_messages")
+    .update({
+      content: input.content,
+      edited_at: new Date().toISOString(),
+    })
+    .eq("id", input.messageId)
+    .eq("user_id", input.userId)
+    .select(
+      "id, group_id, user_id, content, media_type, media_url, reply_to_message_id, edited_at, is_deleted, created_at",
+    )
+    .single();
+
+  return { data, error };
+}
+
+export async function deleteCommunityChatMessage(input: {
+  messageId: string;
+  userId: string;
+}) {
+  const { error } = await supabase
+    .from("community_chat_messages")
+    .delete()
+    .eq("id", input.messageId)
+    .eq("user_id", input.userId);
+
+  return { error };
+}
+
+export async function toggleCommunityChatReaction(input: {
+  messageId: string;
+  userId: string;
+  emoji: string;
+}) {
+  const existing = await supabase
+    .from("community_chat_message_reactions")
+    .select("id, emoji")
+    .eq("message_id", input.messageId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  if (existing.error) {
+    return { mode: "error" as const, error: existing.error };
+  }
+
+  if (existing.data?.emoji === input.emoji) {
+    const { error } = await supabase
+      .from("community_chat_message_reactions")
+      .delete()
+      .eq("id", existing.data.id);
+    return { mode: "removed" as const, error };
+  }
+
+  if (existing.data?.id) {
+    const { data, error } = await supabase
+      .from("community_chat_message_reactions")
+      .update({ emoji: input.emoji })
+      .eq("id", existing.data.id)
+      .select("emoji, user_id")
+      .single();
+    return { mode: "updated" as const, data, error };
+  }
+
+  const { data, error } = await supabase
+    .from("community_chat_message_reactions")
+    .insert({
+      message_id: input.messageId,
+      user_id: input.userId,
+      emoji: input.emoji,
+    })
+    .select("emoji, user_id")
+    .single();
+
+  return { mode: "added" as const, data, error };
 }
 
 export async function searchUsersForPrivateChat(query: string, currentUserId: string) {
@@ -208,7 +362,20 @@ export async function fetchPrivateMessages(chatId: string) {
   const { data, error } = await supabase
     .from("private_chat_messages")
     .select(
-      "id, chat_id, user_id, content, media_type, media_url, created_at, user:users(id, name, image)",
+      `
+      id,
+      chat_id,
+      user_id,
+      content,
+      media_type,
+      media_url,
+      reply_to_message_id,
+      edited_at,
+      is_deleted,
+      created_at,
+      user:users(id, name, image),
+      reactions:private_chat_message_reactions(emoji, user_id)
+      `,
     )
     .eq("chat_id", chatId)
     .order("created_at", { ascending: true })
@@ -218,8 +385,25 @@ export async function fetchPrivateMessages(chatId: string) {
     return { data: [] as PrivateChatMessage[], error: error.message };
   }
 
+  const mapped = ((data ?? []) as any[]).map(mapPrivateMessage);
+  const byId = new Map(mapped.map((message) => [message.id, message]));
+
   return {
-    data: ((data ?? []) as any[]).map(mapPrivateMessage),
+    data: mapped.map((message) => ({
+      ...message,
+      reply_to: message.reply_to_message_id
+        ? (() => {
+            const ref = byId.get(message.reply_to_message_id);
+            if (!ref) return null;
+            return {
+              id: ref.id,
+              content: ref.content,
+              user_id: ref.user_id,
+              user: ref.user,
+            } as ChatReplyRef;
+          })()
+        : null,
+    })),
     error: null,
   };
 }
@@ -230,6 +414,7 @@ export async function sendPrivateChatMessage(input: {
   content: string;
   mediaType?: ChatMediaType;
   mediaUrl?: string | null;
+  replyToMessageId?: string | null;
 }) {
   const { data, error } = await supabase
     .from("private_chat_messages")
@@ -239,8 +424,11 @@ export async function sendPrivateChatMessage(input: {
       content: input.content,
       media_type: input.mediaType ?? "text",
       media_url: input.mediaUrl ?? null,
+      reply_to_message_id: input.replyToMessageId ?? null,
     })
-    .select("id, chat_id, user_id, content, media_type, media_url, created_at")
+    .select(
+      "id, chat_id, user_id, content, media_type, media_url, reply_to_message_id, edited_at, is_deleted, created_at",
+    )
     .single();
 
   if (!error) {
@@ -251,6 +439,87 @@ export async function sendPrivateChatMessage(input: {
   }
 
   return { data, error };
+}
+
+export async function editPrivateChatMessage(input: {
+  messageId: string;
+  userId: string;
+  content: string;
+}) {
+  const { data, error } = await supabase
+    .from("private_chat_messages")
+    .update({
+      content: input.content,
+      edited_at: new Date().toISOString(),
+    })
+    .eq("id", input.messageId)
+    .eq("user_id", input.userId)
+    .select(
+      "id, chat_id, user_id, content, media_type, media_url, reply_to_message_id, edited_at, is_deleted, created_at",
+    )
+    .single();
+
+  return { data, error };
+}
+
+export async function deletePrivateChatMessage(input: {
+  messageId: string;
+  userId: string;
+}) {
+  const { error } = await supabase
+    .from("private_chat_messages")
+    .delete()
+    .eq("id", input.messageId)
+    .eq("user_id", input.userId);
+
+  return { error };
+}
+
+export async function togglePrivateChatReaction(input: {
+  messageId: string;
+  userId: string;
+  emoji: string;
+}) {
+  const existing = await supabase
+    .from("private_chat_message_reactions")
+    .select("id, emoji")
+    .eq("message_id", input.messageId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  if (existing.error) {
+    return { mode: "error" as const, error: existing.error };
+  }
+
+  if (existing.data?.emoji === input.emoji) {
+    const { error } = await supabase
+      .from("private_chat_message_reactions")
+      .delete()
+      .eq("id", existing.data.id);
+    return { mode: "removed" as const, error };
+  }
+
+  if (existing.data?.id) {
+    const { data, error } = await supabase
+      .from("private_chat_message_reactions")
+      .update({ emoji: input.emoji })
+      .eq("id", existing.data.id)
+      .select("emoji, user_id")
+      .single();
+    return { mode: "updated" as const, data, error };
+  }
+
+  const { data, error } = await supabase
+    .from("private_chat_message_reactions")
+    .insert({
+      message_id: input.messageId,
+      user_id: input.userId,
+      emoji: input.emoji,
+    })
+    .select("emoji, user_id")
+    .single();
+
+  return { mode: "added" as const, data, error };
 }
 
 export async function fetchPrivateChatOverviews(userId: string) {

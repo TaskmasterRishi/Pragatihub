@@ -6,10 +6,27 @@ export type ChatUser = Pick<Tables<"users">, "id" | "name" | "image">;
 
 export type ChatClientStatus = "sent" | "sending" | "failed";
 
+export type ChatMessageReaction = {
+  emoji: string;
+  user_id: string;
+};
+
+export type ChatReplyRef = {
+  id: string;
+  content: string;
+  user_id: string;
+  user: ChatUser | null;
+};
+
 export type CommunityChatMessage = Tables<"community_chat_messages"> & {
   user: ChatUser | null;
   media_type?: ChatMediaType | null;
   media_url?: string | null;
+  reply_to_message_id?: string | null;
+  edited_at?: string | null;
+  is_deleted?: boolean | null;
+  reply_to?: ChatReplyRef | null;
+  reactions?: ChatMessageReaction[];
   clientStatus?: ChatClientStatus;
 };
 
@@ -17,6 +34,11 @@ export type PrivateChatMessage = Tables<"private_chat_messages"> & {
   user: ChatUser | null;
   media_type?: ChatMediaType | null;
   media_url?: string | null;
+  reply_to_message_id?: string | null;
+  edited_at?: string | null;
+  is_deleted?: boolean | null;
+  reply_to?: ChatReplyRef | null;
+  reactions?: ChatMessageReaction[];
   clientStatus?: ChatClientStatus;
 };
 
