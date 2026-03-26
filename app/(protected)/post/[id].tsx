@@ -278,6 +278,86 @@ export default function DetailedPost() {
   }, [fetchPostAndComments]);
 
   useEffect(() => {
+    if (!postId) return;
+
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const queueRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        void fetchPostAndComments();
+      }, 140);
+    };
+
+    const channel = supabase.channel(`post-detail:${postId}`);
+
+    channel
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "posts",
+          filter: `id=eq.${postId}`,
+        },
+        queueRefresh,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "post_upvotes",
+          filter: `post_id=eq.${postId}`,
+        },
+        queueRefresh,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "post_downvotes",
+          filter: `post_id=eq.${postId}`,
+        },
+        queueRefresh,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "comments",
+          filter: `post_id=eq.${postId}`,
+        },
+        queueRefresh,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "comment_upvotes",
+        },
+        queueRefresh,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "comment_downvotes",
+        },
+        queueRefresh,
+      )
+      .subscribe();
+
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchPostAndComments, postId]);
+
+  useEffect(() => {
     if (Platform.OS !== "android") return;
 
     const showSub = Keyboard.addListener("keyboardDidShow", (event) => {

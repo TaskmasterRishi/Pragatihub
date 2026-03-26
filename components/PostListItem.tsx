@@ -33,6 +33,7 @@ import {
 } from "react-native";
 
 import JoinCommunityButton from "@/components/JoinCommunityButton";
+import EntityBadge from "@/components/EntityBadge";
 import VoteButtons from "@/components/VoteButtons";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -45,6 +46,28 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
+const ACHIEVEMENTS = [
+  { id: "insightful", emoji: "🧠", label: "Insightful", color: "#0EA5E9" },
+  { id: "helpful", emoji: "🤝", label: "Helpful", color: "#10B981" },
+  { id: "creative", emoji: "🎨", label: "Creative", color: "#8B5CF6" },
+  { id: "motivating", emoji: "🚀", label: "Motivating", color: "#F97316" },
+  { id: "quality", emoji: "🏆", label: "High Quality", color: "#EAB308" },
+  { id: "community", emoji: "💬", label: "Community Pick", color: "#EC4899" },
+  { id: "off_topic", emoji: "🧩", label: "Off-topic", color: "#6B7280" },
+  { id: "misleading", emoji: "⚠️", label: "Misleading", color: "#EF4444" },
+  { id: "low_effort", emoji: "🪫", label: "Low Effort", color: "#9CA3AF" },
+  { id: "toxic", emoji: "🚫", label: "Toxic", color: "#DC2626" },
+] as const;
+type AchievementId = (typeof ACHIEVEMENTS)[number]["id"];
+const ACHIEVEMENT_IDS = new Set<string>(ACHIEVEMENTS.map((a) => a.id));
+const emptyAchievementCounts = () =>
+  Object.fromEntries(ACHIEVEMENTS.map((a) => [a.id, 0])) as Record<
+    AchievementId,
+    number
+  >;
+const isAchievementId = (value: string): value is AchievementId =>
+  ACHIEVEMENT_IDS.has(value);
+type AwardListUser = { id: string; name: string; image: string | null };
 
 /* ───────────────────────────────────────────── */
 /* Shared shimmer util */
@@ -1042,6 +1065,14 @@ function PostListItem({
   const [isWritingDetails, setIsWritingDetails] = useState(false);
   const [isSubmittingModeratorSupport, setIsSubmittingModeratorSupport] =
     useState(false);
+  const [awardSheetVisible, setAwardSheetVisible] = useState(false);
+  const [awardUsersSheetVisible, setAwardUsersSheetVisible] = useState(false);
+  const [awardUsersSheetTitle, setAwardUsersSheetTitle] = useState("");
+  const [awardUsersLoading, setAwardUsersLoading] = useState(false);
+  const [awardUsers, setAwardUsers] = useState<AwardListUser[]>([]);
+  const [achievementCounts, setAchievementCounts] =
+    useState<Record<AchievementId, number>>(emptyAchievementCounts);
+  const [awardedByMe, setAwardedByMe] = useState<Record<string, true>>({});
   const loadingPulseAnim = useRef(new Animated.Value(0.85)).current;
   const reportSheetAnim = useRef(new Animated.Value(0)).current;
   const reportSuccessAnim = useRef(new Animated.Value(0)).current;
@@ -1183,6 +1214,138 @@ function PostListItem({
   const entranceDelay = Math.min(index * 40, 200);
   const isOnDetail = isDetailedPost;
   const postAgeLabel = `${formatDistanceToNowStrict(new Date(post.created_at))} ago`;
+  const canAwardPost = !!user?.id && user.id !== post.user.id;
+  const fetchAchievementState = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("post_badge_awards")
+      .select("badge_key, awarded_by_user_id")
+      .eq("post_id", post.id);
+
+    if (error) return;
+
+    const nextCounts = emptyAchievementCounts();
+    const nextAwardedByMe: Record<string, true> = {};
+    for (const row of data ?? []) {
+      const badgeKey = String((row as any).badge_key ?? "");
+      if (!isAchievementId(badgeKey)) continue;
+      nextCounts[badgeKey] = (nextCounts[badgeKey] ?? 0) + 1;
+      if (user?.id && String((row as any).awarded_by_user_id ?? "") === user.id) {
+        nextAwardedByMe[badgeKey] = true;
+      }
+    }
+
+    setAchievementCounts(nextCounts);
+    setAwardedByMe(nextAwardedByMe);
+  }, [post.id, user?.id]);
+
+  useEffect(() => {
+    void fetchAchievementState();
+  }, [fetchAchievementState]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`post-badges:${post.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "post_badge_awards",
+          filter: `post_id=eq.${post.id}`,
+        },
+        () => {
+          void fetchAchievementState();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchAchievementState, post.id]);
+
+  const totalAchievementCount = ACHIEVEMENTS.reduce(
+    (sum, item) => sum + (achievementCounts[item.id] ?? 0),
+    0,
+  );
+  const visibleAchievements = isOnDetail
+    ? ACHIEVEMENTS
+    : ACHIEVEMENTS.filter((item) => (achievementCounts[item.id] ?? 0) > 0).slice(
+        0,
+        4,
+      );
+  const compactAchievements = ACHIEVEMENTS.filter(
+    (item) => (achievementCounts[item.id] ?? 0) > 0,
+  ).slice(0, 6);
+  const awardAchievement = async (id: AchievementId) => {
+    if (!canAwardPost) {
+      Alert.alert("Not available", "You cannot award your own post.");
+      return;
+    }
+    if (awardedByMe[id]) {
+      Alert.alert("Already awarded", "You already gave this badge.");
+      return;
+    }
+    setAwardedByMe((prev) => ({ ...prev, [id]: true }));
+    setAchievementCounts((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+    setAwardSheetVisible(false);
+
+    const { error } = await supabase.from("post_badge_awards").insert({
+      post_id: post.id,
+      badge_key: id,
+      awarded_by_user_id: user?.id,
+      awarded_to_user_id: post.user.id,
+    });
+
+    if (!error) return;
+
+    setAwardedByMe((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setAchievementCounts((prev) => ({ ...prev, [id]: Math.max((prev[id] ?? 1) - 1, 0) }));
+
+    if ((error as any)?.code === "23505") {
+      Alert.alert("Already awarded", "You already gave this badge.");
+      return;
+    }
+
+    Alert.alert("Could not award", error.message ?? "Please try again.");
+  };
+  const openAwardUsersSheet = async (achievement: (typeof ACHIEVEMENTS)[number]) => {
+    setAwardUsersSheetTitle(`${achievement.emoji} ${achievement.label}`);
+    setAwardUsers([]);
+    setAwardUsersLoading(true);
+    setAwardUsersSheetVisible(true);
+
+    const { data, error } = await supabase
+      .from("post_badge_awards")
+      .select("awarded_by_user_id, user:users(id, name, image)")
+      .eq("post_id", post.id)
+      .eq("badge_key", achievement.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setAwardUsersLoading(false);
+      return;
+    }
+
+    const seen = new Set<string>();
+    const users: AwardListUser[] = [];
+    for (const row of (data ?? []) as any[]) {
+      const uid = String(row.awarded_by_user_id ?? "");
+      if (!uid || seen.has(uid)) continue;
+      seen.add(uid);
+      users.push({
+        id: uid,
+        name: String(row.user?.name ?? "User"),
+        image: (row.user?.image as string | null) ?? null,
+      });
+    }
+    setAwardUsers(users);
+    setAwardUsersLoading(false);
+  };
   const MetaBadge = ({
     prefix,
     value,
@@ -1486,18 +1649,40 @@ function PostListItem({
                 paddingVertical: 5,
               }}
             >
-              <AnimatedIconButton>
-                <Trophy size={17} color={muted} />
-              </AnimatedIconButton>
+              {canAwardPost ? (
+                <>
+                  <AnimatedIconButton>
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+                    >
+                      <Pressable onPress={() => setAwardSheetVisible(true)}>
+                        <Trophy size={17} color={muted} />
+                      </Pressable>
+                      {totalAchievementCount > 0 ? (
+                        <Text
+                          style={{
+                            color: muted,
+                            fontSize: 11,
+                            fontWeight: "700",
+                            minWidth: 10,
+                          }}
+                        >
+                          {totalAchievementCount}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </AnimatedIconButton>
 
-              <View
-                style={{
-                  width: 1,
-                  height: 18,
-                  backgroundColor: border,
-                  marginHorizontal: 10,
-                }}
-              />
+                  <View
+                    style={{
+                      width: 1,
+                      height: 18,
+                      backgroundColor: border,
+                      marginHorizontal: 10,
+                    }}
+                  />
+                </>
+              ) : null}
 
               <AnimatedIconButton onPress={handleShare}>
                 <Share2 size={17} color={muted} />
@@ -1522,6 +1707,109 @@ function PostListItem({
               )}
             </View>
           </View>
+
+          {(isOnDetail || compactAchievements.length > 0) && (
+            <View
+              style={{
+                marginTop: 10,
+                borderTopWidth: 1,
+                borderColor: `${border}AA`,
+                paddingTop: 8,
+              }}
+            >
+              {isOnDetail ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    justifyContent: "space-between",
+                    rowGap: 8,
+                  }}
+                >
+                  {visibleAchievements.map((item) => {
+                    const count = achievementCounts[item.id] ?? 0;
+                    const dim = count === 0;
+                    return (
+                      <Pressable
+                        key={item.id}
+                        onLongPress={() => void openAwardUsersSheet(item)}
+                        delayLongPress={220}
+                        style={{
+                          width: "48.5%",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                          borderWidth: 1,
+                          borderRadius: 12,
+                          paddingHorizontal: 10,
+                          paddingVertical: 8,
+                          backgroundColor: dim ? `${muted}10` : `${item.color}16`,
+                          borderColor: dim ? `${border}` : `${item.color}4A`,
+                        }}
+                      >
+                        <Text style={{ fontSize: 16 }}>{item.emoji}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              color: dim ? muted : item.color,
+                              fontSize: 11.5,
+                              fontWeight: "700",
+                            }}
+                            numberOfLines={1}
+                          >
+                            {item.label}
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            color: dim ? muted : item.color,
+                            fontSize: 12,
+                            fontWeight: "800",
+                          }}
+                        >
+                          {count}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  {compactAchievements.map((item) => {
+                    const count = achievementCounts[item.id] ?? 0;
+                    return (
+                      <View key={item.id}>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                            borderWidth: 1,
+                            borderRadius: 999,
+                            paddingHorizontal: 8,
+                            paddingVertical: 5,
+                            backgroundColor: `${item.color}14`,
+                            borderColor: `${item.color}4A`,
+                          }}
+                        >
+                          <Text style={{ fontSize: 14 }}>{item.emoji}</Text>
+                          <Text
+                            style={{
+                              color: item.color,
+                              fontSize: 11,
+                              fontWeight: "800",
+                            }}
+                          >
+                            {count}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          )}
 
           {refreshing && (
             <Animated.View
@@ -2113,6 +2401,226 @@ function PostListItem({
                   )}
                 </ScrollView>
               </Animated.View>
+            </Pressable>
+          </View>
+        </Modal>
+
+        <Modal
+          transparent
+          visible={awardSheetVisible}
+          animationType="fade"
+          statusBarTranslucent
+          navigationBarTranslucent
+          onRequestClose={() => setAwardSheetVisible(false)}
+        >
+          <View style={{ flex: 1 }}>
+            <Pressable
+              style={{
+                ...StyleSheet.absoluteFillObject,
+                backgroundColor: "rgba(2, 6, 23, 0.46)",
+              }}
+              onPress={() => setAwardSheetVisible(false)}
+            />
+            <Pressable
+              onPress={(event) => event.stopPropagation()}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: card,
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                borderTopWidth: 1,
+                borderColor: border,
+                paddingHorizontal: 16,
+                paddingTop: 14,
+                paddingBottom: bottomInset + 18,
+                gap: 10,
+              }}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 4,
+                  borderRadius: 999,
+                  backgroundColor: border,
+                  alignSelf: "center",
+                  marginBottom: 6,
+                }}
+              />
+              <Text style={{ color: text, fontSize: 18, fontWeight: "800" }}>
+                Award Achievement
+              </Text>
+              <Text style={{ color: muted, fontSize: 13 }}>
+                {canAwardPost
+                  ? "Choose a badge to award this post."
+                  : "You cannot award your own post."}
+              </Text>
+
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {ACHIEVEMENTS.map((item) => {
+                  const already = !!awardedByMe[item.id];
+                  return (
+                    <Pressable
+                      key={item.id}
+                      disabled={!canAwardPost || already}
+                      onPress={() => awardAchievement(item.id)}
+                      style={{
+                        width: "48%",
+                        borderWidth: 1.2,
+                        borderRadius: 14,
+                        paddingHorizontal: 10,
+                        paddingVertical: 10,
+                        backgroundColor: already ? `${item.color}20` : `${item.color}12`,
+                        borderColor: already ? `${item.color}70` : `${item.color}48`,
+                        opacity: !canAwardPost ? 0.55 : 1,
+                      }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={{ fontSize: 18 }}>{item.emoji}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              color: item.color,
+                              fontSize: 13,
+                              fontWeight: "800",
+                            }}
+                          >
+                            {item.label}
+                          </Text>
+                          <Text
+                            style={{
+                              color: muted,
+                              fontSize: 11,
+                              marginTop: 1,
+                            }}
+                          >
+                            {already ? "Awarded by you" : "Tap to award"}
+                          </Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Pressable
+                onPress={() => setAwardSheetVisible(false)}
+                style={{
+                  marginTop: 4,
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                  backgroundColor: `${muted}20`,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ color: text, fontSize: 15, fontWeight: "700" }}>
+                  Close
+                </Text>
+              </Pressable>
+            </Pressable>
+          </View>
+        </Modal>
+
+        <Modal
+          transparent
+          visible={awardUsersSheetVisible}
+          animationType="slide"
+          statusBarTranslucent
+          navigationBarTranslucent
+          onRequestClose={() => setAwardUsersSheetVisible(false)}
+        >
+          <View style={{ flex: 1 }}>
+            <Pressable
+              style={{
+                ...StyleSheet.absoluteFillObject,
+                backgroundColor: "rgba(2, 6, 23, 0.46)",
+              }}
+              onPress={() => setAwardUsersSheetVisible(false)}
+            />
+            <Pressable
+              onPress={(event) => event.stopPropagation()}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                maxHeight: "72%",
+                backgroundColor: card,
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                borderTopWidth: 1,
+                borderColor: border,
+                paddingHorizontal: 16,
+                paddingTop: 14,
+                paddingBottom: bottomInset + 14,
+                gap: 10,
+              }}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 4,
+                  borderRadius: 999,
+                  backgroundColor: border,
+                  alignSelf: "center",
+                  marginBottom: 4,
+                }}
+              />
+              <Text style={{ color: text, fontSize: 17, fontWeight: "800" }}>
+                {awardUsersSheetTitle}
+              </Text>
+              <Text style={{ color: muted, fontSize: 12.5 }}>
+                Users who awarded this badge
+              </Text>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
+              >
+                {awardUsersLoading ? (
+                  <Text style={{ color: muted, fontSize: 13 }}>Loading users...</Text>
+                ) : awardUsers.length === 0 ? (
+                  <Text style={{ color: muted, fontSize: 13 }}>No users yet</Text>
+                ) : (
+                  awardUsers.map((item) => (
+                    <View
+                      key={item.id}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        borderWidth: 1,
+                        borderColor: border,
+                        borderRadius: 12,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                        gap: 8,
+                      }}
+                    >
+                      <Image
+                        source={{
+                          uri: item.image || "https://via.placeholder.com/150",
+                        }}
+                        style={{
+                          width: 30,
+                          height: 30,
+                          borderRadius: 15,
+                          borderWidth: 1,
+                          borderColor: `${border}99`,
+                        }}
+                      />
+                      <EntityBadge kind="user" size={12} />
+                      <Text
+                        style={{ color: text, fontSize: 14, fontWeight: "700", flex: 1 }}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
             </Pressable>
           </View>
         </Modal>

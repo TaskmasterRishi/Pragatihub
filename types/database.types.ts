@@ -454,6 +454,55 @@ export type Database = {
           },
         ]
       }
+      post_badge_awards: {
+        Row: {
+          awarded_by_user_id: string
+          awarded_to_user_id: string
+          badge_key: string
+          created_at: string
+          id: string
+          post_id: string
+        }
+        Insert: {
+          awarded_by_user_id: string
+          awarded_to_user_id: string
+          badge_key: string
+          created_at?: string
+          id?: string
+          post_id: string
+        }
+        Update: {
+          awarded_by_user_id?: string
+          awarded_to_user_id?: string
+          badge_key?: string
+          created_at?: string
+          id?: string
+          post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_badge_awards_awarded_by_user_id_fkey"
+            columns: ["awarded_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_badge_awards_awarded_to_user_id_fkey"
+            columns: ["awarded_to_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_badge_awards_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_media: {
         Row: {
           created_at: string

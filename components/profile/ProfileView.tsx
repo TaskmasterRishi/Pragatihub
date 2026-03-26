@@ -46,6 +46,28 @@ type ProfileViewProps = {
   onEditImage?: () => void | Promise<void>;
 };
 
+const PROFILE_AWARDS = [
+  { id: "insightful", emoji: "🧠", label: "Insightful", color: "#0EA5E9" },
+  { id: "helpful", emoji: "🤝", label: "Helpful", color: "#10B981" },
+  { id: "creative", emoji: "🎨", label: "Creative", color: "#8B5CF6" },
+  { id: "motivating", emoji: "🚀", label: "Motivating", color: "#F97316" },
+  { id: "quality", emoji: "🏆", label: "High Quality", color: "#EAB308" },
+  { id: "community", emoji: "💬", label: "Community Pick", color: "#EC4899" },
+  { id: "off_topic", emoji: "🧩", label: "Off-topic", color: "#6B7280" },
+  { id: "misleading", emoji: "⚠️", label: "Misleading", color: "#EF4444" },
+  { id: "low_effort", emoji: "🪫", label: "Low Effort", color: "#9CA3AF" },
+  { id: "toxic", emoji: "🚫", label: "Toxic", color: "#DC2626" },
+] as const;
+type ProfileAwardId = (typeof PROFILE_AWARDS)[number]["id"];
+const PROFILE_AWARD_IDS = new Set<string>(PROFILE_AWARDS.map((award) => award.id));
+const createEmptyProfileAwardCounts = () =>
+  Object.fromEntries(PROFILE_AWARDS.map((award) => [award.id, 0])) as Record<
+    ProfileAwardId,
+    number
+  >;
+const isProfileAwardId = (value: string): value is ProfileAwardId =>
+  PROFILE_AWARD_IDS.has(value);
+
 export default function ProfileView({
   profileUserId,
   displayName,
@@ -67,6 +89,9 @@ export default function ProfileView({
   const [communitiesLoading, setCommunitiesLoading] = useState(false);
   const [karmaCount, setKarmaCount] = useState(0);
   const [postCount, setPostCount] = useState(0);
+  const [awardCounts, setAwardCounts] = useState<Record<ProfileAwardId, number>>(
+    createEmptyProfileAwardCounts,
+  );
   const [refreshing, setRefreshing] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -247,9 +272,34 @@ export default function ProfileView({
     setCommentsLoading(false);
   };
 
+  const fetchUserAwardBreakdown = async (userId: string) => {
+    const { data, error } = await supabase
+      .from("post_badge_awards")
+      .select("badge_key")
+      .eq("awarded_to_user_id", userId);
+
+    if (error) {
+      console.log("Profile awards breakdown fetch error:", error);
+      setAwardCounts(createEmptyProfileAwardCounts());
+      return;
+    }
+
+    const nextCounts = createEmptyProfileAwardCounts();
+    for (const row of data ?? []) {
+      const badgeKey = String((row as { badge_key?: string }).badge_key ?? "");
+      if (!isProfileAwardId(badgeKey)) continue;
+      nextCounts[badgeKey] = (nextCounts[badgeKey] ?? 0) + 1;
+    }
+    setAwardCounts(nextCounts);
+  };
+
   useEffect(() => {
     if (!profileUserId) return;
-    const loaders = [fetchUserPosts(profileUserId), fetchUserCommunities(profileUserId)];
+    const loaders = [
+      fetchUserPosts(profileUserId),
+      fetchUserCommunities(profileUserId),
+      fetchUserAwardBreakdown(profileUserId),
+    ];
     if (isOwnProfile) {
       loaders.push(fetchUserComments(profileUserId));
     } else {
@@ -263,7 +313,11 @@ export default function ProfileView({
     if (!profileUserId || refreshing) return;
     setRefreshing(true);
     try {
-      const loaders = [fetchUserPosts(profileUserId), fetchUserCommunities(profileUserId)];
+      const loaders = [
+        fetchUserPosts(profileUserId),
+        fetchUserCommunities(profileUserId),
+        fetchUserAwardBreakdown(profileUserId),
+      ];
       if (isOwnProfile) {
         loaders.push(fetchUserComments(profileUserId));
       }
@@ -546,6 +600,39 @@ export default function ProfileView({
         </View>
 
         <View className="px-4 pt-16">
+          <View
+            className="rounded-2xl p-3"
+            style={{ backgroundColor: cardColor, borderWidth: 1, borderColor: "#ffffff14" }}
+          >
+            <Text className="text-sm font-semibold mb-3" style={{ color: textColor }}>
+              All Awards
+            </Text>
+            <View className="flex-row flex-wrap">
+              {PROFILE_AWARDS.map((award) => (
+                <View key={award.id} style={{ width: "50%", padding: 4 }}>
+                  <View
+                    className="rounded-xl px-3 py-2 flex-row items-center justify-between"
+                    style={{ backgroundColor: `${award.color}20` }}
+                  >
+                    <View className="flex-row items-center gap-2">
+                      <Text style={{ fontSize: 15 }}>{award.emoji}</Text>
+                      <Text
+                        className="text-xs font-semibold"
+                        style={{ color: textColor, maxWidth: 90 }}
+                        numberOfLines={1}
+                      >
+                        {award.label}
+                      </Text>
+                    </View>
+                    <Text className="text-sm font-bold" style={{ color: textColor }}>
+                      {awardCounts[award.id] ?? 0}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+
           <View
             className="mt-2 flex-row rounded-2xl px-1 py-1 relative"
             style={{
