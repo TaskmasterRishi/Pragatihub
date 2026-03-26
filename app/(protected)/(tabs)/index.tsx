@@ -432,13 +432,7 @@ export default function HomeScreen() {
                           <Pressable
                             key={foundUser.id}
                             onPress={() =>
-                              router.push({
-                                pathname: "/(protected)/dm/[id]",
-                                params: {
-                                  id: foundUser.id,
-                                  name: foundUser.name,
-                                },
-                              })
+                              router.push(`/user/${foundUser.id}`)
                             }
                             style={[
                               styles.userRow,

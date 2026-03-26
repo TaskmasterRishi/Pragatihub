@@ -261,6 +261,10 @@ export default function AppLayout() {
           name="community/edit/[id]"
           options={{ animation: "slide_from_right" }}
         />
+        <Stack.Screen
+          name="user/[id]"
+          options={{ animation: "slide_from_right" }}
+        />
       </Stack>
     </View>
   );
