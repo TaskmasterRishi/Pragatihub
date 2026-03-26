@@ -39,6 +39,23 @@ type SendPayload = {
   mentionHandles?: string[];
 };
 
+type ReactionChangePayload = {
+  messageId: string;
+  userId: string;
+  emoji: string;
+  mode: "added" | "removed";
+};
+
+type MessageUpdatePayload = {
+  messageId: string;
+  content: string;
+  editedAt: string | null;
+};
+
+type MessageDeletePayload = {
+  messageId: string;
+};
+
 function toTypingUser(row: any): TypingUser {
   return {
     id: String(row.user_id),
@@ -68,6 +85,48 @@ export function useChat({
   const [loading, setLoading] = useState(true);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const applyReactionChange = useCallback((payload: ReactionChangePayload) => {
+    setMessages((prev) =>
+      prev.map((message) => {
+        if (message.id !== payload.messageId) return message;
+        const reactions = message.reactions ?? [];
+        if (payload.mode === "removed") {
+          return {
+            ...message,
+            reactions: reactions.filter(
+              (reaction) =>
+                !(reaction.user_id === payload.userId && reaction.emoji === payload.emoji),
+            ),
+          } as AnyChatMessage;
+        }
+
+        const exists = reactions.some(
+          (reaction) =>
+            reaction.user_id === payload.userId && reaction.emoji === payload.emoji,
+        );
+        if (exists) return message;
+        return {
+          ...message,
+          reactions: [...reactions, { user_id: payload.userId, emoji: payload.emoji }],
+        } as AnyChatMessage;
+      }),
+    );
+  }, []);
+  const applyMessageUpdate = useCallback((payload: MessageUpdatePayload) => {
+    setMessages((prev) =>
+      prev.map((message) => {
+        if (message.id !== payload.messageId) return message;
+        return {
+          ...message,
+          content: payload.content,
+          edited_at: payload.editedAt,
+        } as AnyChatMessage;
+      }),
+    );
+  }, []);
+  const applyMessageDelete = useCallback((payload: MessageDeletePayload) => {
+    setMessages((prev) => prev.filter((message) => message.id !== payload.messageId));
+  }, []);
 
   const activeContextId =
     chatType === "community" ? communityId : resolvedPrivateChatId ?? undefined;
@@ -154,6 +213,10 @@ export function useChat({
 
     const topic = chatType === "community" ? `community-chat:${activeContextId}` : `private-chat:${activeContextId}`;
     const table = chatType === "community" ? "community_chat_messages" : "private_chat_messages";
+    const reactionsTable =
+      chatType === "community"
+        ? "community_chat_message_reactions"
+        : "private_chat_message_reactions";
     const column = chatType === "community" ? "group_id" : "chat_id";
 
     const channel = supabase.channel(topic, {
@@ -258,6 +321,100 @@ export function useChat({
       .on(
         "postgres_changes",
         {
+          event: "INSERT",
+          schema: "public",
+          table: reactionsTable,
+        },
+        (payload) => {
+          const row = payload.new as any;
+          const messageId = String(row.message_id ?? "");
+          const userId = String(row.user_id ?? "");
+          const emoji = String(row.emoji ?? "");
+          if (!messageId || !userId || !emoji) return;
+          applyReactionChange({ messageId, userId, emoji, mode: "added" });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: reactionsTable,
+        },
+        (payload) => {
+          const row = payload.old as any;
+          const messageId = String(row.message_id ?? "");
+          const userId = String(row.user_id ?? "");
+          const emoji = String(row.emoji ?? "");
+          if (!messageId || !userId || !emoji) return;
+          applyReactionChange({ messageId, userId, emoji, mode: "removed" });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: reactionsTable,
+        },
+        (payload) => {
+          const oldRow = payload.old as any;
+          const newRow = payload.new as any;
+
+          const oldMessageId = String(oldRow.message_id ?? "");
+          const oldUserId = String(oldRow.user_id ?? "");
+          const oldEmoji = String(oldRow.emoji ?? "");
+          const newMessageId = String(newRow.message_id ?? "");
+          const newUserId = String(newRow.user_id ?? "");
+          const newEmoji = String(newRow.emoji ?? "");
+          if (!newMessageId || !newUserId || !newEmoji) return;
+          if (oldMessageId && oldUserId && oldEmoji) {
+            applyReactionChange({
+              messageId: oldMessageId,
+              userId: oldUserId,
+              emoji: oldEmoji,
+              mode: "removed",
+            });
+          }
+          applyReactionChange({
+            messageId: newMessageId,
+            userId: newUserId,
+            emoji: newEmoji,
+            mode: "added",
+          });
+        },
+      )
+      .on("broadcast", { event: "reaction_changed" }, ({ payload }) => {
+        const data = payload as Partial<ReactionChangePayload> | null;
+        const messageId = String(data?.messageId ?? "");
+        const userId = String(data?.userId ?? "");
+        const emoji = String(data?.emoji ?? "");
+        const mode = data?.mode;
+        if (!messageId || !userId || !emoji) return;
+        if (mode !== "added" && mode !== "removed") return;
+        applyReactionChange({ messageId, userId, emoji, mode });
+      })
+      .on("broadcast", { event: "message_updated" }, ({ payload }) => {
+        const data = payload as Partial<MessageUpdatePayload> | null;
+        const messageId = String(data?.messageId ?? "");
+        const content =
+          typeof data?.content === "string" ? data.content : "";
+        const editedAt =
+          typeof data?.editedAt === "string" || data?.editedAt === null
+            ? data.editedAt
+            : null;
+        if (!messageId) return;
+        applyMessageUpdate({ messageId, content, editedAt });
+      })
+      .on("broadcast", { event: "message_deleted" }, ({ payload }) => {
+        const data = payload as Partial<MessageDeletePayload> | null;
+        const messageId = String(data?.messageId ?? "");
+        if (!messageId) return;
+        applyMessageDelete({ messageId });
+      })
+      .on(
+        "postgres_changes",
+        {
           event: "DELETE",
           schema: "public",
           table,
@@ -299,7 +456,17 @@ export function useChat({
       channelRef.current = null;
       setTypingUsers([]);
     };
-  }, [activeContextId, chatType, currentUserId, hydrateSender, isAuthed, user]);
+  }, [
+    activeContextId,
+    applyMessageDelete,
+    applyMessageUpdate,
+    applyReactionChange,
+    chatType,
+    currentUserId,
+    hydrateSender,
+    isAuthed,
+    user,
+  ]);
 
   const setTypingStatus = useCallback(
     async (typing: boolean) => {
@@ -445,6 +612,43 @@ export function useChat({
     return buildListItems(grouped);
   }, [currentUserId, messages]);
 
+  const broadcastReactionChange = useCallback(
+    async (payload: ReactionChangePayload) => {
+      const channel = channelRef.current;
+      if (!channel) return;
+      await channel.send({
+        type: "broadcast",
+        event: "reaction_changed",
+        payload,
+      });
+    },
+    [],
+  );
+  const broadcastMessageUpdate = useCallback(
+    async (payload: MessageUpdatePayload) => {
+      const channel = channelRef.current;
+      if (!channel) return;
+      await channel.send({
+        type: "broadcast",
+        event: "message_updated",
+        payload,
+      });
+    },
+    [],
+  );
+  const broadcastMessageDelete = useCallback(
+    async (payload: MessageDeletePayload) => {
+      const channel = channelRef.current;
+      if (!channel) return;
+      await channel.send({
+        type: "broadcast",
+        event: "message_deleted",
+        payload,
+      });
+    },
+    [],
+  );
+
   return {
     loading,
     sending,
@@ -457,6 +661,9 @@ export function useChat({
     setMessages,
     setErrorText,
     setTypingStatus,
+    broadcastReactionChange,
+    broadcastMessageUpdate,
+    broadcastMessageDelete,
     sendMessage,
     reload: loadInitialData,
   };

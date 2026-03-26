@@ -644,6 +644,9 @@ export default function ChatThread({
     listItems,
     setMessages,
     setTypingStatus,
+    broadcastReactionChange,
+    broadcastMessageUpdate,
+    broadcastMessageDelete,
     sendMessage,
   } = useChat({
     chatType,
@@ -1058,6 +1061,11 @@ export default function ChatThread({
         content: data.content ?? content,
         edited_at: data.edited_at ?? new Date().toISOString(),
       }));
+      void broadcastMessageUpdate({
+        messageId: editingMessage.id,
+        content: data.content ?? content,
+        editedAt: data.edited_at ?? new Date().toISOString(),
+      });
       setEditingMessage(null);
       setInput("");
       return;
@@ -1148,9 +1156,18 @@ export default function ChatThread({
       if (result.error) {
         updateMessageLocally(snapshot.id, () => snapshot);
         Alert.alert("Could not react", result.error.message ?? "Try again.");
+        return;
+      }
+      if (result.mode === "added" || result.mode === "removed") {
+        void broadcastReactionChange({
+          messageId: snapshot.id,
+          userId: user.id,
+          emoji,
+          mode: result.mode,
+        });
       }
     },
-    [chatType, updateMessageLocally, user?.id],
+    [broadcastReactionChange, chatType, updateMessageLocally, user?.id],
   );
 
   const handleReplyToMessage = useCallback(() => {
@@ -1201,8 +1218,16 @@ export default function ChatThread({
       setInput("");
     }
     setMessages((prev) => prev.filter((message) => message.id !== messageId));
+    void broadcastMessageDelete({ messageId });
     setActionsVisible(false);
-  }, [activeMessage, chatType, editingMessage?.id, setMessages, user?.id]);
+  }, [
+    activeMessage,
+    broadcastMessageDelete,
+    chatType,
+    editingMessage?.id,
+    setMessages,
+    user?.id,
+  ]);
 
   const handlePressReactionChip = useCallback(
     (message: AnyChatMessage, emoji: string) => {

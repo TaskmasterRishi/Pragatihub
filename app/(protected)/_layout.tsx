@@ -1,6 +1,7 @@
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { setSupabaseAccessTokenProvider } from "@/lib/Supabase";
 import { communityPresenceManager } from "@/lib/realtime/community-presence";
+import { globalPresenceManager } from "@/lib/realtime/global-presence";
 import { syncUserToSupabase } from "@/lib/actions/users";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth, useUser } from "@clerk/clerk-expo";
@@ -105,8 +106,10 @@ export default function AppLayout() {
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user?.id) return;
     communityPresenceManager.start(user.id);
+    globalPresenceManager.start(user.id);
     return () => {
       communityPresenceManager.stop();
+      globalPresenceManager.stop();
     };
   }, [isLoaded, isSignedIn, user?.id]);
 
