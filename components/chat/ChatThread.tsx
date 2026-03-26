@@ -1,5 +1,6 @@
 import AppLoader from "@/components/AppLoader";
 import ChatInput from "@/components/ChatInput";
+import { useCommunityPresence } from "@/hooks/use-community-presence";
 import { useChat, type ListItem, type MessageGroup } from "@/hooks/use-chat";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import {
@@ -25,6 +26,7 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
+  ChevronDown,
   ChevronLeft,
   Gem,
   Grid,
@@ -87,6 +89,12 @@ type MentionLookup = Record<
 >;
 
 type ReactionUser = {
+  id: string;
+  name: string;
+  image: string | null;
+};
+
+type OnlineUser = {
   id: string;
   name: string;
   image: string | null;
@@ -622,6 +630,10 @@ export default function ChatThread({
   const [reactionDetailsUsers, setReactionDetailsUsers] = useState<ReactionUser[]>(
     [],
   );
+  const [onlineSheetVisible, setOnlineSheetVisible] = useState(false);
+  const { onlineUserIds, onlineCount } = useCommunityPresence(
+    chatType === "community" ? communityId : undefined,
+  );
 
   const {
     loading,
@@ -685,6 +697,13 @@ export default function ChatThread({
     () => ({ text, secondary, primary, border, backgroundSecondary, isDark }),
     [text, secondary, primary, border, backgroundSecondary, isDark],
   );
+  const onlineUsers = useMemo<OnlineUser[]>(() => {
+    if (chatType !== "community") return [];
+    if (!onlineUserIds.size) return [];
+    return mentionCandidates.filter((member) => onlineUserIds.has(member.id));
+  }, [chatType, mentionCandidates, onlineUserIds]);
+  const onlinePreview = useMemo(() => onlineUsers.slice(0, 4), [onlineUsers]);
+  const onlineOverflowCount = Math.max(0, onlineCount - onlinePreview.length);
 
   useEffect(() => {
     Animated.spring(composerAnim, {
@@ -1265,6 +1284,84 @@ export default function ChatThread({
             </Text>
           ) : null}
         </View>
+        {chatType === "community" && onlineCount > 0 ? (
+          <View style={styles.onlineDockWrap}>
+            <Pressable
+              onPress={() => setOnlineSheetVisible(true)}
+              style={[
+                styles.onlineDock,
+                { backgroundColor: card, borderColor: border },
+              ]}
+            >
+              <View style={styles.onlineAvatars}>
+                {onlinePreview.map((member, index) => (
+                  <View
+                    key={member.id}
+                    style={[
+                      styles.onlineAvatarWrap,
+                      {
+                        marginLeft: index === 0 ? 0 : -10,
+                        zIndex: 10 - index,
+                        borderColor: card,
+                      },
+                    ]}
+                  >
+                    {member.image ? (
+                      <Image source={{ uri: member.image }} style={styles.onlineAvatar} />
+                    ) : (
+                      <View
+                        style={[
+                          styles.onlineAvatarFallback,
+                          { backgroundColor: `${primary}22` },
+                        ]}
+                      >
+                        <Text style={[styles.onlineAvatarText, { color: primary }]}>
+                          {(member.name[0] ?? "?").toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <View
+                      style={[
+                        styles.onlinePresenceDot,
+                        { backgroundColor: "#22C55E", borderColor: card },
+                      ]}
+                    />
+                  </View>
+                ))}
+                {onlineOverflowCount > 0 ? (
+                  <View
+                    style={[
+                      styles.onlineOverflowBadge,
+                      {
+                        marginLeft: onlinePreview.length > 0 ? -10 : 0,
+                        borderColor: card,
+                        backgroundColor: backgroundSecondary,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.onlineOverflowText, { color: text }]}>
+                      +{onlineOverflowCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.onlineMeta}>
+                <Text style={[styles.onlineLabel, { color: text }]}>Online</Text>
+                <Text style={[styles.onlineSubLabel, { color: secondary }]}>
+                  {onlineCount} now
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.onlineExpandBtn,
+                  { backgroundColor: `${primary}18`, borderColor: `${primary}30` },
+                ]}
+              >
+                <ChevronDown size={13} color={primary} />
+              </View>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       {errorText ? (
@@ -1500,6 +1597,68 @@ export default function ChatThread({
           composerAnim={composerAnim}
         />
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={onlineSheetVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOnlineSheetVisible(false)}
+      >
+        <View style={styles.sheetRoot}>
+          <Pressable
+            style={styles.sheetDismissArea}
+            onPress={() => setOnlineSheetVisible(false)}
+          />
+          <Pressable
+            style={[
+              styles.reactionDetailsSheet,
+              {
+                backgroundColor: card,
+                borderColor: border,
+                paddingBottom: Math.max(insets.bottom, 10),
+              },
+            ]}
+            onPress={() => {}}
+          >
+            <View style={[styles.sheetHandle, { backgroundColor: `${secondary}55` }]} />
+            <Text style={[styles.reactionDetailsTitle, { color: text }]}>Online now</Text>
+            <Text style={[styles.onlineSheetSubtitle, { color: secondary }]}>
+              {onlineCount} members currently active
+            </Text>
+            <FlatList
+              data={onlineUsers}
+              keyExtractor={(item) => item.id}
+              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+              renderItem={({ item }) => (
+                <View style={styles.reactionUserRow}>
+                  {item.image ? (
+                    <Image source={{ uri: item.image }} style={styles.reactionUserAvatar} />
+                  ) : (
+                    <View
+                      style={[
+                        styles.reactionUserAvatarFallback,
+                        { backgroundColor: `${primary}22` },
+                      ]}
+                    >
+                      <Text style={[styles.reactionUserAvatarText, { color: primary }]}>
+                        {(item.name[0] ?? "?").toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={[styles.reactionUserName, { color: text }]} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                </View>
+              )}
+              ListEmptyComponent={
+                <Text style={[styles.reactionDetailsEmpty, { color: secondary }]}>
+                  No one online yet
+                </Text>
+              }
+            />
+          </Pressable>
+        </View>
+      </Modal>
 
       <Modal
         visible={actionsVisible}
@@ -2059,6 +2218,110 @@ const styles = StyleSheet.create({
   inputContainer: {
     elevation: 20,
     zIndex: 100,
+  },
+  onlineDockWrap: {
+    alignItems: "flex-end",
+    marginLeft: 8,
+  },
+  onlineDock: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderRadius: 22,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  onlineAvatars: {
+    flexDirection: "row",
+    alignItems: "center",
+    minWidth: 40,
+  },
+  onlineAvatarWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    position: "relative",
+  },
+  onlineAvatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
+  },
+  onlineAvatarFallback: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  onlineAvatarText: {
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  onlinePresenceDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    position: "absolute",
+    right: -1,
+    bottom: -1,
+  },
+  onlineOverflowBadge: {
+    height: 24,
+    minWidth: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  onlineOverflowText: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  onlineMeta: {
+    minWidth: 52,
+  },
+  onlineLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+  onlineSubLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    lineHeight: 13,
+    marginTop: 1,
+  },
+  onlineExpandBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 10,
+  },
+  onlineSheetSubtitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: -2,
+    marginBottom: 10,
   },
   typingAvatars: {
     flexDirection: "row",
