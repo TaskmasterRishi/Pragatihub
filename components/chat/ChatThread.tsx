@@ -378,6 +378,7 @@ function MessageGroupRow({
     theme;
   const hasSending = messages.some((m) => m.clientStatus === "sending");
   const hasFailed = messages.some((m) => m.clientStatus === "failed");
+  const hasEdited = messages.some((m) => Boolean(m.edited_at));
 
   const bubbleBg = mine
     ? isDark
@@ -560,6 +561,11 @@ function MessageGroupRow({
           >
             {timestamp}
           </Text>
+          {hasEdited ? (
+            <Text style={[groupStyles.statusText, { color: secondary }]}>
+              Edited
+            </Text>
+          ) : null}
           {mine && hasSending ? (
             <ActivityIndicator size="small" color={secondary} />
           ) : null}
@@ -610,7 +616,6 @@ export default function ChatThread({
   const [activeMessage, setActiveMessage] = useState<AnyChatMessage | null>(null);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [editingMessage, setEditingMessage] = useState<AnyChatMessage | null>(null);
-  const [editDraft, setEditDraft] = useState("");
   const [replyTarget, setReplyTarget] = useState<AnyChatMessage | null>(null);
   const [reactionDetailsVisible, setReactionDetailsVisible] = useState(false);
   const [reactionDetailsEmoji, setReactionDetailsEmoji] = useState("");
@@ -1003,6 +1008,42 @@ export default function ChatThread({
   }, []);
 
   const handleSend = async () => {
+    if (editingMessage) {
+      if (!user?.id) return;
+      const content = input.trim();
+      if (!content) {
+        Alert.alert("Message required", "Please enter message text.");
+        return;
+      }
+
+      const { data, error } =
+        chatType === "community"
+          ? await editCommunityChatMessage({
+              messageId: editingMessage.id,
+              userId: user.id,
+              content,
+            })
+          : await editPrivateChatMessage({
+              messageId: editingMessage.id,
+              userId: user.id,
+              content,
+            });
+
+      if (error || !data) {
+        Alert.alert("Could not edit message", error?.message ?? "Try again.");
+        return;
+      }
+
+      updateMessageLocally(editingMessage.id, (message) => ({
+        ...message,
+        content: data.content ?? content,
+        edited_at: data.edited_at ?? new Date().toISOString(),
+      }));
+      setEditingMessage(null);
+      setInput("");
+      return;
+    }
+
     const parsed = parseKeyboardMediaInput(input);
     if (!parsed.content && !parsed.mediaUrl) return;
     const { mentionUserIds, mentionHandles } = resolveMentions(parsed.content);
@@ -1045,20 +1086,30 @@ export default function ChatThread({
     async (message: AnyChatMessage, emoji: string, closeSheet = false) => {
       if (!message?.id || !user?.id) return;
       const snapshot = message;
-      const mineReaction = (snapshot.reactions ?? []).find(
-        (reaction) => reaction.user_id === user.id,
-      );
+      if (closeSheet) setActionsVisible(false);
 
       updateMessageLocally(snapshot.id, (current) => {
-        const others = (current.reactions ?? []).filter(
-          (reaction) => reaction.user_id !== user.id,
+        const mineSameEmoji = (current.reactions ?? []).find(
+          (reaction) => reaction.user_id === user.id && reaction.emoji === emoji,
         );
-        if (mineReaction?.emoji === emoji) {
-          return { ...current, reactions: others };
+        if (mineSameEmoji) {
+          return {
+            ...current,
+            reactions: (current.reactions ?? []).filter(
+              (reaction) =>
+                !(
+                  reaction.user_id === user.id &&
+                  reaction.emoji === emoji
+                ),
+            ),
+          };
         }
         return {
           ...current,
-          reactions: [...others, { user_id: user.id, emoji } as ChatMessageReaction],
+          reactions: [
+            ...(current.reactions ?? []),
+            { user_id: user.id, emoji } as ChatMessageReaction,
+          ],
         };
       });
 
@@ -1079,13 +1130,13 @@ export default function ChatThread({
         updateMessageLocally(snapshot.id, () => snapshot);
         Alert.alert("Could not react", result.error.message ?? "Try again.");
       }
-      if (closeSheet) setActionsVisible(false);
     },
     [chatType, updateMessageLocally, user?.id],
   );
 
   const handleReplyToMessage = useCallback(() => {
     if (!activeMessage) return;
+    setEditingMessage(null);
     setReplyTarget(activeMessage);
     setActionsVisible(false);
   }, [activeMessage]);
@@ -1093,46 +1144,23 @@ export default function ChatThread({
   const handleStartEditMessage = useCallback(() => {
     if (!activeMessage || activeMessage.user_id !== user?.id) return;
     setEditingMessage(activeMessage);
-    setEditDraft(activeMessage.content ?? "");
+    setInput(activeMessage.content ?? "");
+    setReplyTarget(null);
     setActionsVisible(false);
   }, [activeMessage, user?.id]);
 
-  const handleSaveEditedMessage = useCallback(async () => {
-    if (!editingMessage?.id || !user?.id) return;
-    const content = editDraft.trim();
-    if (!content) {
-      Alert.alert("Message required", "Please enter message text.");
-      return;
+  const handleDeleteForMe = useCallback(() => {
+    if (!activeMessage?.id) return;
+    const messageId = activeMessage.id;
+    if (editingMessage?.id === messageId) {
+      setEditingMessage(null);
+      setInput("");
     }
+    setMessages((prev) => prev.filter((message) => message.id !== messageId));
+    setActionsVisible(false);
+  }, [activeMessage, editingMessage?.id, setMessages]);
 
-    const { data, error } =
-      chatType === "community"
-        ? await editCommunityChatMessage({
-            messageId: editingMessage.id,
-            userId: user.id,
-            content,
-          })
-        : await editPrivateChatMessage({
-            messageId: editingMessage.id,
-            userId: user.id,
-            content,
-          });
-
-    if (error || !data) {
-      Alert.alert("Could not edit message", error?.message ?? "Try again.");
-      return;
-    }
-
-    updateMessageLocally(editingMessage.id, (message) => ({
-      ...message,
-      content: data.content ?? content,
-      edited_at: data.edited_at ?? new Date().toISOString(),
-    }));
-    setEditingMessage(null);
-    setEditDraft("");
-  }, [chatType, editDraft, editingMessage, updateMessageLocally, user?.id]);
-
-  const handleDeleteMessage = useCallback(async () => {
+  const handleDeleteForAll = useCallback(async () => {
     if (!activeMessage?.id || !user?.id) return;
     const messageId = activeMessage.id;
     const { error } =
@@ -1149,13 +1177,17 @@ export default function ChatThread({
       Alert.alert("Could not delete message", error.message ?? "Try again.");
       return;
     }
+    if (editingMessage?.id === messageId) {
+      setEditingMessage(null);
+      setInput("");
+    }
     setMessages((prev) => prev.filter((message) => message.id !== messageId));
     setActionsVisible(false);
-  }, [activeMessage, chatType, setMessages, user?.id]);
+  }, [activeMessage, chatType, editingMessage?.id, setMessages, user?.id]);
 
   const handlePressReactionChip = useCallback(
-    async (message: AnyChatMessage, emoji: string) => {
-      await toggleReactionForMessage(message, emoji, false);
+    (message: AnyChatMessage, emoji: string) => {
+      void toggleReactionForMessage(message, emoji, false);
     },
     [toggleReactionForMessage],
   );
@@ -1376,6 +1408,28 @@ export default function ChatThread({
           </View>
         ) : null}
 
+        {editingMessage ? (
+          <View style={[styles.replyBar, { backgroundColor: card, borderColor: border }]}>
+            <View style={styles.replyBarTextWrap}>
+              <Text style={[styles.replyBarTitle, { color: primary }]}>
+                Editing message
+              </Text>
+              <Text style={[styles.replyBarSnippet, { color: secondary }]} numberOfLines={1}>
+                {editingMessage.content || "Message"}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => {
+                setEditingMessage(null);
+                setInput("");
+              }}
+              style={styles.replyBarClose}
+            >
+              <X size={14} color={secondary} />
+            </Pressable>
+          </View>
+        ) : null}
+
         {mentionVisible ? (
           <View
             style={[
@@ -1453,12 +1507,20 @@ export default function ChatThread({
         animationType="fade"
         onRequestClose={() => setActionsVisible(false)}
       >
-        <Pressable
-          style={styles.actionsBackdrop}
-          onPress={() => setActionsVisible(false)}
-        >
+        <View style={styles.sheetRoot}>
           <Pressable
-            style={[styles.actionsSheet, { backgroundColor: card, borderColor: border }]}
+            style={styles.sheetDismissArea}
+            onPress={() => setActionsVisible(false)}
+          />
+          <Pressable
+            style={[
+              styles.actionsSheet,
+              {
+                backgroundColor: card,
+                borderColor: border,
+                paddingBottom: Math.max(insets.bottom, 10),
+              },
+            ]}
             onPress={() => {}}
           >
             <View style={styles.actionsEmojiRow}>
@@ -1485,13 +1547,20 @@ export default function ChatThread({
                 <Pressable style={styles.actionBtn} onPress={handleStartEditMessage}>
                   <Text style={[styles.actionBtnText, { color: text }]}>Edit</Text>
                 </Pressable>
-                <Pressable style={styles.actionBtn} onPress={() => void handleDeleteMessage()}>
-                  <Text style={[styles.actionBtnText, { color: "#FF3B30" }]}>Delete</Text>
+                <Pressable style={styles.actionBtn} onPress={handleDeleteForMe}>
+                  <Text style={[styles.actionBtnText, { color: text }]}>Delete for me</Text>
+                </Pressable>
+                <Pressable style={styles.actionBtn} onPress={() => void handleDeleteForAll()}>
+                  <Text style={[styles.actionBtnText, { color: "#FF3B30" }]}>Delete for all</Text>
                 </Pressable>
               </>
-            ) : null}
+            ) : (
+              <Pressable style={styles.actionBtn} onPress={handleDeleteForMe}>
+                <Text style={[styles.actionBtnText, { color: text }]}>Delete for me</Text>
+              </Pressable>
+            )}
           </Pressable>
-        </Pressable>
+        </View>
       </Modal>
 
       <Modal
@@ -1500,12 +1569,20 @@ export default function ChatThread({
         animationType="slide"
         onRequestClose={() => setReactionDetailsVisible(false)}
       >
-        <Pressable
-          style={styles.actionsBackdrop}
-          onPress={() => setReactionDetailsVisible(false)}
-        >
+        <View style={styles.sheetRoot}>
           <Pressable
-            style={[styles.reactionDetailsSheet, { backgroundColor: card, borderColor: border }]}
+            style={styles.sheetDismissArea}
+            onPress={() => setReactionDetailsVisible(false)}
+          />
+          <Pressable
+            style={[
+              styles.reactionDetailsSheet,
+              {
+                backgroundColor: card,
+                borderColor: border,
+                paddingBottom: Math.max(insets.bottom, 10),
+              },
+            ]}
             onPress={() => {}}
           >
             <Text style={[styles.reactionDetailsTitle, { color: text }]}>
@@ -1543,39 +1620,6 @@ export default function ChatThread({
               }
             />
           </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={!!editingMessage}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setEditingMessage(null)}
-      >
-        <View style={styles.actionsBackdrop}>
-          <View style={[styles.editSheet, { backgroundColor: card, borderColor: border }]}>
-            <Text style={[styles.editTitle, { color: text }]}>Edit message</Text>
-            <TextInput
-              value={editDraft}
-              onChangeText={setEditDraft}
-              multiline
-              autoFocus
-              style={[styles.editInput, { color: text, borderColor: border }]}
-              placeholder="Update your message"
-              placeholderTextColor={`${secondary}99`}
-            />
-            <View style={styles.editActions}>
-              <Pressable style={styles.editActionBtn} onPress={() => setEditingMessage(null)}>
-                <Text style={[styles.actionBtnText, { color: secondary }]}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.editActionBtn, { backgroundColor: `${primary}22` }]}
-                onPress={() => void handleSaveEditedMessage()}
-              >
-                <Text style={[styles.actionBtnText, { color: primary }]}>Save</Text>
-              </Pressable>
-            </View>
-          </View>
         </View>
       </Modal>
 
@@ -1771,9 +1815,8 @@ const groupStyles = StyleSheet.create({
     position: "absolute",
     bottom: -10,
     flexDirection: "row",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     gap: 6,
-    maxWidth: "92%",
     zIndex: 2,
   },
   reactionOverlayMine: {
@@ -2055,6 +2098,13 @@ const styles = StyleSheet.create({
     height: 3.5,
     borderRadius: 1.75,
   },
+  sheetRoot: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  sheetDismissArea: {
+    flex: 1,
+  },
   actionsBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",
@@ -2062,7 +2112,8 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   actionsSheet: {
-    borderRadius: 16,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     borderWidth: 1,
     padding: 10,
     gap: 2,
@@ -2125,7 +2176,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   reactionDetailsSheet: {
-    borderRadius: 16,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     borderWidth: 1,
     padding: 12,
     maxHeight: "55%",

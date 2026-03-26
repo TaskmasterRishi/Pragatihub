@@ -242,31 +242,22 @@ export async function toggleCommunityChatReaction(input: {
 }) {
   const existing = await supabase
     .from("community_chat_message_reactions")
-    .select("id, emoji")
+    .select("id")
     .eq("message_id", input.messageId)
     .eq("user_id", input.userId)
+    .eq("emoji", input.emoji)
     .maybeSingle();
 
   if (existing.error) {
     return { mode: "error" as const, error: existing.error };
   }
 
-  if (existing.data?.emoji === input.emoji) {
+  if (existing.data?.id) {
     const { error } = await supabase
       .from("community_chat_message_reactions")
       .delete()
       .eq("id", existing.data.id);
     return { mode: "removed" as const, error };
-  }
-
-  if (existing.data?.id) {
-    const { data, error } = await supabase
-      .from("community_chat_message_reactions")
-      .update({ emoji: input.emoji })
-      .eq("id", existing.data.id)
-      .select("emoji, user_id")
-      .single();
-    return { mode: "updated" as const, data, error };
   }
 
   const { data, error } = await supabase
@@ -482,31 +473,22 @@ export async function togglePrivateChatReaction(input: {
 }) {
   const existing = await supabase
     .from("private_chat_message_reactions")
-    .select("id, emoji")
+    .select("id")
     .eq("message_id", input.messageId)
     .eq("user_id", input.userId)
+    .eq("emoji", input.emoji)
     .maybeSingle();
 
   if (existing.error) {
     return { mode: "error" as const, error: existing.error };
   }
 
-  if (existing.data?.emoji === input.emoji) {
+  if (existing.data?.id) {
     const { error } = await supabase
       .from("private_chat_message_reactions")
       .delete()
       .eq("id", existing.data.id);
     return { mode: "removed" as const, error };
-  }
-
-  if (existing.data?.id) {
-    const { data, error } = await supabase
-      .from("private_chat_message_reactions")
-      .update({ emoji: input.emoji })
-      .eq("id", existing.data.id)
-      .select("emoji, user_id")
-      .single();
-    return { mode: "updated" as const, data, error };
   }
 
   const { data, error } = await supabase
