@@ -13,7 +13,6 @@ import type {
   ChatUser,
   CommunityChatMessage,
   ListItem,
-  MessageGroup,
   PrivateChatMessage,
   TypingUser,
 } from "@/types/chat";
@@ -35,6 +34,8 @@ type SendPayload = {
   content: string;
   mediaType?: ChatMediaType;
   mediaUrl?: string | null;
+  mentionUserIds?: string[];
+  mentionHandles?: string[];
 };
 
 function toTypingUser(row: any): TypingUser {
@@ -249,7 +250,13 @@ export function useChat({
   );
 
   const sendMessage = useCallback(
-    async ({ content, mediaType = "text", mediaUrl = null }: SendPayload) => {
+    async ({
+      content,
+      mediaType = "text",
+      mediaUrl = null,
+      mentionUserIds = [],
+      mentionHandles = [],
+    }: SendPayload) => {
       if (!isAuthed || !currentUserId || !activeContextId || sending) return;
       const normalized = content.trim();
       if (!normalized && !mediaUrl) return;
@@ -296,6 +303,8 @@ export function useChat({
               content: normalized,
               mediaType,
               mediaUrl,
+              mentionUserIds,
+              mentionHandles,
             })
           : sendPrivateChatMessage({
               chatId: activeContextId,

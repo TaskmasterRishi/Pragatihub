@@ -180,6 +180,65 @@ export type Database = {
           },
         ]
       }
+      community_chat_message_mentions: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          mention_text: string | null
+          mentioned_by_user_id: string
+          mentioned_user_id: string
+          message_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          mention_text?: string | null
+          mentioned_by_user_id: string
+          mentioned_user_id: string
+          message_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          mention_text?: string | null
+          mentioned_by_user_id?: string
+          mentioned_user_id?: string
+          message_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_chat_message_mentions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_chat_message_mentions_mentioned_by_user_id_fkey"
+            columns: ["mentioned_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_chat_message_mentions_mentioned_user_id_fkey"
+            columns: ["mentioned_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_chat_message_mentions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "community_chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_moderator_votes: {
         Row: {
           candidate_user_id: string

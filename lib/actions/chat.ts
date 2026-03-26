@@ -84,6 +84,8 @@ export async function sendCommunityChatMessage(input: {
   content: string;
   mediaType?: ChatMediaType;
   mediaUrl?: string | null;
+  mentionUserIds?: string[];
+  mentionHandles?: string[];
 }) {
   const { data, error } = await supabase
     .from("community_chat_messages")
@@ -96,6 +98,32 @@ export async function sendCommunityChatMessage(input: {
     })
     .select("id, group_id, user_id, content, media_type, media_url, created_at")
     .single();
+
+  if (!error && data?.id && input.mentionUserIds?.length) {
+    const mentionHandleByUserId = new Map<string, string | null>();
+    input.mentionUserIds.forEach((mentionedUserId, index) => {
+      if (!mentionedUserId || mentionedUserId === input.userId) return;
+      if (mentionHandleByUserId.has(mentionedUserId)) return;
+      mentionHandleByUserId.set(
+        mentionedUserId,
+        input.mentionHandles?.[index] ?? null,
+      );
+    });
+
+    const uniqueMentionIds = Array.from(mentionHandleByUserId.keys());
+
+    if (uniqueMentionIds.length > 0) {
+      const rows = uniqueMentionIds.map((mentionedUserId) => ({
+        message_id: data.id,
+        group_id: input.groupId,
+        mentioned_user_id: mentionedUserId,
+        mentioned_by_user_id: input.userId,
+        mention_text: mentionHandleByUserId.get(mentionedUserId) ?? null,
+      }));
+
+      await supabase.from("community_chat_message_mentions").insert(rows);
+    }
+  }
 
   return { data, error };
 }
