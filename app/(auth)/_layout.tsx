@@ -8,7 +8,7 @@ export default function AuthRoutesLayout() {
   if (!isLoaded) return null;
 
   if (isSignedIn) {
-    return <Redirect href={"/(protected)/(tabs)"} />;
+    return <Redirect href={"/(protected)/(tabs)/index"} />;
   }
 
   return (

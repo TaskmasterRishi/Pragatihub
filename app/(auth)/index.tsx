@@ -27,7 +27,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 type AuthMode = "login" | "register" | "verify";
 type ClientTrustStrategy = "email_code" | "phone_code";
-const POST_AUTH_ROUTE = "/";
+const POST_AUTH_ROUTE = "/(protected)/(tabs)/index";
 const OAUTH_CALLBACK_PATH = "oauth-native-callback";
 
 /* -------------------- ERROR NORMALIZER -------------------- */

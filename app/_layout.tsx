@@ -9,10 +9,6 @@ import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
 
-export const unstable_settings = {
-  anchor: "(protected)",
-};
-
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const theme = colorScheme === "dark" ? "dark" : "light";
