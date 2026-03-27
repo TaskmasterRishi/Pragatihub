@@ -1462,22 +1462,29 @@ function PostListItem({
         >
           {/* Header */}
           <View className="flex-row items-center mb-3">
-            <Image
-              source={{
-                uri: post.user.image || "https://via.placeholder.com/150",
-              }}
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: `${border}99`,
-              }}
-            />
+            <Pressable onPress={() => router.push(`/user/${post.user.id}`)}>
+              <Image
+                source={{
+                  uri: post.user.image || "https://via.placeholder.com/150",
+                }}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: `${border}99`,
+                }}
+              />
+            </Pressable>
 
             <View className="ml-3 flex-1">
               <View style={{ gap: 2, maxWidth: "100%" }}>
-                <MetaBadge prefix="U" value={post.user.name} variant="user" />
+                <MetaBadge
+                  prefix="U"
+                  value={post.user.name}
+                  variant="user"
+                  onPress={() => router.push(`/user/${post.user.id}`)}
+                />
                 <MetaBadge
                   prefix=""
                   value={`Posted under ${post.group.name}`}
