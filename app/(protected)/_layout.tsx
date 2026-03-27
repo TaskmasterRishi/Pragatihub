@@ -1,6 +1,7 @@
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { setSupabaseAccessTokenProvider } from "@/lib/Supabase";
 import { syncUserToSupabase } from "@/lib/actions/users";
+import { inboxSyncManager } from "@/lib/inbox/inbox-sync";
 import { communityPresenceManager } from "@/lib/realtime/community-presence";
 import { globalPresenceManager } from "@/lib/realtime/global-presence";
 import { useAuth, useUser } from "@clerk/clerk-expo";
@@ -109,9 +110,11 @@ export default function AppLayout() {
     if (!isAuthLoaded || !isSignedIn || !user?.id) return;
     communityPresenceManager.start(user.id);
     globalPresenceManager.start(user.id);
+    inboxSyncManager.start(user.id);
     return () => {
       communityPresenceManager.stop();
       globalPresenceManager.stop();
+      inboxSyncManager.stop();
     };
   }, [isAuthLoaded, isSignedIn, user?.id]);
 
