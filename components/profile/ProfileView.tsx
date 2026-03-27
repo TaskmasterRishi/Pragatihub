@@ -789,7 +789,6 @@ export default function ProfileView({
                       <PostListItem
                         key={post.id}
                         post={post}
-                        hideJoinButton={true}
                         showOwnerActions={isOwnProfile}
                         onEditPost={
                           isOwnProfile ? handleOpenEditPost : undefined

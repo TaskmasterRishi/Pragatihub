@@ -106,8 +106,6 @@ export default function HomeScreen() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [showAllUsers, setShowAllUsers] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isMembershipLoading, setIsMembershipLoading] = useState(true);
-  const [joinedGroupIds, setJoinedGroupIds] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const skeletonData = useMemo(
     () => Array.from({ length: 6 }).map((_, i) => ({ id: `skeleton-${i}` })),
@@ -124,29 +122,6 @@ export default function HomeScreen() {
     tabBarVisibleRef.current = visible;
     setTabBarVisible(visible);
   }, []);
-
-  const loadMemberships = useCallback(async () => {
-    if (!user?.id) {
-      setJoinedGroupIds(new Set());
-      setIsMembershipLoading(false);
-      return;
-    }
-    try {
-      const { data, error } = await supabase
-        .from("user_groups")
-        .select("group_id")
-        .eq("user_id", user.id);
-      if (error) {
-        setJoinedGroupIds(new Set());
-      } else {
-        setJoinedGroupIds(new Set((data ?? []).map((g) => g.group_id)));
-      }
-    } catch {
-      setJoinedGroupIds(new Set());
-    } finally {
-      setIsMembershipLoading(false);
-    }
-  }, [user?.id]);
 
   const countRowsByPostId = useCallback((rows: CountRow[] | null) => {
     const counts = new Map<string, number>();
@@ -266,10 +241,6 @@ export default function HomeScreen() {
   }, [fetchPosts]);
 
   useEffect(() => {
-    loadMemberships();
-  }, [loadMemberships]);
-
-  useEffect(() => {
     if (isInitialLoading) return;
     Animated.parallel([
       Animated.timing(skeletonOpacity, {
@@ -370,15 +341,9 @@ export default function HomeScreen() {
 
   const renderItem = useCallback(
     ({ item, index: itemIndex }: { item: Post; index: number }) => (
-      <PostListItem
-        post={item}
-        index={itemIndex}
-        refreshing={refreshing}
-        isMembershipLoading={isMembershipLoading}
-        initialJoined={joinedGroupIds.has(item.group.id)}
-      />
+      <PostListItem post={item} index={itemIndex} refreshing={refreshing} />
     ),
-    [refreshing, isMembershipLoading, joinedGroupIds],
+    [refreshing],
   );
   const keyExtractor = useCallback((item: Post) => item.id, []);
   const onEndReached = useCallback(() => {

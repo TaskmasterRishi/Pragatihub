@@ -33,7 +33,6 @@ import {
 } from "react-native";
 
 import EntityBadge from "@/components/EntityBadge";
-import JoinCommunityButton from "@/components/JoinCommunityButton";
 import VoteButtons from "@/components/VoteButtons";
 import { Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -1006,26 +1005,18 @@ function ScalePressable({
 function PostListItem({
   post,
   isDetailedPost = false,
-  showJoinButton = true,
-  hideJoinButton = false,
   showOwnerActions = false,
   index = 0,
   refreshing = false,
-  isMembershipLoading = false,
-  initialJoined,
   onEditPost,
   onDeletePost,
   onSharePost,
 }: {
   post: Post;
   isDetailedPost?: boolean;
-  showJoinButton?: boolean;
-  hideJoinButton?: boolean;
   showOwnerActions?: boolean;
   index?: number;
   refreshing?: boolean;
-  isMembershipLoading?: boolean;
-  initialJoined?: boolean;
   onEditPost?: (post: Post) => void;
   onDeletePost?: (post: Post) => void;
   onSharePost?: (post: Post) => void;
@@ -1042,7 +1033,6 @@ function PostListItem({
   const communityBadgeAccent = useThemeColor({}, "communityBadgeAccent");
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 0);
-  const shouldShowJoinButton = showJoinButton && !hideJoinButton;
   const orderedMedia = [...(post.post_media ?? [])].sort(
     (a, b) => a.media_order - b.media_order,
   );
@@ -1518,24 +1508,7 @@ function PostListItem({
               >
                 <EllipsisVertical size={18} color={muted} />
               </Pressable>
-            ) : (
-              shouldShowJoinButton &&
-              (isMembershipLoading ? (
-                <View
-                  style={{
-                    width: 74,
-                    height: 28,
-                    borderRadius: 999,
-                    backgroundColor: `${muted}25`,
-                  }}
-                />
-              ) : (
-                <JoinCommunityButton
-                  communityId={post.group.id}
-                  initialJoined={initialJoined}
-                />
-              ))
-            )}
+            ) : null}
           </View>
 
           {isEdited && (

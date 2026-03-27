@@ -185,7 +185,7 @@ export default function CommunityPostsTab() {
         keyExtractor={(i) => i.id}
         renderItem={({ item }) => (
           <View style={styles.postWrap}>
-            <PostListItem post={item} hideJoinButton />
+            <PostListItem post={item} />
           </View>
         )}
         showsVerticalScrollIndicator={false}
