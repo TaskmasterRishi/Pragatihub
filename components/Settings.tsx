@@ -1,18 +1,13 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import {
-    AppWindow,
     ChevronRight,
-    Gem,
-    Grid,
     Languages,
     Mail,
-    ShieldCheck,
     User,
     Users,
-    Wallet,
     X,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Modal,
   ScrollView,
@@ -27,13 +22,21 @@ import { Image } from "expo-image";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { createGroup } from "@/lib/actions/groups";
-import { syncUserToSupabase } from "@/lib/actions/users";
+import {
+  getUserDisplayName,
+  syncUserToSupabase,
+  updateUserName,
+} from "@/lib/actions/users";
 
 interface SettingsProps {
   onClose: () => void;
+  onDisplayNameUpdated?: (displayName: string) => void;
 }
 
-export default function Settings({ onClose }: SettingsProps) {
+export default function Settings({
+  onClose,
+  onDisplayNameUpdated,
+}: SettingsProps) {
   const { user } = useUser();
   const { signOut } = useAuth();
 
@@ -47,6 +50,11 @@ export default function Settings({ onClose }: SettingsProps) {
   const placeholderColor = useThemeColor({}, "placeholder");
 
   const [showCreateCommunity, setShowCreateCommunity] = useState(false);
+  const [showDisplayNameModal, setShowDisplayNameModal] = useState(false);
+  const [displayNameInput, setDisplayNameInput] = useState("");
+  const [currentDisplayName, setCurrentDisplayName] = useState("User");
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
+  const [isUpdatingDisplayName, setIsUpdatingDisplayName] = useState(false);
   const [communityName, setCommunityName] = useState("");
   const [communityDescription, setCommunityDescription] = useState("");
   const [communityImage, setCommunityImage] = useState<string | null>(null);
@@ -102,6 +110,70 @@ export default function Settings({ onClose }: SettingsProps) {
     </TouchableOpacity>
   );
 
+  const openDisplayNameEditor = () => {
+    setDisplayNameInput(currentDisplayName);
+    setDisplayNameError(null);
+    setShowDisplayNameModal(true);
+  };
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fallbackName =
+      user.fullName?.trim() || user.username?.trim() || "User";
+    setCurrentDisplayName(fallbackName);
+
+    getUserDisplayName(user.id)
+      .then(({ data, error }) => {
+        if (error) {
+          console.log("Display name fetch error:", error);
+          return;
+        }
+        if (data?.name?.trim()) {
+          setCurrentDisplayName(data.name.trim());
+        }
+      })
+      .catch((error) => {
+        console.log("Display name fetch exception:", error);
+      });
+  }, [user?.id, user?.fullName, user?.username]);
+
+  const handleDisplayNameUpdate = async () => {
+    if (!user?.id) {
+      setDisplayNameError("You must be signed in.");
+      return;
+    }
+
+    const trimmedDisplayName = displayNameInput.trim();
+    if (!trimmedDisplayName) {
+      setDisplayNameError("Display name is required.");
+      return;
+    }
+
+    setIsUpdatingDisplayName(true);
+    setDisplayNameError(null);
+
+    try {
+      const { error } = await updateUserName({
+        id: user.id,
+        name: trimmedDisplayName,
+      });
+
+      if (error) {
+        setDisplayNameError(error.message ?? "Failed to update display name.");
+        return;
+      }
+
+      setCurrentDisplayName(trimmedDisplayName);
+      onDisplayNameUpdated?.(trimmedDisplayName);
+      setShowDisplayNameModal(false);
+    } catch (error: any) {
+      setDisplayNameError(error?.errors?.[0]?.message ?? "Failed to update display name.");
+    } finally {
+      setIsUpdatingDisplayName(false);
+    }
+  };
+
   return (
     <View className="flex-1" style={{ backgroundColor }}>
       {/* Header */}
@@ -150,75 +222,15 @@ export default function Settings({ onClose }: SettingsProps) {
                 ? `${user.firstName} ${user.lastName || ""}`
                 : "User")
             }
+            showChevron={false}
+          />
+          <SettingItem
+            Icon={User}
+            label="Display Name"
+            value={currentDisplayName}
+            onPress={openDisplayNameEditor}
           />
           <SettingItem Icon={Languages} label="Language" value="English" />
-          <SettingItem
-            Icon={ShieldCheck}
-            label="Privacy"
-            style={{ borderBottomWidth: 0 }}
-          />
-        </View>
-
-        {/* Premium Status */}
-        <View
-          className="mb-6 flex-row items-center justify-between rounded-2xl p-4"
-          style={{
-            backgroundColor: cardColor,
-          }}
-        >
-          <View className="flex-row items-center">
-            <Gem size={24} color={primaryColor} className="mr-3" />
-            <Text
-              className="text-base font-semibold"
-              style={{ color: textColor }}
-            >
-              Premium Status
-            </Text>
-          </View>
-          <View className="flex-row items-center">
-            <Text className="mr-1 text-sm font-medium text-red-500">
-              Inactive
-            </Text>
-            <ChevronRight size={20} color={textSecondaryColor} />
-          </View>
-        </View>
-
-        {/* Refer a friend banner */}
-        <TouchableOpacity
-          className="relative mb-6 overflow-hidden rounded-2xl p-5"
-          style={{
-            backgroundColor: "#ff6b00", // Orange-ish color from design
-          }}
-        >
-          {/* Decorative circles */}
-          <View className="absolute -right-5 -top-5 h-[100px] w-[100px] rounded-full border-[20px] border-white/10" />
-
-          <Text className="mb-2 text-lg font-bold text-white">
-            Refer a friend
-          </Text>
-          <View className="self-start flex-row items-center rounded-2xl bg-white/20 px-3 py-1.5">
-            <Wallet size={16} color="white" className="mr-1.5" />
-            <Text className="font-bold text-white">50 /referral</Text>
-          </View>
-          {/* Panda illustration placeholder */}
-          <View className="absolute bottom-0 right-5 h-20 w-20 justify-end">
-            <Users size={80} color="white" />
-          </View>
-        </TouchableOpacity>
-
-        {/* App Settings */}
-        <View
-          className="mb-6 rounded-2xl p-4"
-          style={{
-            backgroundColor: cardColor,
-          }}
-        >
-          <SettingItem Icon={AppWindow} label="App Icon" />
-          <SettingItem
-            Icon={Grid}
-            label="Widget"
-            style={{ borderBottomWidth: 0 }}
-          />
         </View>
 
         {/* Community */}
@@ -248,6 +260,91 @@ export default function Settings({ onClose }: SettingsProps) {
           <Text className="text-base font-semibold text-red-500">Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal
+        visible={showDisplayNameModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowDisplayNameModal(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+            padding: 20,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: cardColor,
+              borderRadius: 16,
+              borderColor,
+              borderWidth: 1,
+              padding: 20,
+            }}
+          >
+            <Text style={{ color: textColor, fontSize: 18, fontWeight: "700" }}>
+              Update Display Name
+            </Text>
+            <Text
+              style={{
+                color: textSecondaryColor,
+                marginTop: 6,
+                marginBottom: 12,
+              }}
+            >
+              This updates only your Supabase display name.
+            </Text>
+            <TextInput
+              value={displayNameInput}
+              onChangeText={setDisplayNameInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="Enter display name"
+              placeholderTextColor={placeholderColor}
+              style={{
+                backgroundColor: inputBg,
+                color: textColor,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+              }}
+            />
+            {displayNameError && (
+              <Text style={{ color: "tomato", marginTop: 10 }}>
+                {displayNameError}
+              </Text>
+            )}
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 16 }}>
+              <TouchableOpacity
+                className="flex-1 items-center rounded-xl py-3"
+                style={{ backgroundColor: backgroundColor }}
+                onPress={() => {
+                  if (isUpdatingDisplayName) return;
+                  setShowDisplayNameModal(false);
+                  setDisplayNameError(null);
+                  setDisplayNameInput(currentDisplayName);
+                }}
+              >
+                <Text style={{ color: textColor, fontWeight: "600" }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="flex-1 items-center rounded-xl py-3"
+                style={{ backgroundColor: primaryColor }}
+                onPress={handleDisplayNameUpdate}
+                disabled={isUpdatingDisplayName}
+              >
+                <Text style={{ color: "white", fontWeight: "600" }}>
+                  {isUpdatingDisplayName ? "Updating..." : "Save"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showCreateCommunity}

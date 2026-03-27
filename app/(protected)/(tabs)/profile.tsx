@@ -1,13 +1,52 @@
 import ProfileView from "@/components/profile/ProfileView";
-import { updateUserImage } from "@/lib/actions/users";
+import { getUserDisplayName, updateUserImage } from "@/lib/actions/users";
 import { useUser } from "@clerk/clerk-expo";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function ProfileScreen() {
   const { user } = useUser();
   const [updatingImage, setUpdatingImage] = useState(false);
+  const [displayName, setDisplayName] = useState("User");
+  const [profileUsername, setProfileUsername] = useState("@user");
+
+  useEffect(() => {
+    if (!user?.id || !user) return;
+
+    const refreshIdentity = async () => {
+      try {
+        await user.reload();
+      } catch (error) {
+        console.log("Profile user reload error:", error);
+      }
+
+      const fallbackName = user.fullName || user.username || "User";
+      setDisplayName(fallbackName);
+      setProfileUsername(user.username ? `@${user.username}` : "@user");
+
+      const { data, error } = await getUserDisplayName(user.id);
+      if (error) {
+        console.log("Profile display name fetch error:", error);
+        return;
+      }
+      if (data?.name?.trim()) {
+        setDisplayName(data.name.trim());
+      }
+    };
+
+    refreshIdentity().catch((error) => {
+      console.log("Profile identity refresh exception:", error);
+    });
+  }, [user, user?.id]);
+
+  useEffect(() => {
+    if (!user?.username) {
+      setProfileUsername("@user");
+      return;
+    }
+    setProfileUsername(`@${user.username}`);
+  }, [user?.username]);
 
   const onSelectImage = async () => {
     try {
@@ -53,8 +92,8 @@ export default function ProfileScreen() {
   return (
     <ProfileView
       profileUserId={user.id}
-      displayName={user.fullName || user.username || "User"}
-      username={user.username ? `@${user.username}` : "@user"}
+      displayName={displayName}
+      username={profileUsername}
       avatarUrl={user.imageUrl}
       isOwnProfile={true}
       updatingImage={updatingImage}

@@ -83,6 +83,12 @@ export default function ProfileView({
 }: ProfileViewProps) {
   const router = useRouter();
   const [showSettings, setShowSettings] = useState(false);
+  const [profileDisplayName, setProfileDisplayName] = useState(
+    displayName || "User",
+  );
+  const [profileUsername, setProfileUsername] = useState(
+    username?.trim()?.length ? username : "@user",
+  );
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [userComments, setUserComments] = useState<
@@ -127,6 +133,14 @@ export default function ProfileView({
   const postsTabScale = useRef(new Animated.Value(1)).current;
   const commentsTabScale = useRef(new Animated.Value(1)).current;
   const communitiesTabScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    setProfileDisplayName(displayName || "User");
+  }, [displayName]);
+
+  useEffect(() => {
+    setProfileUsername(username?.trim()?.length ? username : "@user");
+  }, [username]);
 
   useEffect(() => {
     if (!visibleTabs.includes(activeTab)) {
@@ -470,7 +484,7 @@ export default function ProfileView({
     <View className="flex-1" style={{ backgroundColor }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 80 }}
         className="flex-1"
         refreshControl={
           <RefreshControl
@@ -510,7 +524,7 @@ export default function ProfileView({
                     pathname: "/(protected)/dm/[id]",
                     params: {
                       id: profileUserId,
-                      name: displayName || "User",
+                      name: profileDisplayName || "User",
                     },
                   })
                 }
@@ -548,13 +562,13 @@ export default function ProfileView({
                 style={{ color: primaryForeground }}
                 numberOfLines={1}
               >
-                {displayName || "User"}
+                {profileDisplayName || "User"}
               </Text>
               <Text
                 className="mt-1 text-left text-sm text-white/80"
                 numberOfLines={1}
               >
-                {username?.trim()?.length ? username : "@user"}
+                {profileUsername}
               </Text>
             </View>
           </View>
@@ -950,7 +964,12 @@ export default function ProfileView({
           animationType="slide"
           onRequestClose={() => setShowSettings(false)}
         >
-          <Settings onClose={() => setShowSettings(false)} />
+          <Settings
+            onClose={() => setShowSettings(false)}
+            onDisplayNameUpdated={(nextDisplayName) => {
+              setProfileDisplayName(nextDisplayName);
+            }}
+          />
         </Modal>
       ) : null}
 
