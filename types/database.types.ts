@@ -294,72 +294,6 @@ export type Database = {
           },
         ]
       }
-      notifications: {
-        Row: {
-          actor_user_id: string | null
-          body: string
-          created_at: string
-          id: string
-          is_read: boolean
-          kind: string
-          metadata: Json
-          path: string
-          read_at: string | null
-          recipient_user_id: string
-          source_record_id: string | null
-          source_table: string | null
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          actor_user_id?: string | null
-          body?: string
-          created_at?: string
-          id?: string
-          is_read?: boolean
-          kind: string
-          metadata?: Json
-          path: string
-          read_at?: string | null
-          recipient_user_id: string
-          source_record_id?: string | null
-          source_table?: string | null
-          title: string
-          updated_at?: string
-        }
-        Update: {
-          actor_user_id?: string | null
-          body?: string
-          created_at?: string
-          id?: string
-          is_read?: boolean
-          kind?: string
-          metadata?: Json
-          path?: string
-          read_at?: string | null
-          recipient_user_id?: string
-          source_record_id?: string | null
-          source_table?: string | null
-          title?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "notifications_actor_user_id_fkey"
-            columns: ["actor_user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notifications_recipient_user_id_fkey"
-            columns: ["recipient_user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       group_moderator_votes: {
         Row: {
           candidate_user_id: string
@@ -487,8 +421,75 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          actor_user_id: string | null
+          body: string
+          created_at: string
+          id: string
+          is_read: boolean
+          kind: string
+          metadata: Json
+          path: string
+          read_at: string | null
+          recipient_user_id: string
+          source_record_id: string | null
+          source_table: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          kind: string
+          metadata?: Json
+          path: string
+          read_at?: string | null
+          recipient_user_id: string
+          source_record_id?: string | null
+          source_table?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          kind?: string
+          metadata?: Json
+          path?: string
+          read_at?: string | null
+          recipient_user_id?: string
+          source_record_id?: string | null
+          source_table?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_actor_user_id_fkey"
+            columns: ["actor_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_recipient_user_id_fkey"
+            columns: ["recipient_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_badge_awards: {
         Row: {
+          award_context: string | null
           awarded_by_user_id: string
           awarded_to_user_id: string
           badge_key: string
@@ -497,6 +498,7 @@ export type Database = {
           post_id: string
         }
         Insert: {
+          award_context?: string | null
           awarded_by_user_id: string
           awarded_to_user_id: string
           badge_key: string
@@ -505,6 +507,7 @@ export type Database = {
           post_id: string
         }
         Update: {
+          award_context?: string | null
           awarded_by_user_id?: string
           awarded_to_user_id?: string
           badge_key?: string

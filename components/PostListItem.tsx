@@ -66,7 +66,12 @@ const emptyAchievementCounts = () =>
   >;
 const isAchievementId = (value: string): value is AchievementId =>
   ACHIEVEMENT_IDS.has(value);
-type AwardListUser = { id: string; name: string; image: string | null };
+type AwardListUser = {
+  id: string;
+  name: string;
+  image: string | null;
+  context: string | null;
+};
 
 /* ───────────────────────────────────────────── */
 /* Shared shimmer util */
@@ -1060,7 +1065,10 @@ function PostListItem({
   const [awardUsersSheetVisible, setAwardUsersSheetVisible] = useState(false);
   const [awardUsersSheetTitle, setAwardUsersSheetTitle] = useState("");
   const [awardUsersLoading, setAwardUsersLoading] = useState(false);
+  const [awardUsersLoaded, setAwardUsersLoaded] = useState(false);
   const [awardUsers, setAwardUsers] = useState<AwardListUser[]>([]);
+  const [awardContext, setAwardContext] = useState("");
+  const awardUsersRequestIdRef = useRef(0);
   const [achievementCounts, setAchievementCounts] = useState<
     Record<AchievementId, number>
   >(emptyAchievementCounts);
@@ -1273,7 +1281,7 @@ function PostListItem({
   ).slice(0, 6);
   const showFloatingCompactAchievements =
     !isOnDetail && compactAchievements.length > 0;
-  const awardAchievement = async (id: AchievementId) => {
+  const awardAchievement = async (id: AchievementId, context?: string) => {
     if (!canAwardPost) {
       Alert.alert("Not available", "You cannot award your own post.");
       return;
@@ -1291,9 +1299,13 @@ function PostListItem({
       badge_key: id,
       awarded_by_user_id: user?.id,
       awarded_to_user_id: post.user.id,
+      award_context: (context ?? "").trim() || null,
     });
 
-    if (!error) return;
+    if (!error) {
+      setAwardContext("");
+      return;
+    }
 
     setAwardedByMe((prev) => {
       const next = { ...prev };
@@ -1315,20 +1327,28 @@ function PostListItem({
   const openAwardUsersSheet = async (
     achievement: (typeof ACHIEVEMENTS)[number],
   ) => {
+    const requestId = awardUsersRequestIdRef.current + 1;
+    awardUsersRequestIdRef.current = requestId;
     setAwardUsersSheetTitle(`${achievement.emoji} ${achievement.label}`);
     setAwardUsers([]);
+    setAwardUsersLoaded(false);
     setAwardUsersLoading(true);
     setAwardUsersSheetVisible(true);
 
     const { data, error } = await supabase
       .from("post_badge_awards")
-      .select("awarded_by_user_id, user:users(id, name, image)")
+      .select(
+        "awarded_by_user_id, award_context, awarded_by:users!post_badge_awards_awarded_by_user_id_fkey(id, name, image)",
+      )
       .eq("post_id", post.id)
       .eq("badge_key", achievement.id)
       .order("created_at", { ascending: false });
 
+    if (awardUsersRequestIdRef.current !== requestId) return;
+
     if (error) {
       setAwardUsersLoading(false);
+      setAwardUsersLoaded(true);
       return;
     }
 
@@ -1340,12 +1360,14 @@ function PostListItem({
       seen.add(uid);
       users.push({
         id: uid,
-        name: String(row.user?.name ?? "User"),
-        image: (row.user?.image as string | null) ?? null,
+        name: String(row.awarded_by?.name ?? "User"),
+        image: (row.awarded_by?.image as string | null) ?? null,
+        context: (row.award_context as string | null) ?? null,
       });
     }
     setAwardUsers(users);
     setAwardUsersLoading(false);
+    setAwardUsersLoaded(true);
   };
   const MetaBadge = ({
     prefix,
@@ -1730,8 +1752,7 @@ function PostListItem({
                   return (
                     <Pressable
                       key={item.id}
-                      onLongPress={() => void openAwardUsersSheet(item)}
-                      delayLongPress={220}
+                      onPress={() => void openAwardUsersSheet(item)}
                       style={{
                         width: "48.5%",
                         flexDirection: "row",
@@ -2467,6 +2488,24 @@ function PostListItem({
                   ? "Choose a badge to award this post."
                   : "You cannot award your own post."}
               </Text>
+              <TextInput
+                value={awardContext}
+                onChangeText={setAwardContext}
+                editable={canAwardPost}
+                placeholder="Add context/reason (optional)"
+                placeholderTextColor={`${muted}99`}
+                maxLength={180}
+                style={{
+                  borderWidth: 1,
+                  borderColor: `${border}CC`,
+                  borderRadius: 12,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  color: text,
+                  backgroundColor: `${background}CC`,
+                  fontSize: 13,
+                }}
+              />
 
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {ACHIEVEMENTS.map((item) => {
@@ -2475,7 +2514,7 @@ function PostListItem({
                     <Pressable
                       key={item.id}
                       disabled={!canAwardPost || already}
-                      onPress={() => awardAchievement(item.id)}
+                      onPress={() => awardAchievement(item.id, awardContext)}
                       style={{
                         width: "48%",
                         borderWidth: 1.2,
@@ -2549,7 +2588,10 @@ function PostListItem({
           animationType="slide"
           statusBarTranslucent
           navigationBarTranslucent
-          onRequestClose={() => setAwardUsersSheetVisible(false)}
+          onRequestClose={() => {
+            awardUsersRequestIdRef.current += 1;
+            setAwardUsersSheetVisible(false);
+          }}
         >
           <View style={{ flex: 1 }}>
             <Pressable
@@ -2557,7 +2599,10 @@ function PostListItem({
                 ...StyleSheet.absoluteFillObject,
                 backgroundColor: "rgba(2, 6, 23, 0.46)",
               }}
-              onPress={() => setAwardUsersSheetVisible(false)}
+              onPress={() => {
+                awardUsersRequestIdRef.current += 1;
+                setAwardUsersSheetVisible(false);
+              }}
             />
             <Pressable
               onPress={(event) => event.stopPropagation()}
@@ -2599,7 +2644,7 @@ function PostListItem({
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
               >
-                {awardUsersLoading ? (
+                {awardUsersLoading || !awardUsersLoaded ? (
                   <Text style={{ color: muted, fontSize: 13 }}>
                     Loading users...
                   </Text>
@@ -2609,8 +2654,13 @@ function PostListItem({
                   </Text>
                 ) : (
                   awardUsers.map((item) => (
-                    <View
+                    <Pressable
                       key={item.id}
+                      onPress={() => {
+                        awardUsersRequestIdRef.current += 1;
+                        setAwardUsersSheetVisible(false);
+                        router.push(`/user/${item.id}`);
+                      }}
                       style={{
                         flexDirection: "row",
                         alignItems: "center",
@@ -2635,18 +2685,31 @@ function PostListItem({
                         }}
                       />
                       <EntityBadge kind="user" size={12} />
-                      <Text
-                        style={{
-                          color: text,
-                          fontSize: 14,
-                          fontWeight: "700",
-                          flex: 1,
-                        }}
-                        numberOfLines={1}
-                      >
-                        {item.name}
-                      </Text>
-                    </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            color: text,
+                            fontSize: 14,
+                            fontWeight: "700",
+                          }}
+                          numberOfLines={1}
+                        >
+                          {item.name}
+                        </Text>
+                        {item.context ? (
+                          <Text
+                            style={{
+                              color: muted,
+                              fontSize: 12.5,
+                              marginTop: 2,
+                            }}
+                            numberOfLines={2}
+                          >
+                            {item.context}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
                   ))
                 )}
               </ScrollView>
