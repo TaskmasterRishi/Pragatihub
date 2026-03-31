@@ -83,6 +83,14 @@ function mapPrivateMessage(row: any): PrivateChatMessage {
   };
 }
 
+function compactText(value: string | null | undefined) {
+  return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function truncateText(value: string, max = 180) {
+  return value.length <= max ? value : `${value.slice(0, max - 3)}...`;
+}
+
 export async function fetchCommunityMeta(communityId: string, currentUserId: string) {
   const membershipRes = await supabase
     .from("user_groups")
@@ -195,6 +203,39 @@ export async function sendCommunityChatMessage(input: {
       }));
 
       await supabase.from("community_chat_message_mentions").insert(rows);
+
+      const [actorRes, groupRes] = await Promise.all([
+        supabase.from("users").select("name").eq("id", input.userId).maybeSingle(),
+        supabase.from("groups").select("name").eq("id", input.groupId).maybeSingle(),
+      ]);
+      const actorName = compactText(actorRes.data?.name) || "Someone";
+      const groupName = compactText(groupRes.data?.name) || "community chat";
+      const preview =
+        truncateText(compactText(input.content)) ||
+        `${actorName} mentioned you in chat.`;
+
+      const notifications = uniqueMentionIds.map((mentionedUserId) => ({
+        recipient_user_id: mentionedUserId,
+        actor_user_id: input.userId,
+        kind: "chat_mention",
+        title: `${actorName} mentioned you in ${groupName}`,
+        body: preview,
+        path: `/community/${input.groupId}/chat`,
+        source_table: "community_chat_message_mentions",
+        source_record_id: data.id,
+        metadata: {
+          group_id: input.groupId,
+          message_id: data.id,
+          mention_text: mentionHandleByUserId.get(mentionedUserId) ?? null,
+        },
+      }));
+
+      await supabase
+        .from("notifications")
+        .upsert(notifications, {
+          onConflict: "recipient_user_id,source_table,source_record_id,kind",
+          ignoreDuplicates: true,
+        });
     }
   }
 

@@ -223,31 +223,16 @@ class InboxSyncManager {
     if (!this.userId || this.channel) return;
     const userId = this.userId;
 
-    const postFilter =
-      userId && typeof userId === "string"
-        ? { filter: `user_id=neq.${userId}` }
-        : {};
-
     this.channel = supabase
       .channel(`inbox-sync-${userId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "comments" },
-        () => this.queueSilentSync(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "post_reports" },
-        () => this.queueSilentSync(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "posts", ...postFilter },
-        () => this.queueSilentSync(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "community_chat_messages" },
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `recipient_user_id=eq.${userId}`,
+        },
         () => this.queueSilentSync(),
       )
       .subscribe((status) => {

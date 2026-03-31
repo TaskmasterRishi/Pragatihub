@@ -235,13 +235,9 @@ class CommunityPresenceManager {
     this.lastHeartbeatAt = now;
     this.markUserOnline(communityId, this.userId, now);
 
-    await channel.send({
-      type: "broadcast",
-      event: PRESENCE_EVENT,
-      payload: {
-        userId: this.userId,
-        sentAt: new Date(now).toISOString(),
-      },
+    await channel.httpSend(PRESENCE_EVENT, {
+      userId: this.userId,
+      sentAt: new Date(now).toISOString(),
     });
   }
 
@@ -253,13 +249,9 @@ class CommunityPresenceManager {
     this.lastHeartbeatAt = now;
     for (const [communityId, channel] of this.channels.entries()) {
       this.markUserOnline(communityId, this.userId, now);
-      await channel.send({
-        type: "broadcast",
-        event: PRESENCE_EVENT,
-        payload: {
-          userId: this.userId,
-          sentAt: new Date(now).toISOString(),
-        },
+      await channel.httpSend(PRESENCE_EVENT, {
+        userId: this.userId,
+        sentAt: new Date(now).toISOString(),
       });
     }
   }

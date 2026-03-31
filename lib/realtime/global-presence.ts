@@ -164,13 +164,9 @@ class GlobalPresenceManager {
     this.lastHeartbeatAt = now;
     this.markUserOnline(this.userId, now);
 
-    await this.channel.send({
-      type: "broadcast",
-      event: GLOBAL_PRESENCE_EVENT,
-      payload: {
-        userId: this.userId,
-        sentAt: new Date(now).toISOString(),
-      },
+    await this.channel.httpSend(GLOBAL_PRESENCE_EVENT, {
+      userId: this.userId,
+      sentAt: new Date(now).toISOString(),
     });
   }
 }

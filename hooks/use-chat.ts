@@ -854,11 +854,7 @@ export function useChat({
 
         const channel = channelRef.current;
         if (channel) {
-          await channel.send({
-            type: "broadcast",
-            event: "message_created",
-            payload: createdPayload,
-          });
+          await channel.httpSend("message_created", createdPayload);
         }
       }
 
@@ -885,11 +881,7 @@ export function useChat({
     async (payload: ReactionChangePayload) => {
       const channel = channelRef.current;
       if (!channel) return;
-      await channel.send({
-        type: "broadcast",
-        event: "reaction_changed",
-        payload,
-      });
+      await channel.httpSend("reaction_changed", payload);
     },
     [],
   );
@@ -897,11 +889,7 @@ export function useChat({
     async (payload: MessageUpdatePayload) => {
       const channel = channelRef.current;
       if (!channel) return;
-      await channel.send({
-        type: "broadcast",
-        event: "message_updated",
-        payload,
-      });
+      await channel.httpSend("message_updated", payload);
     },
     [],
   );
@@ -909,11 +897,7 @@ export function useChat({
     async (payload: MessageDeletePayload) => {
       const channel = channelRef.current;
       if (!channel) return;
-      await channel.send({
-        type: "broadcast",
-        event: "message_deleted",
-        payload,
-      });
+      await channel.httpSend("message_deleted", payload);
     },
     [],
   );
