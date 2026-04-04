@@ -230,8 +230,90 @@ class InboxSyncManager {
         {
           event: "*",
           schema: "public",
-          table: "notifications",
-          filter: `recipient_user_id=eq.${userId}`,
+          table: "post_upvotes",
+        },
+        () => this.queueSilentSync(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "comments",
+        },
+        () => this.queueSilentSync(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "comment_upvotes",
+        },
+        () => this.queueSilentSync(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "community_chat_message_mentions",
+          filter: `mentioned_user_id=eq.${userId}`,
+        },
+        () => this.queueSilentSync(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "post_badge_awards",
+        },
+        () => this.queueSilentSync(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "group_moderator_votes",
+          filter: `candidate_user_id=eq.${userId}`,
+        },
+        () => this.queueSilentSync(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_groups",
+        },
+        () => this.queueSilentSync(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "post_reports",
+        },
+        () => this.queueSilentSync(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "community_chat_messages",
+        },
+        () => this.queueSilentSync(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "private_chat_messages",
         },
         () => this.queueSilentSync(),
       )

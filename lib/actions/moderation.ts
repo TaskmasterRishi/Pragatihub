@@ -138,6 +138,17 @@ export async function submitReport(
     details: details?.trim() || null,
   });
 
+  const err = error as { code?: string; message?: string } | null;
+  if (
+    err &&
+    (err.code === "23505" ||
+      /duplicate key value violates unique constraint/i.test(
+        err.message ?? "",
+      ))
+  ) {
+    return { error: new Error("You have already reported this post.") };
+  }
+
   return { error };
 }
 

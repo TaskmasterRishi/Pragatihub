@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, Text } from "react-native";
 
 import { useThemeColor } from "@/hooks/use-theme-color";
+import type { NotificationInsert } from "@/lib/notifications/types";
 import { supabase } from "@/lib/Supabase";
 
 type VoteType = "post" | "comment";
@@ -39,6 +40,10 @@ const VOTE_CONFIG: Record<VoteType, VoteConfig> = {
     down: { table: "comment_downvotes", idField: "comment_id" },
   },
 };
+
+function truncateText(value: string, max = 110) {
+  return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
 
 function usePressScale(initial = 1, pressed = 0.9) {
   const scale = useRef(new Animated.Value(initial)).current;
@@ -232,14 +237,70 @@ export default function VoteButtons({
     if (!user?.id) return false;
     const { up } = VOTE_CONFIG[type];
     //@ts-ignore
-    const { error } = await supabase.from(up.table).insert({
-      [up.idField]: itemId,
-      user_id: user.id,
-    });
+    const { data, error } = await supabase
+      .from(up.table)
+      .insert({
+        [up.idField]: itemId,
+        user_id: user.id,
+      })
+      .select("id")
+      .single();
 
     if (error) {
       console.log("Add upvote error:", error);
       return false;
+    }
+
+    if (type === "post") {
+      void (async () => {
+        try {
+          const [postRes, actorRes] = await Promise.all([
+            supabase
+              .from("posts")
+              .select("id, title, user_id")
+              .eq("id", itemId)
+              .maybeSingle(),
+            supabase.from("users").select("name").eq("id", user.id).maybeSingle(),
+          ]);
+
+          const recipientUserId = postRes.data?.user_id ?? null;
+          if (!recipientUserId || recipientUserId === user.id) return;
+
+          const actorName =
+            actorRes.data?.name?.toString().trim() ||
+            user.fullName ||
+            user.username ||
+            "Someone";
+          const postTitle = postRes.data?.title?.toString().trim() ?? "";
+          const body = postTitle
+            ? `Liked your post: ${truncateText(postTitle, 90)}`
+            : "Liked your post.";
+
+          const notification: NotificationInsert = {
+            recipient_user_id: recipientUserId,
+            actor_user_id: user.id,
+            kind: "post_like",
+            title: `${actorName} liked your post`,
+            body,
+            path: `/post/${itemId}`,
+            source_table: "post_upvotes",
+            source_record_id: String((data as any)?.id ?? itemId),
+            metadata: {
+              post_id: itemId,
+            },
+          };
+
+          await supabase.from("notifications").upsert(
+            [notification],
+            {
+              onConflict: "recipient_user_id,source_table,source_record_id,kind",
+              ignoreDuplicates: true,
+            },
+          );
+        } catch (notifyError) {
+          console.log("Post like notification error:", notifyError);
+        }
+      })();
     }
 
     setVoteState("up");

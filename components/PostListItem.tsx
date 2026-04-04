@@ -1160,10 +1160,14 @@ function PostListItem({
         setReportDetails("");
       }, 2000);
     } else {
+      const message = (error as Error)?.message || "";
+      if (/already reported/i.test(message)) {
+        Alert.alert("Already reported", "You have already reported this post.");
+        return;
+      }
       Alert.alert(
         "Error",
-        (error as Error)?.message ||
-          "Failed to submit report. Please try again.",
+        message || "Failed to submit report. Please try again.",
       );
     }
   };

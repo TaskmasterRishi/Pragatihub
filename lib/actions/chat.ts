@@ -1,3 +1,4 @@
+import type { NotificationInsert } from "@/lib/notifications/types";
 import { supabase } from "@/lib/Supabase";
 import type {
   ChatReplyRef,
@@ -214,7 +215,7 @@ export async function sendCommunityChatMessage(input: {
         truncateText(compactText(input.content)) ||
         `${actorName} mentioned you in chat.`;
 
-      const notifications = uniqueMentionIds.map((mentionedUserId) => ({
+      const notifications: NotificationInsert[] = uniqueMentionIds.map((mentionedUserId) => ({
         recipient_user_id: mentionedUserId,
         actor_user_id: input.userId,
         kind: "chat_mention",

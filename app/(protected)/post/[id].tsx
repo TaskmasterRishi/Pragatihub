@@ -3,6 +3,7 @@ import CommentItem from "@/components/CommentItem";
 import PostListItem, { PostSkeletonCard } from "@/components/PostListItem";
 import { Comment, Post } from "@/constants/types";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import type { NotificationInsert } from "@/lib/notifications/types";
 import { supabase } from "@/lib/Supabase";
 import { useUser } from "@clerk/clerk-expo";
 import { Image } from "expo-image";
@@ -89,6 +90,10 @@ type PickerItem = {
   mediaUrl: string;
 };
 type CommentMediaType = "text" | "image" | "gif" | "sticker" | "video";
+
+function truncateText(value: string, max = 110) {
+  return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
 
 export default function DetailedPost() {
   const { id } = useLocalSearchParams();
@@ -503,6 +508,61 @@ export default function DetailedPost() {
       user: data.user,
       replies: [],
     };
+
+    const actorName = user.fullName || user.username || "Someone";
+    const commentPreview = finalContent
+      ? truncateText(finalContent, 90)
+      : finalMediaType === "gif"
+        ? "Sent a GIF"
+        : finalMediaType === "sticker"
+          ? "Sent a sticker"
+          : "Added a comment";
+    const postTitle = (detailedPost as any)?.title?.toString().trim() ?? "";
+    const postOwnerId = (detailedPost as any)?.user?.id?.toString() ?? null;
+    const replyTargetUserId = replyingTo?.user?.id?.toString() ?? null;
+    const notifyRows: NotificationInsert[] = [];
+
+    if (replyTargetUserId && replyTargetUserId !== user.id) {
+      notifyRows.push({
+        recipient_user_id: replyTargetUserId,
+        actor_user_id: user.id,
+        kind: "reply",
+        title: `${actorName} replied to your comment`,
+        body: commentPreview,
+        path: `/post/${postId}`,
+        source_table: "comments",
+        source_record_id: String(newComment.id),
+        metadata: {
+          post_id: postId,
+          comment_id: newComment.id,
+          parent_comment_id: replyingTo?.id ?? null,
+        },
+      });
+    }
+
+    if (!replyingTo?.id && postOwnerId && postOwnerId !== user.id) {
+      notifyRows.push({
+        recipient_user_id: postOwnerId,
+        actor_user_id: user.id,
+        kind: "comment",
+        title: `${actorName} commented on your post`,
+        body: postTitle ? `${commentPreview} · ${truncateText(postTitle, 50)}` : commentPreview,
+        path: `/post/${postId}`,
+        source_table: "comments",
+        source_record_id: String(newComment.id),
+        metadata: {
+          post_id: postId,
+          comment_id: newComment.id,
+        },
+      });
+    }
+
+    if (notifyRows.length > 0) {
+      void supabase.from("notifications").upsert(notifyRows, {
+        onConflict: "recipient_user_id,source_table,source_record_id,kind",
+        ignoreDuplicates: true,
+      });
+    }
 
     setAllComments((prev) => {
       if (!replyingTo?.id) return [...prev, newComment];

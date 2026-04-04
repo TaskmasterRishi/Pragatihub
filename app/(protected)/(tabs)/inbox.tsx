@@ -1,6 +1,6 @@
 import { useThemeColor } from "@/hooks/use-theme-color";
 import {
-  formatInboxTime,
+  formatInboxCreatedAt,
   type InboxFilter,
   type InboxItem,
   type InboxKind,
@@ -150,9 +150,15 @@ export default function InboxScreen() {
 
   const renderIcon = (kind: InboxKind, isUnread: boolean) => {
     const color = isUnread ? accentColor : secondaryTextColor;
-    if (kind === "chat") return <MessageCircle size={18} color={color} />;
-    if (kind === "community_post") return <Megaphone size={18} color={color} />;
-    if (kind === "moderation") return <ShieldAlert size={18} color={color} />;
+    if (kind === "chat" || kind === "chat_mention" || kind === "chat_reply" || kind === "dm") {
+      return <MessageCircle size={18} color={color} />;
+    }
+    if (kind === "community_post" || kind === "badge_award" || kind === "community_join") {
+      return <Megaphone size={18} color={color} />;
+    }
+    if (kind === "moderation" || kind === "moderator_vote") {
+      return <ShieldAlert size={18} color={color} />;
+    }
     if (kind === "reply") return <MessageCircle size={18} color={color} />;
     return <Bell size={18} color={color} />;
   };
@@ -340,9 +346,6 @@ export default function InboxScreen() {
                     >
                       {item.title}
                     </Text>
-                    <Text style={[styles.itemTime, { color: secondaryTextColor }]}>
-                      {formatInboxTime(item.createdAt)}
-                    </Text>
                   </View>
 
                   <Text
@@ -379,6 +382,9 @@ export default function InboxScreen() {
                       {item.actorName}
                     </Text>
                   </View>
+                  <Text style={[styles.createdAtText, { color: secondaryTextColor }]}>
+                    {formatInboxCreatedAt(item.createdAt)}
+                  </Text>
                 </View>
 
                 {isUnread ? (
@@ -491,6 +497,7 @@ const styles = StyleSheet.create({
   },
   avatarInitial: { fontSize: 10, fontWeight: "700" },
   actorName: { fontSize: 12, flex: 1 },
+  createdAtText: { fontSize: 11, fontWeight: "500", marginTop: 2, opacity: 0.9 },
   unreadDot: {
     width: 8,
     height: 8,
